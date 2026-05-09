@@ -1,5 +1,6 @@
 import api from './client'
 
-export const getCategoryMonthly = () => api.get('/api/analysis/category/monthly').then(r => r.data)
-export const getCategoryCumulative = () => api.get('/api/analysis/category/cumulative').then(r => r.data)
-export const getCoinStats = () => api.get('/api/analysis/coins').then(r => r.data)
+export const getCategoryMonthly    = () => api.get('/api/analysis/category/monthly').then(r => r.data)
+export const getCategoryCumulative = (period = '월') => api.get('/api/analysis/category/cumulative', { params: { period } }).then(r => r.data)
+export const getCoinStats          = () => api.get('/api/analysis/coins').then(r => r.data)
+export const getCorrelation        = (market) => api.get(`/api/analysis/correlation/${market}`).then(r => r.data)

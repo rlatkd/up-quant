@@ -17,3 +17,9 @@ class CoinStat(BaseModel):
     volatility: float   # 30일 일간 수익률 표준편차 (%)
     return_1m: float    # 1개월 총 수익률 (%)
     acc_trade_price_24h: float
+
+
+class CorrelationItem(BaseModel):
+    market: str
+    korean_name: str
+    correlation: float  # -1.0 ~ 1.0

@@ -22,6 +22,16 @@ _RAW = [
     ("KRW-1INCH", "1인치",               582, -0.0321,         19,   1_800_000_000,         615,         570),
 ]
 
+_52W_HIGH = {"KRW-BTC", "KRW-XRP", "KRW-LINK", "KRW-DOGE"}
+_52W_LOW  = {"KRW-SOL", "KRW-AVAX", "KRW-SAND", "KRW-1INCH"}
+
+
+def _w52_range(market: str, price: float) -> tuple[float, float]:
+    rng = random.Random(hash(market + "52w"))
+    high = round(price * rng.uniform(1.15, 2.8))
+    low  = round(price * rng.uniform(0.25, 0.75))
+    return high, low
+
 
 def _sparkline(market: str, price: float, rate: float) -> list[float]:
     rng = random.Random(hash(market))
@@ -46,6 +56,10 @@ _TICKERS: list[Ticker] = [
         low_price=low,
         prev_closing_price=round(price / (1 + rate)),
         sparkline=_sparkline(m, price, rate),
+        is_52w_high=m in _52W_HIGH,
+        is_52w_low=m in _52W_LOW,
+        w52_high=_w52_range(m, price)[0],
+        w52_low=_w52_range(m, price)[1],
     )
     for m, name, price, rate, cp, vol, high, low in _RAW
 ]
