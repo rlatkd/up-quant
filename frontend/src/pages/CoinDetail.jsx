@@ -1,17 +1,56 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { createChart, CandlestickSeries } from 'lightweight-charts'
+import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts'
 import { useTicker, useOrderbook, useTrades } from '../hooks/useTickers'
 import { useCandles } from '../hooks/useCandles'
+import { useCorrelation } from '../hooks/useAnalysis'
 
-function CandlestickChart({ candles }) {
+// ── 기술적 지표 계산 ──────────────────────────────────────
+function calcMA(closes, period) {
+  return closes.map((_, i) =>
+    i < period - 1 ? null : closes.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period
+  )
+}
+
+function calcBollinger(closes, period = 20, mult = 2) {
+  return closes.map((_, i) => {
+    if (i < period - 1) return null
+    const slice = closes.slice(i - period + 1, i + 1)
+    const ma  = slice.reduce((a, b) => a + b, 0) / period
+    const std = Math.sqrt(slice.reduce((s, v) => s + (v - ma) ** 2, 0) / period)
+    return { upper: ma + mult * std, lower: ma - mult * std }
+  })
+}
+
+function calcRSI(closes, period = 14) {
+  return closes.map((_, i) => {
+    if (i < period) return null
+    const slice = closes.slice(i - period, i)
+    const gains  = slice.map((v, j) => j === 0 ? 0 : Math.max(0, v - slice[j - 1]))
+    const losses = slice.map((v, j) => j === 0 ? 0 : Math.max(0, slice[j - 1] - v))
+    const ag = gains.reduce((a, b) => a + b, 0) / period
+    const al = losses.reduce((a, b) => a + b, 0) / period
+    return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2))
+  })
+}
+
+// ── 상관관계 색상 ──
+function corrColor(v) {
+  if (v >= 0.7)  return 'text-red-600 bg-red-50'
+  if (v >= 0.3)  return 'text-red-400 bg-red-50/50'
+  if (v >= -0.3) return 'text-gray-500 bg-gray-50'
+  if (v >= -0.7) return 'text-blue-400 bg-blue-50/50'
+  return 'text-blue-600 bg-blue-50'
+}
+
+// ── 차트 컴포넌트 ──────────────────────────────────────────
+function CandlestickChart({ candles, indicators }) {
   const containerRef = useRef(null)
-  const chartRef = useRef(null)
-  const seriesRef = useRef(null)
+  const chartRef     = useRef(null)
+  const seriesRef    = useRef({})
 
   useEffect(() => {
     if (!containerRef.current) return
-
     const chart = createChart(containerRef.current, {
       attributionLogo: false,
       layout: { background: { color: '#ffffff' }, textColor: '#9ca3af' },
@@ -20,56 +59,122 @@ function CandlestickChart({ candles }) {
       timeScale: { borderColor: '#e5e7eb', timeVisible: true },
       crosshair: { mode: 1 },
     })
-
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#ef4444',
-      downColor: '#3b82f6',
-      borderUpColor: '#ef4444',
-      borderDownColor: '#3b82f6',
-      wickUpColor: '#ef4444',
-      wickDownColor: '#3b82f6',
+    const candle = chart.addSeries(CandlestickSeries, {
+      upColor: '#ef4444', downColor: '#3b82f6',
+      borderUpColor: '#ef4444', borderDownColor: '#3b82f6',
+      wickUpColor: '#ef4444', wickDownColor: '#3b82f6',
     })
-
-    chartRef.current = chart
-    seriesRef.current = series
+    seriesRef.current = { candle, chart }
+    chartRef.current  = chart
 
     const onResize = () => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
     }
     window.addEventListener('resize', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-      chart.remove()
-    }
+    return () => { window.removeEventListener('resize', onResize); chart.remove() }
   }, [])
 
   useEffect(() => {
-    if (!seriesRef.current || candles.length === 0) return
+    const { candle, chart } = seriesRef.current
+    if (!candle || !candles.length) return
     const data = candles.map(c => ({
       time: Math.floor(c.timestamp / 1000),
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
+      open: c.open, high: c.high, low: c.low, close: c.close,
     }))
-    seriesRef.current.setData(data)
-    chartRef.current.timeScale().fitContent()
-  }, [candles])
+    candle.setData(data)
+    chart.timeScale().fitContent()
+
+    // MA 시리즈 제거 후 재생성
+    ;['ma20', 'ma60', 'bbUpper', 'bbLower'].forEach(k => {
+      if (seriesRef.current[k]) { chart.removeSeries(seriesRef.current[k]); seriesRef.current[k] = null }
+    })
+
+    const closes = candles.map(c => c.close)
+    const times  = data.map(d => d.time)
+
+    if (indicators.ma) {
+      const ma20 = calcMA(closes, 20)
+      const ma60 = calcMA(closes, 60)
+      const s20 = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+      const s60 = chart.addSeries(LineSeries, { color: '#6366f1', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+      s20.setData(times.map((t, i) => ma20[i] !== null ? { time: t, value: ma20[i] } : null).filter(Boolean))
+      s60.setData(times.map((t, i) => ma60[i] !== null ? { time: t, value: ma60[i] } : null).filter(Boolean))
+      seriesRef.current.ma20 = s20
+      seriesRef.current.ma60 = s60
+    }
+
+    if (indicators.bollinger) {
+      const bb = calcBollinger(closes)
+      const su = chart.addSeries(LineSeries, { color: '#10b981', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+      const sl = chart.addSeries(LineSeries, { color: '#10b981', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+      su.setData(times.map((t, i) => bb[i] ? { time: t, value: bb[i].upper } : null).filter(Boolean))
+      sl.setData(times.map((t, i) => bb[i] ? { time: t, value: bb[i].lower } : null).filter(Boolean))
+      seriesRef.current.bbUpper = su
+      seriesRef.current.bbLower = sl
+    }
+  }, [candles, indicators])
 
   return <div ref={containerRef} style={{ height: 320 }} />
 }
 
+function RSIChart({ candles }) {
+  const containerRef = useRef(null)
+  const chartRef     = useRef(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const chart = createChart(containerRef.current, {
+      attributionLogo: false,
+      layout: { background: { color: '#ffffff' }, textColor: '#9ca3af' },
+      grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
+      rightPriceScale: { borderColor: '#e5e7eb', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { borderColor: '#e5e7eb', timeVisible: true },
+    })
+    chartRef.current = chart
+    const onResize = () => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
+    }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); chart.remove() }
+  }, [])
+
+  useEffect(() => {
+    if (!chartRef.current || !candles.length) return
+    const chart = chartRef.current
+    chart.getSeries().forEach(s => chart.removeSeries(s))
+
+    const closes = candles.map(c => c.close)
+    const times  = candles.map(c => Math.floor(c.timestamp / 1000))
+    const rsi    = calcRSI(closes)
+
+    const rsiSeries = chart.addSeries(LineSeries, { color: '#8b5cf6', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true })
+    rsiSeries.setData(times.map((t, i) => rsi[i] !== null ? { time: t, value: rsi[i] } : null).filter(Boolean))
+
+    const ob = chart.addSeries(LineSeries, { color: '#ef4444', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+    const os = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+    const validTimes = times.filter((_, i) => rsi[i] !== null)
+    if (validTimes.length) {
+      ob.setData(validTimes.map(t => ({ time: t, value: 70 })))
+      os.setData(validTimes.map(t => ({ time: t, value: 30 })))
+    }
+    chart.timeScale().fitContent()
+  }, [candles])
+
+  return <div ref={containerRef} style={{ height: 120 }} />
+}
+
+// ── 상수 ──────────────────────────────────────────────────
 const INTERVALS = [
-  { label: '1분',  api: 'minutes', count: 60 },
-  { label: '3분',  api: 'minutes', count: 60 },
-  { label: '5분',  api: 'minutes', count: 60 },
-  { label: '15분', api: 'minutes', count: 60 },
-  { label: '30분', api: 'minutes', count: 60 },
+  { label: '1분',   api: 'minutes', count: 60 },
+  { label: '3분',   api: 'minutes', count: 60 },
+  { label: '5분',   api: 'minutes', count: 60 },
+  { label: '15분',  api: 'minutes', count: 60 },
+  { label: '30분',  api: 'minutes', count: 60 },
   { label: '1시간', api: 'minutes', count: 60 },
   { label: '4시간', api: 'minutes', count: 60 },
-  { label: '일',   api: 'days',    count: 60 },
-  { label: '주',   api: 'weeks',   count: 52 },
-  { label: '월',   api: 'days',    count: 90 },
+  { label: '일',    api: 'days',    count: 60 },
+  { label: '주',    api: 'weeks',   count: 52 },
+  { label: '월',    api: 'days',    count: 90 },
 ]
 
 function fmtVolume(v) {
@@ -81,20 +186,31 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+// ── 메인 컴포넌트 ─────────────────────────────────────────
 export default function CoinDetail() {
   const { market } = useParams()
-  const [intervalIdx, setIntervalIdx] = useState(7) // 기본: 일봉
+  const [intervalIdx, setIntervalIdx] = useState(7)
+  const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false })
 
-  const { ticker, loading } = useTicker(market)
-  const { orderbook } = useOrderbook(market)
-  const { trades } = useTrades(market)
-  const { candles } = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
+  const { ticker, loading }   = useTicker(market)
+  const { orderbook }         = useOrderbook(market)
+  const { trades }            = useTrades(market)
+  const { candles }           = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
+  const { data: corrData }    = useCorrelation(market)
 
-  if (loading || !ticker) return <div className="py-24 text-center text-sm text-gray-400">로딩 중...</div>
+  if (loading || !ticker) return (
+    <div className="py-24 flex justify-center">
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+    </div>
+  )
 
   const isRise = ticker.change === 'RISE'
   const isFall = ticker.change === 'FALL'
   const priceColor = isRise ? 'text-red-500' : isFall ? 'text-blue-500' : 'text-gray-700'
+
+  function toggleIndicator(key) {
+    setIndicators(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   return (
     <div className="space-y-4">
@@ -117,10 +233,10 @@ export default function CoinDetail() {
           </div>
           <div className="flex gap-7 ml-4 text-sm border-l border-gray-100 pl-8">
             {[
-              ['고가', ticker.high_price.toLocaleString(), 'text-red-500'],
-              ['저가', ticker.low_price.toLocaleString(), 'text-blue-500'],
-              ['전일종가', ticker.prev_closing_price.toLocaleString(), 'text-gray-700'],
-              ['거래대금(24h)', fmtVolume(ticker.acc_trade_price_24h), 'text-gray-700'],
+              ['고가',       ticker.high_price.toLocaleString(),        'text-red-500'],
+              ['저가',       ticker.low_price.toLocaleString(),         'text-blue-500'],
+              ['전일종가',   ticker.prev_closing_price.toLocaleString(), 'text-gray-700'],
+              ['거래대금(24h)', fmtVolume(ticker.acc_trade_price_24h),  'text-gray-700'],
             ].map(([label, value, color]) => (
               <div key={label}>
                 <div className="text-xs text-gray-400 mb-1">{label}</div>
@@ -133,26 +249,53 @@ export default function CoinDetail() {
 
       {/* 차트 + 호가창 */}
       <div className="grid grid-cols-12 gap-4">
-        {/* 차트 */}
         <div className="col-span-9 bg-white border border-gray-200 rounded-lg overflow-hidden">
-          {/* 시간 탭 */}
-          <div className="flex border-b border-gray-100 px-2">
-            {INTERVALS.map((iv, i) => (
-              <button
-                key={iv.label}
-                onClick={() => setIntervalIdx(i)}
-                className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                  intervalIdx === i
-                    ? 'border-[#093687] text-[#093687]'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                {iv.label}
-              </button>
-            ))}
+          {/* 시간 탭 + 지표 토글 */}
+          <div className="flex items-center justify-between border-b border-gray-100 px-2">
+            <div className="flex">
+              {INTERVALS.map((iv, i) => (
+                <button
+                  key={iv.label}
+                  onClick={() => setIntervalIdx(i)}
+                  className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                    intervalIdx === i
+                      ? 'border-[#093687] text-[#093687]'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {iv.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 pr-2">
+              {[
+                { key: 'ma',        label: 'MA',        color: 'indigo' },
+                { key: 'bollinger', label: 'Bollinger', color: 'emerald' },
+                { key: 'rsi',       label: 'RSI',       color: 'violet' },
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleIndicator(key)}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
+                    indicators[key]
+                      ? `bg-${color}-500 text-white`
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  style={indicators[key] ? { backgroundColor: { indigo: '#6366f1', emerald: '#10b981', violet: '#8b5cf6' }[color] } : {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="px-4 pb-4 pt-2">
-            <CandlestickChart candles={candles} />
+          <div className="px-4 pb-2 pt-2">
+            <CandlestickChart candles={candles} indicators={indicators} />
+            {indicators.rsi && (
+              <div className="mt-1 border-t border-gray-100 pt-1">
+                <div className="text-xs text-gray-400 mb-1 px-1">RSI(14)</div>
+                <RSIChart candles={candles} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -161,28 +304,19 @@ export default function CoinDetail() {
           <div className="px-3 py-2.5 border-b border-gray-100 text-xs font-semibold text-gray-600">호가</div>
           {orderbook ? (
             <div className="text-xs">
-              {/* 매도 (asks) — 높은 가격부터 역순 표시 */}
               {[...orderbook.asks].reverse().map((ask, i) => (
                 <div key={i} className="relative flex items-center px-3 py-1 hover:bg-blue-50">
-                  <div
-                    className="absolute right-0 top-0 bottom-0 bg-blue-50"
-                    style={{ width: `${Math.min(75, ask.size * 25)}%` }}
-                  />
+                  <div className="absolute right-0 top-0 bottom-0 bg-blue-50" style={{ width: `${Math.min(75, ask.size * 25)}%` }} />
                   <span className="relative z-10 flex-1 text-blue-500 font-medium">{ask.price.toLocaleString()}</span>
                   <span className="relative z-10 text-gray-400">{ask.size.toFixed(4)}</span>
                 </div>
               ))}
-              {/* 현재가 구분선 */}
               <div className={`flex items-center justify-center py-1.5 font-bold text-sm border-y border-gray-200 bg-gray-50 ${priceColor}`}>
                 {ticker.trade_price.toLocaleString()}
               </div>
-              {/* 매수 (bids) */}
               {orderbook.bids.map((bid, i) => (
                 <div key={i} className="relative flex items-center px-3 py-1 hover:bg-red-50">
-                  <div
-                    className="absolute right-0 top-0 bottom-0 bg-red-50"
-                    style={{ width: `${Math.min(75, bid.size * 25)}%` }}
-                  />
+                  <div className="absolute right-0 top-0 bottom-0 bg-red-50" style={{ width: `${Math.min(75, bid.size * 25)}%` }} />
                   <span className="relative z-10 flex-1 text-red-500 font-medium">{bid.price.toLocaleString()}</span>
                   <span className="relative z-10 text-gray-400">{bid.size.toFixed(4)}</span>
                 </div>
@@ -194,9 +328,8 @@ export default function CoinDetail() {
         </div>
       </div>
 
-      {/* 하단: 체결내역 + 종목정보 */}
+      {/* 체결내역 + 종목정보 */}
       <div className="grid grid-cols-2 gap-4">
-        {/* 체결내역 */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">체결 내역</div>
           <table className="w-full">
@@ -225,17 +358,16 @@ export default function CoinDetail() {
           </table>
         </div>
 
-        {/* 종목 정보 */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">종목 정보</div>
           <div className="divide-y divide-gray-50">
             {[
-              ['마켓', ticker.market],
-              ['종목명', ticker.korean_name],
-              ['현재가', ticker.trade_price.toLocaleString() + ' KRW'],
-              ['전일 종가', ticker.prev_closing_price.toLocaleString() + ' KRW'],
-              ['당일 고가', ticker.high_price.toLocaleString() + ' KRW'],
-              ['당일 저가', ticker.low_price.toLocaleString() + ' KRW'],
+              ['마켓',        ticker.market],
+              ['종목명',      ticker.korean_name],
+              ['현재가',      ticker.trade_price.toLocaleString() + ' KRW'],
+              ['전일 종가',   ticker.prev_closing_price.toLocaleString() + ' KRW'],
+              ['당일 고가',   ticker.high_price.toLocaleString() + ' KRW'],
+              ['당일 저가',   ticker.low_price.toLocaleString() + ' KRW'],
               ['거래대금(24h)', fmtVolume(ticker.acc_trade_price_24h) + ' KRW'],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between px-4 py-2.5 text-sm">
@@ -244,6 +376,21 @@ export default function CoinDetail() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* 상관관계 분석 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="text-sm font-semibold text-gray-700 mb-0.5">타 종목 상관관계</div>
+        <div className="text-xs text-gray-400 mb-4">60일 일봉 종가 기준 피어슨 상관계수</div>
+        <div className="grid grid-cols-7 gap-2">
+          {corrData.slice(0, 14).map(item => (
+            <div key={item.market} className={`rounded-lg px-3 py-2.5 text-center ${corrColor(item.correlation)}`}>
+              <div className="text-xs font-semibold">{item.market.replace('KRW-', '')}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{item.korean_name}</div>
+              <div className="text-sm font-bold mt-1">{item.correlation.toFixed(2)}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

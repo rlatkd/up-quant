@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getCategoryMonthly, getCategoryCumulative, getCoinStats } from '../api/analysis'
+import { getCategoryMonthly, getCategoryCumulative, getCoinStats, getCorrelation } from '../api/analysis'
 
 export function useCategoryMonthly() {
   const [data, setData] = useState([])
@@ -10,12 +10,13 @@ export function useCategoryMonthly() {
   return { data, loading }
 }
 
-export function useCategoryCumulative() {
+export function useCategoryCumulative(period = '월') {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
-    getCategoryCumulative().then(setData).finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    getCategoryCumulative(period).then(setData).finally(() => setLoading(false))
+  }, [period])
   return { data, loading }
 }
 
@@ -25,5 +26,16 @@ export function useCoinStats() {
   useEffect(() => {
     getCoinStats().then(setData).finally(() => setLoading(false))
   }, [])
+  return { data, loading }
+}
+
+export function useCorrelation(market) {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    if (!market) return
+    setLoading(true)
+    getCorrelation(market).then(setData).finally(() => setLoading(false))
+  }, [market])
   return { data, loading }
 }

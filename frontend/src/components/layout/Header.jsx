@@ -1,9 +1,12 @@
 import { Link, NavLink } from 'react-router-dom'
 
 const tabs = [
-  { to: '/', label: '대시보드', end: true },
-  { to: '/market', label: '마켓 현황', end: false },
-  { to: '/coins', label: '코인 목록', end: false },
+  { to: '/',         label: '대시보드',   end: true },
+  { to: '/market',   label: '마켓 현황',  end: false },
+  { to: '/coins',    label: '코인 목록',  end: false },
+  { to: '/compare',  label: '비교 분석',  end: false },
+  { to: '/backtest', label: '백테스트',   end: false },
+  { to: '/screener', label: '스크리너',   end: false },
 ]
 
 function LogoMark() {

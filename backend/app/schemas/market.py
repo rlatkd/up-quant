@@ -13,6 +13,10 @@ class Ticker(BaseModel):
     low_price: float
     prev_closing_price: float
     sparkline: list[float]
+    is_52w_high: bool = False
+    is_52w_low: bool = False
+    w52_high: float = 0.0
+    w52_low: float = 0.0
 
 
 class MarketSummary(BaseModel):
