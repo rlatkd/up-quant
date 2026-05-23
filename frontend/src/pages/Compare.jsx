@@ -67,7 +67,7 @@ export default function Compare() {
                 key={t.market}
                 onClick={() => toggleMarket(t.market)}
                 disabled={!isSelected && selected.length >= 5}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer disabled:cursor-not-allowed transition-colors ${
                   isSelected
                     ? 'text-white border-transparent'
                     : 'text-gray-500 border-gray-200 hover:border-gray-400 disabled:opacity-40'

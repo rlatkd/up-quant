@@ -113,7 +113,7 @@ export default function Screener() {
             <button
               key={p.label}
               onClick={() => applyPreset(p)}
-              className="px-3 py-1 text-xs border border-gray-200 rounded-full text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition-colors"
+              className="px-3 py-1 text-xs border border-gray-200 rounded-full text-gray-500 cursor-pointer hover:border-indigo-400 hover:text-indigo-500 transition-colors"
             >
               {p.label}
             </button>
@@ -130,14 +130,14 @@ export default function Screener() {
               <select
                 value={cond.field}
                 onChange={e => updateCondition(cond.id, { field: e.target.value })}
-                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
               >
                 {FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
               <select
                 value={cond.op}
                 onChange={e => updateCondition(cond.id, { op: e.target.value })}
-                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
               >
                 {OPS.map(op => <option key={op} value={op}>{op}</option>)}
               </select>
@@ -151,7 +151,7 @@ export default function Screener() {
               <span className="text-xs text-gray-400 w-4">{FIELDS.find(f => f.key === cond.field)?.unit}</span>
               <button
                 onClick={() => removeCondition(cond.id)}
-                className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none ml-1"
+                className="text-gray-300 hover:text-red-400 transition-colors text-xl leading-none ml-1 cursor-pointer"
               >
                 ×
               </button>
@@ -162,21 +162,21 @@ export default function Screener() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => addCondition()}
-            className="px-4 py-1.5 border border-gray-200 text-sm text-gray-600 rounded hover:bg-gray-50 transition-colors"
+            className="px-4 py-1.5 border border-gray-200 text-sm text-gray-600 rounded cursor-pointer hover:bg-gray-50 transition-colors"
           >
             + 조건 추가
           </button>
           <button
             onClick={handleRun}
             disabled={conditions.length === 0}
-            className="px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+            className="px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             스크리닝 실행
           </button>
           {(conditions.length > 0 || results !== null) && (
             <button
               onClick={handleReset}
-              className="px-4 py-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+              className="px-4 py-1.5 text-sm text-gray-400 cursor-pointer hover:text-gray-600 transition-colors"
             >
               초기화
             </button>

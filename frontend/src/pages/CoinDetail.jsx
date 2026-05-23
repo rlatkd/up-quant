@@ -257,7 +257,7 @@ export default function CoinDetail() {
                 <button
                   key={iv.label}
                   onClick={() => setIntervalIdx(i)}
-                  className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px cursor-pointer transition-colors ${
                     intervalIdx === i
                       ? 'border-[#093687] text-[#093687]'
                       : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -276,7 +276,7 @@ export default function CoinDetail() {
                 <button
                   key={key}
                   onClick={() => toggleIndicator(key)}
-                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
+                  className={`px-2.5 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
                     indicators[key]
                       ? `bg-${color}-500 text-white`
                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200'

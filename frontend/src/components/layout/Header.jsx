@@ -47,6 +47,17 @@ function Header() {
             </NavLink>
           ))}
         </nav>
+        <NavLink
+          to="/help"
+          className={({ isActive }) =>
+            `ml-auto flex items-center gap-1 px-3 text-[13px] transition-colors ${
+              isActive ? 'text-white font-medium' : 'text-white/60 hover:text-white/90'
+            }`
+          }
+        >
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current text-[10px] leading-none">?</span>
+          도움말
+        </NavLink>
       </div>
     </header>
   )

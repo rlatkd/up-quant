@@ -7,6 +7,7 @@ import CoinDetail from './pages/CoinDetail'
 import Compare from './pages/Compare'
 import Backtest from './pages/Backtest'
 import Screener from './pages/Screener'
+import Help from './pages/Help'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/backtest" element={<Backtest />} />
           <Route path="/screener" element={<Screener />} />
+          <Route path="/help" element={<Help />} />
         </Route>
       </Routes>
     </BrowserRouter>

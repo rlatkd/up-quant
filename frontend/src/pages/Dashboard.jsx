@@ -352,7 +352,7 @@ export default function Dashboard() {
               <button
                 key={p}
                 onClick={() => setCumPeriod(p)}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
+                className={`px-2.5 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
                   cumPeriod === p
                     ? 'bg-indigo-500 text-white'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'

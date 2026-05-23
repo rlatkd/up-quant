@@ -168,7 +168,7 @@ export default function CoinList() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1 text-xs rounded font-medium transition-colors ${
+                className={`px-3 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
                   filter === f
                     ? 'bg-indigo-500 text-white'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'

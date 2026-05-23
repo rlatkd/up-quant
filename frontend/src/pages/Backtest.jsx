@@ -77,7 +77,7 @@ export default function Backtest() {
                 <button
                   key={s.key}
                   onClick={() => setStrategy(s.key)}
-                  className={`flex-1 py-1.5 text-xs rounded font-medium transition-colors ${
+                  className={`flex-1 py-1.5 text-xs rounded font-medium cursor-pointer transition-colors ${
                     strategy === s.key ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
@@ -93,7 +93,7 @@ export default function Backtest() {
             <select
               value={market}
               onChange={e => setMarket(e.target.value)}
-              className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+              className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
             >
               {tickers.map(t => (
                 <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} {t.korean_name}</option>
@@ -159,7 +159,7 @@ export default function Backtest() {
           <button
             onClick={handleRun}
             disabled={loading}
-            className="mt-5 px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+            className="mt-5 px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? '실행 중...' : '백테스트 실행'}
           </button>
