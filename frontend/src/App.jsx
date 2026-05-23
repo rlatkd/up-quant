@@ -21,8 +21,9 @@ function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/backtest" element={<Backtest />} />
           <Route path="/screener" element={<Screener />} />
-          <Route path="/help" element={<Help />} />
         </Route>
+        {/* 도움말은 새 창(window.open)으로 띄우므로 Layout(헤더) 밖에서 단독 렌더 */}
+        <Route path="/help" element={<Help />} />
       </Routes>
     </BrowserRouter>
   )

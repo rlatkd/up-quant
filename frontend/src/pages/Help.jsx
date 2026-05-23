@@ -1,4 +1,14 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+
+// 도움말은 새 창이므로, 경로 이동은 이 창이 아니라 메인(부모) 창을 움직인다.
+function goToPage(route) {
+  if (window.opener && !window.opener.closed) {
+    window.opener.location.assign(route)
+    window.opener.focus()
+  } else {
+    window.location.assign(route)
+  }
+}
 
 // 동작 유형 태그
 function Tag({ tone, children }) {
@@ -116,12 +126,14 @@ function Section({ item }) {
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
         <h2 className="text-base font-bold text-gray-800">{item.title}</h2>
-        <Link
-          to={item.route}
-          className="text-xs font-mono text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors"
+        <button
+          type="button"
+          onClick={() => goToPage(item.route)}
+          title="메인 창에서 이 페이지 열기"
+          className="text-xs font-mono text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors cursor-pointer"
         >
           {item.routeLabel || item.route} ↗
-        </Link>
+        </button>
         <span className="text-xs text-gray-400">{item.summary}</span>
       </div>
       <ul className="divide-y divide-gray-50">
@@ -144,8 +156,13 @@ function Section({ item }) {
 }
 
 export default function Help() {
+  useEffect(() => {
+    document.title = '도움말'
+  }, [])
+
   return (
-    <div className="space-y-4 pb-8">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
       {/* 인트로 */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h1 className="text-lg font-bold text-gray-800 mb-1.5">사용 설명서</h1>
@@ -182,14 +199,16 @@ export default function Help() {
         </div>
         <ul className="text-sm text-gray-500 space-y-1.5 list-disc pl-5 leading-relaxed">
           <li>국내 거래소 관례를 따라 <span className="text-red-500 font-medium">상승은 빨강</span>, <span className="text-blue-500 font-medium">하락은 파랑</span>입니다.</li>
-          <li>마우스 커서가 손 모양(👆)으로 바뀌는 요소는 클릭할 수 있습니다.</li>
-          <li>상단 헤더의 탭으로 페이지를 이동합니다. 로고를 누르면 대시보드로 돌아갑니다.</li>
+          <li>마우스 커서가 손 모양으로 바뀌는 요소는 클릭할 수 있습니다.</li>
+          <li>이 설명서는 별도 창이라, 메인 화면 옆에 두고 보면서 사용할 수 있습니다.</li>
+          <li>각 항목의 <span className="font-mono text-indigo-500">경로 ↗</span>를 누르면 <span className="font-medium">메인 창</span>이 해당 페이지로 이동합니다.</li>
           <li>현재 데이터는 데모용 더미 데이터로, 실제 시세와 다를 수 있습니다.</li>
         </ul>
       </div>
 
-      {/* 페이지별 가이드 */}
-      {GUIDE.map(item => <Section key={item.route} item={item} />)}
+        {/* 페이지별 가이드 */}
+        {GUIDE.map(item => <Section key={item.route} item={item} />)}
+      </div>
     </div>
   )
 }

@@ -19,6 +19,14 @@ function LogoMark() {
   )
 }
 
+function openHelpWindow() {
+  window.open(
+    '/help',
+    'upquant-help',
+    'width=860,height=900,menubar=no,toolbar=no,location=no,status=no',
+  )
+}
+
 function Header() {
   return (
     <header className="bg-[#093687] text-white">
@@ -47,17 +55,14 @@ function Header() {
             </NavLink>
           ))}
         </nav>
-        <NavLink
-          to="/help"
-          className={({ isActive }) =>
-            `ml-auto flex items-center gap-1 px-3 text-[13px] transition-colors ${
-              isActive ? 'text-white font-medium' : 'text-white/60 hover:text-white/90'
-            }`
-          }
+        <button
+          type="button"
+          onClick={openHelpWindow}
+          className="ml-auto flex items-center gap-1 px-3 text-[13px] text-white/60 hover:text-white/90 transition-colors cursor-pointer"
         >
           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current text-[10px] leading-none">?</span>
           도움말
-        </NavLink>
+        </button>
       </div>
     </header>
   )
