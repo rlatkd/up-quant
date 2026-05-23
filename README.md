@@ -1,8 +1,8 @@
 # UPquant
 
-> 업비트(Upbit) KRW 마켓 암호화폐 분석 대시보드 — **POC**
+> 업비트(Upbit) KRW 마켓 암호화폐 분석 대시보드
 
-업비트 KRW 마켓의 시세·호가·체결·캔들 데이터를 한 화면에서 탐색하고, 카테고리별 수익률 분석부터 **종목 비교 · 전략 백테스트 · 조건 스크리닝**까지 제공하는 대시보드입니다. 현재 백엔드는 결정론적 **더미 데이터**로 동작하며, 외부 API 클라이언트 한 곳만 교체하면 실제 업비트 Open API로 전환되도록 설계되어 있습니다.
+업비트 KRW 마켓의 시세·호가·체결·캔들 데이터를 한 화면에서 탐색하고, 카테고리별 수익률 분석부터 **종목 비교 · 전략 백테스트 · 조건 스크리닝**까지 제공하는 대시보드입니다. 백엔드는 **업비트 Open API(시세, 인증 불필요)** 를 실시간 호출하며, TTL 캐시(stale-while-revalidate) · 부팅 프리페치 · 요청 스로틀로 응답성과 레이트리밋을 함께 관리합니다. 프론트·백엔드·업비트 호출은 **요청 ID(rid)** 로 묶여 한 줄로 추적됩니다.
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white">
@@ -30,17 +30,18 @@
 
 ## 화면 구성
 
-헤더 탭 6개 + 코인 상세(하위 라우트), 총 7개 라우트로 구성된 SPA입니다.
+헤더 탭 6개 + 도움말(별도 창) + 코인 상세(하위 라우트), 총 8개 라우트로 구성된 SPA입니다.
 
 | 경로 | 페이지 | 설명 | 참고 스타일 |
 |------|--------|------|------------|
-| `/` | **Dashboard** (대시보드) | KPI 카드 · 카테고리 누적수익률 라인차트 · 월별 수익률 히트맵 · 리스크-수익 산점도 | Finviz |
-| `/market` | **Market** (마켓 현황) | 미니 차트 카드 · 상승률 테이블 · 거래대금 트리맵 | — |
-| `/coins` | **CoinList** (코인 목록) | 시장 요약 카드 · 검색 · 코인 테이블(스파크라인) | CoinGecko |
-| `/coins/:market` | **CoinDetail** (코인 상세) | 캔들차트 · 실시간 호가창 · 체결 내역 | Upbit |
+| `/` | **Dashboard** (대시보드) | KPI 카드 · 공포·탐욕 게이지 · 시장 지배력 도넛 · 급등/급락 피드 · 카테고리 누적수익률(월/분기/년) · 상관관계 히트맵 · 월별 수익률 히트맵 · 리스크-수익 산점도 | Finviz |
+| `/market` | **Market** (마켓 현황) | 미니 차트 카드 · 52주 신고가/신저가 배지 · 상승률/하락률 테이블 · 거래대금 TOP5 · 거래대금 트리맵 | — |
+| `/coins` | **CoinList** (코인 목록) | 시장 요약 카드 · 검색 · 필터 탭 · 3단계 정렬 · 즐겨찾기(localStorage) · 52주 위치 바 · 스파크라인 | CoinGecko |
+| `/coins/:market` | **CoinDetail** (코인 상세) | 캔들차트(분/일/주/월 + MA·볼린저·RSI 토글) · 호가창 · 체결 내역 · 타 종목 상관관계 | Upbit |
 | `/compare` | **Compare** (비교 분석) | 최대 5종목 선택 · 90일 누적 등락률 라인 비교 · 종목별 통계 카드 | — |
 | `/backtest` | **Backtest** (백테스트) | MA 크로스 / RSI 역추세 전략 · 자산 곡선 · 성과지표(수익률·MDD·승률) · 거래 내역 | — |
 | `/screener` | **Screener** (스크리너) | 다중 조건 필터(등락률·거래대금·변동성·1개월 수익률·52주 위치) · 프리셋 | — |
+| `/help` | **Help** (도움말) | 페이지별 기능·동작·이동 경로 안내. 헤더 **? 도움말** 클릭 시 `window.open` 별도 창으로 표시 | — |
 
 ---
 
@@ -50,10 +51,12 @@
 
 | 라이브러리 | 용도 |
 |-----------|------|
-| **FastAPI** | REST API 서버 |
-| **httpx** | 업비트 REST 클라이언트 (async) |
+| **FastAPI** | REST API 서버 · 인바운드 로깅 미들웨어 |
+| **httpx** | 업비트 REST 클라이언트 (동기 + 전역 스로틀 · 429 재시도 · `event_hooks` 로깅) |
 | **pydantic / pydantic-settings** | 응답 스키마(DTO) · 환경설정 |
 | **uvicorn** | ASGI 서버 |
+
+> 외부 의존성 없는 인메모리 TTL 캐시(`core/cache.py`, stale-while-revalidate)와 `contextvars` 기반 요청 ID 로깅(`core/logging.py`)을 자체 구현했습니다.
 
 ### Frontend (Node)
 
@@ -78,10 +81,10 @@ flowchart LR
         pages["pages/"] --> hooks["hooks/"] --> apicall["api/ (axios)"]
     end
     subgraph BE["Backend · FastAPI :8000"]
-        routers["routers/"] --> services["services/"] --> clients["clients/ (httpx)"]
+        routers["routers/"] --> services["services/ (+캐시)"] --> clients["clients/ (httpx)"]
     end
-    apicall -- "HTTP /api/*" --> routers
-    clients -. "교체 시 실 호출" .-> upbit["Upbit Open API"]
+    apicall -- "HTTP /api/* (rid)" --> routers
+    clients -- "REST 시세 호출 (rid)" --> upbit["Upbit Open API"]
 ```
 
 **Backend 레이어** — Spring과 유사한 계층 구조
@@ -89,10 +92,12 @@ flowchart LR
 ```
 routers/   ← HTTP 진입점          (≈ @RestController)
    ↓
-services/  ← 비즈니스 로직         (≈ @Service)  ※ 현재 더미 데이터 생성
+services/  ← 비즈니스 로직 + 캐싱   (≈ @Service)  ※ 업비트 응답을 가공·캐시
    ↓
-clients/   ← 외부 API 호출 래퍼    (≈ @Repository)
+clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재시도·로깅
 ```
+
+**관측성(Observability)** — 프론트 axios 인터셉터 → 백엔드 미들웨어 → 업비트 `event_hook`이 모두 동일한 **요청 ID(rid)** 로 로깅됩니다. 백엔드가 `X-Request-Id` 헤더로 rid를 내려주며, Spring의 MDC처럼 한 요청의 전 구간을 grep 한 번으로 추적할 수 있습니다.
 
 **Frontend 레이어**
 
@@ -112,21 +117,22 @@ api/       ← axios HTTP 호출
 up-quant/
 ├── backend/                       # FastAPI 서버
 │   ├── app/
-│   │   ├── main.py                # 앱 진입점 · CORS · 라우터 등록 · /health
+│   │   ├── main.py                # 앱 진입점 · CORS · 인바운드 로깅 미들웨어 · 부팅 프리페치 · /health
 │   │   ├── core/
-│   │   │   ├── config.py          # pydantic-settings 환경설정
-│   │   │   └── cache.py           # TTL 인메모리 캐시 (실 API 전환 대비)
+│   │   │   ├── config.py          # 환경설정 · 마켓 유니버스/카테고리 · 캐시 TTL
+│   │   │   ├── cache.py           # 인메모리 TTL 캐시 (stale-while-revalidate · single-flight)
+│   │   │   └── logging.py         # 요청 ID(rid) contextvar + 공통 로깅 포맷
 │   │   ├── clients/
-│   │   │   └── upbit_rest.py      # 업비트 REST 클라이언트 (httpx async)
+│   │   │   └── upbit_rest.py      # 업비트 REST 클라이언트 (httpx 동기 · 스로틀 · 429 재시도 · event_hook 로깅)
 │   │   ├── schemas/               # Pydantic 응답 모델
 │   │   │   ├── market.py          # Ticker · MarketSummary · Orderbook · Trade
 │   │   │   ├── candle.py          # CandleItem
 │   │   │   ├── analysis.py        # CategoryMonthly · CoinStat
 │   │   │   └── backtest.py        # EquityPoint · TradeRecord · BacktestMetrics · BacktestResult
-│   │   ├── services/              # 비즈니스 로직 (현재 더미 데이터 생성)
-│   │   │   ├── market_service.py
-│   │   │   ├── candle_service.py
-│   │   │   ├── analysis_service.py
+│   │   ├── services/              # 비즈니스 로직 (업비트 응답 가공 + 캐싱)
+│   │   │   ├── market_service.py  # 현재가·한글명·호가·체결·요약·52주·스파크라인
+│   │   │   ├── candle_service.py  # 캔들 (일봉 200개 캐시 후 슬라이스 공유 · >200 페이지네이션)
+│   │   │   ├── analysis_service.py # 변동성·1개월수익률·상관관계 (카테고리 수익률은 예시 데이터)
 │   │   │   └── backtest_service.py # MA 크로스 · RSI 전략, SMA/RSI/MDD 계산
 │   │   └── routers/               # HTTP 엔드포인트
 │   │       ├── markets.py
@@ -140,7 +146,7 @@ up-quant/
 │   │   ├── App.jsx                # 라우트 정의
 │   │   ├── index.css              # Tailwind 엔트리
 │   │   ├── api/                   # axios 호출 래퍼
-│   │   │   ├── client.js          # axios 인스턴스 (baseURL)
+│   │   │   ├── client.js          # axios 인스턴스 (baseURL) + 요청/응답 로깅 인터셉터
 │   │   │   ├── markets.js
 │   │   │   ├── candles.js
 │   │   │   ├── analysis.js
@@ -158,7 +164,8 @@ up-quant/
 │   │       ├── CoinDetail.jsx
 │   │       ├── Compare.jsx
 │   │       ├── Backtest.jsx
-│   │       └── Screener.jsx
+│   │       ├── Screener.jsx
+│   │       └── Help.jsx           # 사용 설명서 (별도 창)
 │   ├── index.html
 │   ├── vite.config.js
 │   ├── eslint.config.js
@@ -217,6 +224,8 @@ npm run dev
 
 기본 URL: `http://localhost:8000` · 전 엔드포인트 인증 불필요 (공개 시세)
 
+> 응답은 업비트 Open API를 호출해 생성하며 TTL 캐시(stale-while-revalidate)로 제공됩니다. 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다.
+
 ### Health
 
 | Method | Path | 설명 |
@@ -230,14 +239,14 @@ npm run dev
 | `GET` | `/tickers` | `Ticker[]` | 전체 코인 현재가 목록 |
 | `GET` | `/tickers/{market}` | `Ticker` | 단일 코인 현재가 (없으면 404) |
 | `GET` | `/summary` | `MarketSummary` | 시장 요약 (거래대금·상승/하락 수·BTC 도미넌스) |
-| `GET` | `/orderbook/{market}` | `Orderbook` | 호가창 (매도/매수 각 8호가) |
-| `GET` | `/trades/{market}` | `Trade[]` | 최근 체결 내역 (20건) |
+| `GET` | `/orderbook/{market}` | `Orderbook` | 호가창 (매도/매수 호가) |
+| `GET` | `/trades/{market}` | `Trade[]` | 최근 체결 내역 (30건) |
 
 ### Candles — `/api/candles`
 
 | Method | Path | 쿼리 파라미터 | 응답 모델 | 설명 |
 |--------|------|--------------|-----------|------|
-| `GET` | `/{market}` | `interval=days` · `count=60` | `CandleItem[]` | 캔들 데이터 (`interval`: `minutes` \| `days` \| `weeks`) |
+| `GET` | `/{market}` | `interval=days` · `count=60` | `CandleItem[]` | 캔들 데이터 (`interval`: `minutes/{1\|3\|5\|15\|30\|60\|240}` \| `days` \| `weeks` \| `months`) |
 
 ### Analysis — `/api/analysis`
 
@@ -325,15 +334,20 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 
 | 항목 | 선택 | 사유 |
 |------|------|------|
-| 더미 데이터 위치 | `services/` 레이어에서 생성 | `clients/upbit_rest.py` 호출로 교체만 하면 실 API 전환 |
-| 데이터 결정성 | `market`/`interval` 시드 기반 난수 | 재실행해도 동일한 차트·스파크라인 보장 |
-| 라우터 prefix | `/api/markets` 등 플랫 구조 | `api/v1/` 버저닝은 POC 단계에서 생략 |
+| 데이터 소스 | 업비트 시세(Quotation) REST · 인증 불필요 | 계정/거래 권한 없이 시세만 사용 |
+| 캐싱 | 인메모리 TTL + stale-while-revalidate + single-flight | 만료 시에도 옛 값 즉시 응답, 갱신은 백그라운드 1스레드만 (콜드·스탬피드 회피) |
+| 일봉 캐시 통합 | 종목별 200개 1회 fetch 후 슬라이스 공유 | 스파크라인·통계·상관관계가 캔들을 재호출하지 않음 (상관관계 ~1800ms → ~5ms) |
+| 레이트리밋 | 전역 스로틀(~초당 8회) + 429 백오프 재시도 | 시세 API IP 제한(초당 약 10회) 내 버스트 방지 |
+| 캐시 워밍 | 부팅 시 백그라운드 프리페치 | 첫 사용자도 캐시 워밍 상태 |
+| 관측성 | `contextvars` 기반 rid를 3계층 로그에 주입 + `X-Request-Id` | Spring MDC처럼 요청 전 구간 추적 |
+| 마켓 유니버스 | 15개 KRW 마켓을 `/market/all`과 교집합 | 상장폐지 종목 자동 제외 (예: MATIC → POL) |
+| 카테고리 수익률 | 예시(더미) 데이터 유지 | 업비트가 코인 카테고리를 제공하지 않음 |
+| 라우터 prefix | `/api/markets` 등 플랫 구조 | `api/v1/` 버저닝 생략 |
 | 색상 컨벤션 | 상승 = 빨강 / 하락 = 파랑 | 한국 금융 UI 관행 |
 | 헤더 색상 | `#093687` 네이비 | 업비트 헤더 톤 매칭 |
 | 캔들차트 | lightweight-charts v5 | `addSeries(CandlestickSeries, opts)` API |
-| 분석 지표 | 업비트 Open API로 계산 가능한 것만 | 더미 → 실 전환 시 호환 보장 |
 | 백테스트 입력 | `candle_service`의 일봉 캔들 재사용 | 별도 데이터 소스 없이 전략 검증 |
-| 실시간성 | 현재 HTTP, WebSocket은 추후 | POC는 폴링으로 충분 |
+| 실시간성 | 현재 HTTP 폴링, WebSocket은 추후 | REST + 캐시로 충분 |
 
 > 업비트 Open API: REST `https://api.upbit.com/v1`, WebSocket `wss://api.upbit.com/websocket/v1`. 공개 시세는 인증 불필요 (REST 분당 약 600회 제한).
 
@@ -341,19 +355,25 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 
 ## 현재 상태 & 로드맵
 
-> 🚧 **POC 단계** — 모든 API 응답은 현재 결정론적 더미 데이터입니다.
+> ✅ 업비트 시세 Open API 실연동 완료. 카테고리별 수익률만 예시(더미) 데이터입니다.
 
 **완료**
 - [x] 백엔드 4개 라우터 (markets / candles / analysis / backtest) + 응답 스키마
-- [x] 15개 KRW 코인 더미 데이터 · 결정론적 캔들/스파크라인 · 52주 고저
-- [x] 카테고리 월별·누적 수익률, 변동성·1개월 수익률 계산
-- [x] MA 크로스 / RSI 백테스트 엔진 (자산 곡선·MDD·승률)
-- [x] 프론트 7개 페이지 (대시보드·마켓·코인목록·코인상세·비교분석·백테스트·스크리너) + 데이터 페칭 훅
+- [x] **업비트 시세 REST 실연동** — 현재가·캔들(분/일/주/월)·호가·체결·마켓목록·52주 고저
+- [x] 인메모리 TTL 캐시(stale-while-revalidate · single-flight) · 부팅 프리페치 · 요청 스로틀 · 429 재시도
+- [x] 카테고리 수익률(예시), 변동성·1개월 수익률·상관관계(실 캔들 기반) 계산
+- [x] MA 크로스 / RSI 백테스트 엔진 (자산 곡선·MDD·승률, 200캔들 초과 페이지네이션)
+- [x] 프론트 8개 페이지 (대시보드·마켓·코인목록·코인상세·비교분석·백테스트·스크리너·도움말) + 데이터 페칭 훅
+- [x] CoinDetail 캔들 인터벌 탭 (분/일/주/월 + MA·볼린저·RSI 지표 토글)
+- [x] rid 기반 3계층 통합 로깅 (axios 인터셉터 · FastAPI 미들웨어 · httpx event_hook)
 
 **다음 작업**
-- [ ] 실 업비트 API 연결 (`upbit_rest.py` + `cache.py` 활용, 서비스 레이어 교체)
+- [ ] 비교분석 시, 그래프 다시 그리는게 아닌 새로 추가하는 식으로 렌더링 개선
+- [ ] 마켓현황에서 상승률 및 하락율 컴포넌트에 있는 종목들은 cursor-pointer인데, 클릭 시 아무 이벤트도 없음
+- [ ] 대시보드에서 리스크-수익 분포에서 분포가 이렇게 몰려있는게 맞는지 검증
+- [ ] 스크리너에서 옵션들별 기본 수치들로 스크리닝 실행하면 목록이 없는것도 있고 적은 것도 있음. 뭔가 기본 수치를 좀 개선해야 함
 - [ ] WebSocket 실시간 시세 중계 (FastAPI WS → 프론트 Context)
-- [ ] CoinDetail 캔들 인터벌 탭 (분봉/일봉/주봉 — 백엔드 API는 준비됨)
+- [ ] 카테고리 수익률을 실 캔들 집계로 대체
 - [ ] 에러/로딩 상태 UI 개선
 
-**의도적으로 보류** (POC 이후): Redis 캐싱 · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정
+**의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정

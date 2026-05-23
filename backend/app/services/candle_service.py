@@ -44,6 +44,14 @@ def _fetch(market: str, interval: str, count: int) -> list[CandleItem]:
     return items[-count:]
 
 
+# 일봉은 종목별로 200개를 한 번만 받아 캐시하고, 요청 수만큼 잘라 공유한다.
+# (스파크라인 30 / 통계 30 / 상관관계 60 / 상세 120 등이 같은 캐시를 재사용 → 호출 폭증 방지)
+_CANON = 200
+
+
 def get_candles(market: str, interval: str = "days", count: int = 60) -> list[CandleItem]:
+    if interval == "days" and count <= _CANON:
+        full = cached(f"candle:{market}:days", config.TTL_CANDLE, lambda: _fetch(market, "days", _CANON))
+        return full[-count:] if count < len(full) else full
     key = f"candle:{market}:{interval}:{count}"
     return cached(key, config.TTL_CANDLE, lambda: _fetch(market, interval, count))

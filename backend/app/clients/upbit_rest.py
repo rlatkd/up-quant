@@ -1,10 +1,31 @@
+import logging
 import threading
 import time
 
 import httpx
 
+logger = logging.getLogger("upbit")
+
 _BASE = "https://api.upbit.com/v1"
-_client = httpx.Client(base_url=_BASE, timeout=httpx.Timeout(10.0))
+
+
+def _on_request(request: httpx.Request) -> None:
+    request.extensions["start"] = time.monotonic()
+
+
+def _log_response(response: httpx.Response) -> None:
+    """모든 Upbit 요청/응답을 한 곳에서 로깅 (서블릿 필터/인터셉터 역할)."""
+    start = response.request.extensions.get("start")
+    ms = f"{(time.monotonic() - start) * 1000:.0f}ms" if start else "?"
+    path = str(response.request.url).replace(_BASE, "")
+    logger.info("%s %s → %d (%s)", response.request.method, path, response.status_code, ms)
+
+
+_client = httpx.Client(
+    base_url=_BASE,
+    timeout=httpx.Timeout(10.0),
+    event_hooks={"request": [_on_request], "response": [_log_response]},
+)
 
 # ── 레이트리밋 보호 ──────────────────────────────────────────
 # 시세 API는 IP 기준 초당 약 10회 제한. 버스트로 429가 나지 않도록 전역 스로틀 + 재시도.
@@ -26,6 +47,7 @@ def _throttle() -> None:
 
 
 def _get(path: str, params: dict | None = None, retries: int = 3) -> list | dict:
+    # 모든 응답 로깅은 클라이언트 event_hook(_log_response)이 공통 처리한다.
     last: httpx.Response | None = None
     for attempt in range(retries):
         _throttle()
@@ -35,6 +57,7 @@ def _get(path: str, params: dict | None = None, retries: int = 3) -> list | dict
             continue
         last.raise_for_status()
         return last.json()
+
     assert last is not None
     last.raise_for_status()
     return last.json()

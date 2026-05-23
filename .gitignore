@@ -21,5 +21,12 @@ Thumbs.db
 .idea/
 *.swp
 
+# 마크다운은 기본 제외(로컬 메모용)하되, 아래 문서들은 추적
 *.md
 !README.md
+!CLAUDE.md
+!references/*.md
+!docs/*.md
+
+# 개인 자료는 깃에 올리지 않음 (QAE 프로젝트 계획서 원본)
+references/QAE_EDA_*
