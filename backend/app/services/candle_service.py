@@ -1,63 +1,49 @@
-import random
-import time
+from datetime import datetime, timezone
 
+from app.clients import upbit_rest
+from app.core import config
+from app.core.cache import cached
 from app.schemas.candle import CandleItem
 
-_SEEDS: dict[str, tuple[float, float]] = {
-    "KRW-BTC":   (119_642_000, 0.025),
-    "KRW-ETH":   (3_812_000,   0.030),
-    "KRW-XRP":   (3_248,       0.040),
-    "KRW-SOL":   (231_500,     0.035),
-    "KRW-DOGE":  (452,         0.050),
-    "KRW-ADA":   (812,         0.040),
-    "KRW-LINK":  (22_450,      0.035),
-    "KRW-AVAX":  (46_200,      0.040),
-    "KRW-DOT":   (11_850,      0.030),
-    "KRW-ATOM":  (11_200,      0.035),
-    "KRW-NEAR":  (7_620,       0.040),
-    "KRW-SAND":  (548,         0.050),
-    "KRW-MANA":  (382,         0.050),
-    "KRW-MATIC": (1_125,       0.040),
-    "KRW-1INCH": (582,         0.050),
-}
 
-_INTERVAL_SECONDS = {"minutes": 60, "days": 86_400, "weeks": 604_800}
+def _to_ms(dt_utc: str) -> int:
+    """'2024-01-01T00:00:00' (UTC, tz 없음) → Unix 밀리초"""
+    return int(datetime.fromisoformat(dt_utc).replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+
+def _fetch(market: str, interval: str, count: int) -> list[CandleItem]:
+    # Upbit는 최신순으로 최대 200개씩 반환. count>200이면 to 파라미터로 과거 방향 페이지네이션.
+    raw: list[dict] = []
+    remaining = count
+    to: str | None = None
+    while remaining > 0:
+        batch = upbit_rest.get_candles(interval, market, min(remaining, 200), to)
+        if not batch:
+            break
+        raw.extend(batch)
+        remaining -= len(batch)
+        if len(batch) < 200:
+            break
+        to = batch[-1]["candle_date_time_utc"] + "Z"  # 가장 오래된 캔들 이전을 조회
+
+    # 시각 기준 중복 제거 후 오래된→최신 순 정렬 (lightweight-charts는 오름차순·고유 시각 필요)
+    uniq = {c["candle_date_time_utc"]: c for c in raw}
+    rows = sorted(uniq.values(), key=lambda c: c["candle_date_time_utc"])
+
+    items = [
+        CandleItem(
+            timestamp=_to_ms(c["candle_date_time_utc"]),
+            open=c["opening_price"],
+            high=c["high_price"],
+            low=c["low_price"],
+            close=c["trade_price"],
+            volume=c["candle_acc_trade_volume"],
+        )
+        for c in rows
+    ]
+    return items[-count:]
 
 
 def get_candles(market: str, interval: str = "days", count: int = 60) -> list[CandleItem]:
-    target, vol = _SEEDS.get(market, (10_000, 0.04))
-    rng = random.Random(hash(market + interval))
-
-    step = _INTERVAL_SECONDS.get(interval, 86_400)
-    start = int(time.time()) - count * step
-
-    price = target * 0.85
-    candles: list[CandleItem] = []
-
-    for i in range(count):
-        o = price
-        c = o * (1 + rng.uniform(-vol, vol))
-        h = max(o, c) * rng.uniform(1.001, 1.015)
-        lo = min(o, c) * rng.uniform(0.985, 0.999)
-        candles.append(CandleItem(
-            timestamp=(start + i * step) * 1_000,
-            open=round(o),
-            high=round(h),
-            low=round(lo),
-            close=round(c),
-            volume=round(rng.uniform(100, 5_000), 4),
-        ))
-        price = c
-
-    if candles:
-        last = candles[-1]
-        candles[-1] = CandleItem(
-            timestamp=last.timestamp,
-            open=last.open,
-            high=max(last.high, target),
-            low=min(last.low, target),
-            close=target,
-            volume=last.volume,
-        )
-
-    return candles
+    key = f"candle:{market}:{interval}:{count}"
+    return cached(key, config.TTL_CANDLE, lambda: _fetch(market, interval, count))

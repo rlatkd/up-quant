@@ -165,16 +165,16 @@ function RSIChart({ candles }) {
 
 // ── 상수 ──────────────────────────────────────────────────
 const INTERVALS = [
-  { label: '1분',   api: 'minutes', count: 60 },
-  { label: '3분',   api: 'minutes', count: 60 },
-  { label: '5분',   api: 'minutes', count: 60 },
-  { label: '15분',  api: 'minutes', count: 60 },
-  { label: '30분',  api: 'minutes', count: 60 },
-  { label: '1시간', api: 'minutes', count: 60 },
-  { label: '4시간', api: 'minutes', count: 60 },
-  { label: '일',    api: 'days',    count: 60 },
-  { label: '주',    api: 'weeks',   count: 52 },
-  { label: '월',    api: 'days',    count: 90 },
+  { label: '1분',   api: 'minutes/1',   count: 100 },
+  { label: '3분',   api: 'minutes/3',   count: 100 },
+  { label: '5분',   api: 'minutes/5',   count: 100 },
+  { label: '15분',  api: 'minutes/15',  count: 100 },
+  { label: '30분',  api: 'minutes/30',  count: 100 },
+  { label: '1시간', api: 'minutes/60',  count: 100 },
+  { label: '4시간', api: 'minutes/240', count: 100 },
+  { label: '일',    api: 'days',        count: 120 },
+  { label: '주',    api: 'weeks',       count: 100 },
+  { label: '월',    api: 'months',      count: 60 },
 ]
 
 function fmtVolume(v) {

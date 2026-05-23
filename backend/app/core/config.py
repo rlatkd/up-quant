@@ -7,3 +7,32 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ── 분석 대상 마켓 + 카테고리 ────────────────────────────────
+# Upbit는 카테고리를 제공하지 않으므로 수동 매핑. 실제 상장 여부는 /market/all로 필터링한다.
+MARKET_CATEGORIES: dict[str, str] = {
+    "KRW-BTC":   "layer1",
+    "KRW-ETH":   "layer1",
+    "KRW-SOL":   "layer1",
+    "KRW-AVAX":  "layer1",
+    "KRW-DOT":   "layer1",
+    "KRW-ATOM":  "layer1",
+    "KRW-NEAR":  "layer1",
+    "KRW-ADA":   "layer1",
+    "KRW-XRP":   "layer1",
+    "KRW-LINK":  "defi",
+    "KRW-1INCH": "defi",
+    "KRW-DOGE":  "meme",
+    "KRW-SAND":  "gaming",
+    "KRW-MANA":  "gaming",
+    "KRW-POL":   "layer2",
+}
+
+MARKETS: list[str] = list(MARKET_CATEGORIES.keys())
+
+# ── 캐시 TTL (초) ───────────────────────────────────────────
+TTL_MARKET_ALL = 3600   # 마켓 목록/한글명 (거의 안 변함)
+TTL_TICKER     = 5      # 현재가
+TTL_CANDLE     = 30     # 캔들
+TTL_ORDERBOOK  = 3      # 호가
+TTL_TRADES     = 3      # 체결

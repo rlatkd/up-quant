@@ -1,28 +1,12 @@
 import math
 import random
-import statistics
 
+from app.core.config import MARKET_CATEGORIES
 from app.schemas.analysis import CategoryMonthly, CoinStat, CorrelationItem
 from app.services import candle_service, market_service
 
-# 카테고리 분류 (Upbit KRW 마켓 기준)
-_CATEGORIES: dict[str, str] = {
-    "KRW-BTC":   "layer1",
-    "KRW-ETH":   "layer1",
-    "KRW-SOL":   "layer1",
-    "KRW-AVAX":  "layer1",
-    "KRW-DOT":   "layer1",
-    "KRW-ATOM":  "layer1",
-    "KRW-NEAR":  "layer1",
-    "KRW-ADA":   "layer1",
-    "KRW-XRP":   "layer1",
-    "KRW-LINK":  "defi",
-    "KRW-1INCH": "defi",
-    "KRW-DOGE":  "meme",
-    "KRW-SAND":  "gaming",
-    "KRW-MANA":  "gaming",
-    "KRW-MATIC": "layer2",
-}
+# 카테고리 분류는 config로 중앙화 (Upbit는 카테고리를 제공하지 않음)
+_CATEGORIES = MARKET_CATEGORIES
 
 # 카테고리별 월간 수익률 — Upbit /v1/candles/months 기반으로 교체 예정
 _MONTHLY_RAW = [
@@ -99,7 +83,7 @@ def get_category_cumulative(period: str = "월") -> list[CategoryMonthly]:
 
 def _volatility(market: str) -> float:
     """30일 일간 수익률의 표준편차 (Upbit /v1/candles/days 기반)"""
-    candles = candle_service.get_candles(market, "days", count=31)
+    candles = candle_service.get_candles(market, "days", count=30)
     closes = [c.close for c in candles]
     if len(closes) < 3:
         return 0.0
