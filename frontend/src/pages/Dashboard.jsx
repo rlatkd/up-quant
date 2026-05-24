@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ScatterChart, Scatter, ZAxis, ReferenceLine, ResponsiveContainer,
@@ -27,6 +28,30 @@ const CATS = ['layer1', 'defi', 'meme', 'gaming', 'layer2']
 
 const DOM_COLORS = ['#f59e0b', '#6366f1', '#06b6d4', '#10b981', '#9ca3af']
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
+
+// 리스크-수익 산점도: 대부분 종목이 모여 있고 일부만 극단값이라,
+// 축은 분포 본체(IQR 펜스)까지만 그리고 스케일 밖 종목은 가장자리에 ◆로 따로 표기한다.
+// (정확한 값은 호버 툴팁으로 확인 — 굳이 축을 극단값까지 늘리지 않는다)
+function quantile(sorted, p) {
+  const i = (sorted.length - 1) * p
+  const lo = Math.floor(i), hi = Math.ceil(i)
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
+}
+function bulkRange(vals, k = 2) {
+  if (!vals.length) return { lo: 0, hi: 1 }
+  const s = [...vals].sort((a, b) => a - b)
+  const q1 = quantile(s, 0.25), q3 = quantile(s, 0.75), iqr = q3 - q1
+  return {
+    lo: Math.max(s[0], q1 - k * iqr),            // 본체 하한 (실데이터 범위 내)
+    hi: Math.min(s[s.length - 1], q3 + k * iqr),  // 본체 상한
+  }
+}
+const padDomain = (lo, hi) => { const p = (hi - lo) * 0.05 || 0.5; return [lo - p, hi + p] }
+
+// 카테고리 수익률은 업비트가 카테고리를 제공하지 않아 예시(더미) 데이터를 사용한다.
+function DummyBadge() {
+  return <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-medium">예시</span>
+}
 
 function pearson(xs, ys) {
   const n = xs.length
@@ -131,26 +156,24 @@ function HeatmapCell({ value }) {
   )
 }
 
-function ScatterDot({ cx, cy, payload }) {
-  const color = CAT_COLORS[payload.category] || '#94a3b8'
-  return (
-    <g>
-      <circle cx={cx} cy={cy} r={5} fill={color} fillOpacity={0.85} stroke={color} strokeWidth={1} />
-      <text x={cx + 7} y={cy + 4} fontSize={10} fill="#6b7280">{payload.name}</text>
-    </g>
-  )
+// 색상 기준 = 1개월 수익률: 상승(빨강)·보합(회색)·하락(파랑), 절대값 클수록 진하게.
+// (한국 금융 UI 관습과 일치. Y축이 잘려 ◆로 표기된 종목도 색으로 등락 강도를 알 수 있다)
+const lerp = (a, b, t) => Math.round(a + (b - a) * t)
+function returnColor(r) {
+  const t = Math.min(1, Math.abs(r) / 30)              // ±30%에서 최대 채도
+  const base = [148, 163, 184]                          // 보합: slate-400
+  const tgt = r >= 0 ? [239, 68, 68] : [59, 130, 246]   // 상승 빨강 / 하락 파랑
+  return `rgb(${lerp(base[0], tgt[0], t)}, ${lerp(base[1], tgt[1], t)}, ${lerp(base[2], tgt[2], t)})`
 }
 
-function CatLegend() {
+function ScatterDot({ cx, cy, payload }) {
+  // 종목 수가 많아 라벨은 생략하고 점만 — 이름·값은 호버 툴팁으로 확인.
+  // 겹쳐도 호버가 쉽도록 넓은 투명 히트 영역을 깔아둔다.
   return (
-    <div className="flex gap-4 mt-2">
-      {CATS.map(cat => (
-        <div key={cat} className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] }} />
-          <span className="text-xs text-gray-500">{CAT_LABELS[cat]}</span>
-        </div>
-      ))}
-    </div>
+    <g>
+      <circle cx={cx} cy={cy} r={9} fill="transparent" />
+      <circle cx={cx} cy={cy} r={3.5} fill={payload.color} fillOpacity={0.8} stroke="#fff" strokeWidth={0.5} />
+    </g>
   )
 }
 
@@ -268,6 +291,7 @@ const PERIOD_OPTIONS = ['월', '분기', '년']
 const PERIOD_X_INTERVAL = { 월: 5, 분기: 1, 년: 0 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [cumPeriod, setCumPeriod] = useState('월')
   const { tickers, loading: tickersLoading } = useTickers()
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
@@ -298,13 +322,21 @@ export default function Dashboard() {
   const changeScore = Math.min(100, Math.max(0, avgChange * 5 + 50))
   const fearGreedScore = Math.round(riseRatioPct * 0.6 + changeScore * 0.4)
 
-  // Scatter grouping by category
-  const scatterByCat = CATS.map(cat => ({
-    cat,
-    points: coinStats
-      .filter(s => s.category === cat)
-      .map(s => ({ x: s.volatility, y: s.return_1m, name: s.market.replace('KRW-', ''), category: cat })),
+  // Scatter: 분포 본체(IQR 펜스 안)만 산점도에 그리고, 스케일 밖 종목은 아래 표로 분리한다.
+  const xR = bulkRange(coinStats.map(s => s.volatility))
+  const yR = bulkRange(coinStats.map(s => s.return_1m))
+  const isOutlier = s => s.volatility < xR.lo || s.volatility > xR.hi || s.return_1m < yR.lo || s.return_1m > yR.hi
+  const inliers = coinStats.filter(s => !isOutlier(s))
+  const outliers = [...coinStats.filter(isOutlier)].sort((a, b) => b.return_1m - a.return_1m)
+  const scatterPoints = inliers.map(s => ({
+    x: s.volatility, y: s.return_1m,
+    color: returnColor(s.return_1m),
+    name: s.market.replace('KRW-', ''), category: s.category,
   }))
+  const xs = inliers.map(s => s.volatility)
+  const ys = inliers.map(s => s.return_1m)
+  const xDomain = xs.length ? padDomain(Math.min(...xs), Math.max(...xs)) : [0, 5]
+  const yDomain = ys.length ? padDomain(Math.min(...ys), Math.max(...ys)) : [-10, 10]
 
   return (
     <div className="space-y-4">
@@ -346,7 +378,10 @@ export default function Dashboard() {
       {/* Cumulative returns */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
+            <DummyBadge />
+          </div>
           <div className="flex gap-1">
             {PERIOD_OPTIONS.map(p => (
               <button
@@ -363,7 +398,7 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-        <div className="text-xs text-gray-400 mb-4">최근 5년 기준, 초기값 대비 누적 등락률 (%)</div>
+        <div className="text-xs text-gray-400 mb-4">초기값 대비 누적 등락률 (%) · 난수 기반 예시 데이터 (실 시세 아님)</div>
         {cumLoading ? (
           <div className="h-[220px] flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
@@ -402,16 +437,20 @@ export default function Dashboard() {
 
       {/* 카테고리 상관관계 히트맵 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-0.5">카테고리 상관관계</div>
+        <div className="flex items-center gap-2 mb-0.5">
+          <div className="text-sm font-semibold text-gray-700">카테고리 상관관계</div>
+          <DummyBadge />
+        </div>
         <div className="text-xs text-gray-400 mb-4">월별 수익률 기반 피어슨 상관계수 (-1 ~ +1)</div>
         <CorrHeatmap monthly={monthly} />
       </div>
 
-      {/* Heatmap + Scatter */}
-      <div className="grid grid-cols-12 gap-4">
-        {/* Monthly heatmap */}
-        <div className="col-span-5 bg-white border border-gray-200 rounded-lg p-5">
-          <div className="text-sm font-semibold text-gray-700 mb-1">월별 카테고리 수익률</div>
+      {/* Monthly heatmap */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="text-sm font-semibold text-gray-700">월별 카테고리 수익률</div>
+            <DummyBadge />
+          </div>
           <div className="text-xs text-gray-400 mb-4">각 카테고리의 해당 월 평균 등락률 (%)</div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -444,27 +483,29 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Risk-Return scatter */}
-        <div className="col-span-7 bg-white border border-gray-200 rounded-lg p-5">
+      {/* Risk-Return scatter */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="text-sm font-semibold text-gray-700 mb-1">리스크-수익 분포</div>
-          <div className="text-xs text-gray-400 mb-3">X: 변동성 (30일 일간 수익률 표준편차), Y: 1개월 수익률</div>
-          <ResponsiveContainer width="100%" height={260}>
-            <ScatterChart margin={{ top: 4, right: 20, bottom: 16, left: -10 }}>
+          <div className="text-xs text-gray-400 mb-3">분포 본체 · X: 변동성(30일 표준편차) · Y: 1개월 수익률 · 색상: 1개월 수익률(상승 빨강/하락 파랑) · 극단값 종목은 아래 표 (호버로 종목·값)</div>
+          <ResponsiveContainer width="100%" height={360}>
+            <ScatterChart margin={{ top: 4, right: 24, bottom: 16, left: -4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis
                 dataKey="x"
                 type="number"
                 name="변동성"
+                domain={xDomain}
                 tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickFormatter={v => v + '%'}
+                tickFormatter={v => Math.round(v * 10) / 10 + '%'}
                 label={{ value: '변동성 (%)', position: 'insideBottom', offset: -8, fontSize: 11, fill: '#9ca3af' }}
               />
               <YAxis
                 dataKey="y"
                 type="number"
                 name="수익률"
+                domain={yDomain}
                 tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickFormatter={v => v + '%'}
+                tickFormatter={v => Math.round(v) + '%'}
               />
               <ZAxis range={[40, 40]} />
               <Tooltip
@@ -475,27 +516,63 @@ export default function Dashboard() {
                   return (
                     <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs shadow-sm">
                       <div className="font-semibold text-gray-700 mb-1">{d.name}</div>
-                      <div className="text-gray-500">{CAT_LABELS[d.category]}</div>
+                      {d.category && <div className="text-gray-500">{CAT_LABELS[d.category]}</div>}
                       <div className="text-gray-600 mt-1">변동성 {d.x}% / 수익률 {d.y > 0 ? '+' : ''}{d.y}%</div>
                     </div>
                   )
                 }}
               />
               <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-              {scatterByCat.map(({ cat, points }) => (
-                <Scatter
-                  key={cat}
-                  name={CAT_LABELS[cat]}
-                  data={points}
-                  fill={CAT_COLORS[cat]}
-                  shape={<ScatterDot />}
-                />
-              ))}
+              <Scatter data={scatterPoints} shape={<ScatterDot />} isAnimationActive={false} />
             </ScatterChart>
           </ResponsiveContainer>
-          <CatLegend />
+          <div className="flex items-center justify-center gap-2 mt-2 text-xs text-gray-400">
+            <span className="text-blue-500">하락</span>
+            <span className="h-2 w-32 rounded-full" style={{ background: 'linear-gradient(to right, #3b82f6, #94a3b8, #ef4444)' }} />
+            <span className="text-red-500">상승</span>
+            <span className="ml-1">· 1개월 수익률</span>
+          </div>
+
+          {/* 스케일 밖(극단값) 종목 — 분포에서 제외하고 표로 정리 */}
+          {outliers.length > 0 && (
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <div className="text-xs font-semibold text-gray-500 mb-2">
+                스케일 밖 종목 <span className="text-gray-400 font-normal">({outliers.length}) · 변동성·수익률이 극단적이라 위 분포에서 제외</span>
+              </div>
+              <div className="max-h-40 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-400">
+                      <th className="text-left font-medium py-1 pr-3">종목</th>
+                      <th className="text-right font-medium py-1 px-3">변동성</th>
+                      <th className="text-right font-medium py-1 pl-3">1개월 수익률</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outliers.map(s => (
+                      <tr
+                        key={s.market}
+                        onClick={() => navigate(`/coins/${s.market}`)}
+                        className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="py-1.5 pr-3 text-gray-700">
+                          <span className="font-medium">{s.market.replace('KRW-', '')}</span>
+                          <span className="text-gray-400 ml-1.5">{s.korean_name}</span>
+                        </td>
+                        <td className="py-1.5 px-3 text-right text-gray-600">{s.volatility.toFixed(2)}%</td>
+                        <td className={`py-1.5 pl-3 text-right font-medium ${
+                          s.return_1m > 0 ? 'text-red-500' : s.return_1m < 0 ? 'text-blue-500' : 'text-gray-400'
+                        }`}>
+                          {s.return_1m > 0 ? '+' : ''}{s.return_1m.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
     </div>
   )
 }

@@ -2,7 +2,6 @@ from app.clients import upbit_rest
 from app.core import config
 from app.core.cache import cached
 from app.schemas.market import Orderbook, OrderbookUnit, MarketSummary, Ticker, Trade
-from app.services import candle_service
 
 
 def _korean_names() -> dict[str, str]:
@@ -15,14 +14,23 @@ def _korean_names() -> dict[str, str]:
 
 
 def _valid_markets() -> list[str]:
-    """설정한 마켓 중 실제 상장된 것만."""
+    """분석 대상 마켓 목록 (실제 상장된 것만).
+    USE_ALL_KRW_MARKETS면 업비트 KRW 마켓 전체, 아니면 설정한 15종목."""
     names = _korean_names()
+    if config.USE_ALL_KRW_MARKETS:
+        return [m for m in names if m.startswith("KRW-")]
     return [m for m in config.MARKETS if m in names]
 
 
 def _sparkline(market: str) -> list[float]:
-    candles = candle_service.get_candles(market, "days", 30)
-    return [c.close for c in candles] or [0.0]
+    """최근 24시간 1시간봉 종가 — 코인목록 '1일' 미니 그래프용 (가벼운 별도 캐시)."""
+    raw = cached(
+        f"spark:{market}",
+        config.TTL_SPARKLINE,
+        lambda: upbit_rest.get_candles("minutes/60", market, 24),
+    )
+    closes = [c["trade_price"] for c in reversed(raw)]  # 최신순 → 오래된순
+    return closes or [0.0]
 
 
 def get_tickers() -> list[Ticker]:

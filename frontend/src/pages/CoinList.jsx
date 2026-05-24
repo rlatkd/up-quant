@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, ResponsiveContainer } from 'recharts'
 import { useTickers, useMarketSummary } from '../hooks/useTickers'
 
@@ -200,7 +200,7 @@ export default function CoinList() {
               <SortTh label="현재가"      col="trade_price"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
               <SortTh label="24h 등락"   col="change_rate"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
               <SortTh label="거래대금(24h)" col="acc_trade_price_24h" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
-              <th className="px-4 py-2.5 text-center font-medium">7일</th>
+              <th className="px-4 py-2.5 text-center font-medium">1일</th>
               <th className="px-4 py-2.5 text-right font-medium">52주 위치</th>
             </tr>
           </thead>

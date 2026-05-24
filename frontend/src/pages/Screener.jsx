@@ -13,11 +13,12 @@ const FIELDS = [
 
 const OPS = ['>', '<', '>=', '<=']
 
+// KRW 마켓 15종목 기준으로 일반적인 날에도 결과가 비지 않도록 임계값 조정
 const PRESETS = [
-  { label: '급등주',   conditions: [{ field: 'change_rate', op: '>', value: '5' }] },
-  { label: '고변동성', conditions: [{ field: 'volatility',  op: '>', value: '4' }] },
-  { label: '52주 신고가 근접', conditions: [{ field: 'w52_pos', op: '>=', value: '90' }] },
-  { label: '침체 저가권', conditions: [{ field: 'w52_pos', op: '<=', value: '20' }, { field: 'change_rate', op: '<', value: '-3' }] },
+  { label: '급등주',   conditions: [{ field: 'change_rate', op: '>', value: '2' }] },
+  { label: '고변동성', conditions: [{ field: 'volatility',  op: '>', value: '2' }] },
+  { label: '52주 신고가 근접', conditions: [{ field: 'w52_pos', op: '>=', value: '60' }] },
+  { label: '침체 저가권', conditions: [{ field: 'w52_pos', op: '<=', value: '30' }, { field: 'return_1m', op: '<', value: '0' }] },
 ]
 
 let _uid = 0
@@ -53,7 +54,8 @@ export default function Screener() {
         market:       t.market,
         korean_name:  t.korean_name,
         trade_price:  t.trade_price,
-        change_rate:  t.change_rate,
+        // change_rate는 소수(예: 0.0234) → 조건/표시는 퍼센트(2.34)를 쓰므로 ×100 정규화
+        change_rate:  t.change_rate * 100,
         acc_trade_24h: Math.round((t.acc_trade_price_24h ?? 0) / 1e8),
         volatility:   s.volatility   ?? 0,
         return_1m:    s.return_1m    ?? 0,

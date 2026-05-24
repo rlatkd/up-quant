@@ -51,7 +51,7 @@ _CANON = 200
 
 def get_candles(market: str, interval: str = "days", count: int = 60) -> list[CandleItem]:
     if interval == "days" and count <= _CANON:
-        full = cached(f"candle:{market}:days", config.TTL_CANDLE, lambda: _fetch(market, "days", _CANON))
+        full = cached(f"candle:{market}:days", config.TTL_CANDLE_DAYS, lambda: _fetch(market, "days", _CANON))
         return full[-count:] if count < len(full) else full
     key = f"candle:{market}:{interval}:{count}"
     return cached(key, config.TTL_CANDLE, lambda: _fetch(market, interval, count))

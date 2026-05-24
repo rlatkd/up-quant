@@ -1,6 +1,8 @@
 import math
 import random
 
+from app.core import config
+from app.core.cache import cached
 from app.core.config import MARKET_CATEGORIES
 from app.schemas.analysis import CategoryMonthly, CoinStat, CorrelationItem
 from app.services import candle_service, market_service
@@ -134,19 +136,23 @@ def get_correlation(market: str) -> list[CorrelationItem]:
     return sorted(result, key=lambda x: x.correlation, reverse=True)
 
 
-def get_coin_stats() -> list[CoinStat]:
-    ticker_map = {t.market: t for t in market_service.get_tickers()}
+def _compute_coin_stats() -> list[CoinStat]:
+    # 분석 유니버스 전체를 대상으로 변동성·1개월 수익률 산출 (공용 일봉 캐시 재사용).
+    # 카테고리는 수동 매핑에 있으면 부여, 없으면 None (분류 소스 확정 전).
+    tickers = market_service.get_tickers()
     result = []
-    for market, category in _CATEGORIES.items():
-        t = ticker_map.get(market)
-        if not t:
-            continue
+    for t in tickers:
         result.append(CoinStat(
-            market=market,
+            market=t.market,
             korean_name=t.korean_name,
-            category=category,
-            volatility=_volatility(market),
-            return_1m=_return_1m(market),
+            category=_CATEGORIES.get(t.market),
+            volatility=_volatility(t.market),
+            return_1m=_return_1m(t.market),
             acc_trade_price_24h=t.acc_trade_price_24h,
         ))
     return result
+
+
+def get_coin_stats() -> list[CoinStat]:
+    # 전체 유니버스면 코인 수가 많아 계산 비용이 커지므로 짧게 캐시한다.
+    return cached("coin_stats", config.TTL_TICKER, _compute_coin_stats)

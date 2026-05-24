@@ -1,13 +1,11 @@
-import { Link } from 'react-router-dom'
-import {
-  AreaChart, Area, ResponsiveContainer, Treemap,
-  BarChart, Bar, XAxis, YAxis, LabelList, Cell,
-} from 'recharts'
+import { Link, useNavigate } from 'react-router-dom'
+import { AreaChart, Area, ResponsiveContainer, Treemap } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 
 const FEATURED = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
 
-const VOL_COLORS = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe']
+const RANK_LIMIT = 20      // 상승률·하락률·거래대금 표기 순위
+const TREEMAP_LIMIT = 30   // 시장 현황 트리맵에 표시할 메이저 종목 수 (거래대금 상위)
 
 function fmtRate(r) {
   return (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
@@ -62,7 +60,7 @@ function MiniCard({ ticker }) {
   )
 }
 
-function RankTable({ title, rows, color }) {
+function RankTable({ title, rows, color, onRowClick }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div className={`px-4 py-3 border-b border-gray-100 text-sm font-semibold ${color}`}>{title}</div>
@@ -76,12 +74,16 @@ function RankTable({ title, rows, color }) {
         </thead>
         <tbody>
           {rows.map(t => (
-            <tr key={t.market} className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer">
+            <tr
+              key={t.market}
+              onClick={() => onRowClick(t.market)}
+              className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
+            >
               <td className="px-4 py-2.5">
-                <Link to={`/coins/${t.market}`} className="flex flex-col">
+                <div className="flex flex-col">
                   <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
                   <span className="text-xs text-gray-400 mt-0.5">{t.market.replace('KRW-', '')}</span>
-                </Link>
+                </div>
               </td>
               <td className={`px-4 py-2.5 text-right text-sm font-medium ${changeColor(t.change)}`}>
                 {t.trade_price.toLocaleString()}
@@ -97,29 +99,37 @@ function RankTable({ title, rows, color }) {
   )
 }
 
-function VolumeChart({ tickers }) {
-  const top5 = [...tickers]
-    .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
-    .slice(0, 5)
-  const data = top5.map(t => ({
-    name: t.market.replace('KRW-', ''),
-    value: t.acc_trade_price_24h,
-  }))
-
+function VolumeTable({ rows, onRowClick }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5">
-      <div className="text-sm font-semibold text-gray-700 mb-0.5">거래대금 TOP 5</div>
-      <div className="text-xs text-gray-400 mb-4">24h 기준</div>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 60, bottom: 0, left: 0 }}>
-          <XAxis type="number" hide />
-          <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} width={32} axisLine={false} tickLine={false} />
-          <Bar dataKey="value" radius={[0, 3, 3, 0]} barSize={18} isAnimationActive={false}>
-            {data.map((_, i) => <Cell key={i} fill={VOL_COLORS[i]} />)}
-            <LabelList dataKey="value" position="right" formatter={fmtVolume} style={{ fontSize: 11, fill: '#6b7280' }} />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">거래대금 상위</div>
+      <table className="w-full">
+        <thead>
+          <tr className="bg-gray-50 text-xs text-gray-400">
+            <th className="px-4 py-2 text-left font-medium">종목</th>
+            <th className="px-4 py-2 text-right font-medium">거래대금(24h)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(t => (
+            <tr
+              key={t.market}
+              onClick={() => onRowClick(t.market)}
+              className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
+            >
+              <td className="px-4 py-2.5">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
+                  <span className="text-xs text-gray-400 mt-0.5">{t.market.replace('KRW-', '')}</span>
+                </div>
+              </td>
+              <td className="px-4 py-2.5 text-right text-sm font-medium text-gray-700">
+                {fmtVolume(t.acc_trade_price_24h)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -189,6 +199,7 @@ function TreemapCell({ x, y, width, height, name, change_rate }) {
 
 export default function Market() {
   const { tickers, loading } = useTickers()
+  const navigate = useNavigate()
 
   if (loading) return (
     <div className="py-24 flex justify-center">
@@ -197,12 +208,15 @@ export default function Market() {
   )
 
   const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)
+  const byVolume = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
   const featured = FEATURED.map(m => tickers.find(t => t.market === m)).filter(Boolean)
-  const treemapData = tickers.map(t => ({
+  // 트리맵은 종목이 많으면 정신없어 거래대금 상위(메이저)만 표시
+  const treemapData = byVolume.slice(0, TREEMAP_LIMIT).map(t => ({
     name: t.market.replace('KRW-', ''),
     size: t.acc_trade_price_24h,
     change_rate: t.change_rate,
   }))
+  const goCoin = m => navigate(`/coins/${m}`)
 
   return (
     <div className="space-y-4">
@@ -214,24 +228,28 @@ export default function Market() {
       {/* 52주 신고가/신저가 배지 */}
       <W52Badges tickers={tickers} />
 
-      {/* 상승률 | 하락률 | 거래대금 TOP5 */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* 상승률 | 하락률 | 거래대금 (각 20위) */}
+      <div className="grid grid-cols-3 gap-4 items-start">
         <RankTable
           title="상승률 상위"
-          rows={sorted.slice(0, 8)}
+          rows={sorted.slice(0, RANK_LIMIT)}
           color="text-red-500"
+          onRowClick={goCoin}
         />
         <RankTable
           title="하락률 상위"
-          rows={[...sorted].reverse().slice(0, 8)}
+          rows={[...sorted].reverse().slice(0, RANK_LIMIT)}
           color="text-blue-500"
+          onRowClick={goCoin}
         />
-        <VolumeChart tickers={tickers} />
+        <VolumeTable rows={byVolume.slice(0, RANK_LIMIT)} onRowClick={goCoin} />
       </div>
 
-      {/* 시장 현황 트리맵 */}
+      {/* 시장 현황 트리맵 (거래대금 상위 메이저) */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">시장 현황</div>
+        <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">
+          시장 현황 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {TREEMAP_LIMIT}종목</span>
+        </div>
         <div className="p-2">
           <ResponsiveContainer width="100%" height={320}>
             <Treemap data={treemapData} dataKey="size" content={<TreemapCell />} isAnimationActive={false} />
