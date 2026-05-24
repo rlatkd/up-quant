@@ -255,6 +255,7 @@ npm run dev
 | `GET` | `/category/monthly` | `CategoryMonthly[]` | 카테고리별 월간 수익률 |
 | `GET` | `/category/cumulative` | `CategoryMonthly[]` | 카테고리별 누적 수익률 |
 | `GET` | `/coins` | `CoinStat[]` | 코인별 변동성·1개월 수익률 (리스크-수익 산점도용) |
+| `GET` | `/correlation/{market}` | `CorrelationItem[]` | 지정 종목과 타 종목의 60일 종가 피어슨 상관관계 (내림차순) |
 
 ### Backtest — `/api/backtest`
 
@@ -304,12 +305,13 @@ Trade         { timestamp, price, volume, side(BID|ASK) }
 </details>
 
 <details>
-<summary><b>CandleItem</b> · <b>CategoryMonthly</b> · <b>CoinStat</b></summary>
+<summary><b>CandleItem</b> · <b>CategoryMonthly</b> · <b>CoinStat</b> · <b>CorrelationItem</b></summary>
 
 ```text
 CandleItem      { timestamp(ms), open, high, low, close, volume }
 CategoryMonthly { month("YYYY-MM"), layer1, defi, meme, gaming, layer2 }
 CoinStat        { market, korean_name, category, volatility(%), return_1m(%), acc_trade_price_24h }
+CorrelationItem { market, korean_name, correlation(-1.0~1.0) }
 ```
 
 코인은 `layer1` · `defi` · `meme` · `gaming` · `layer2` 카테고리로 분류됩니다.
@@ -340,7 +342,7 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 | 레이트리밋 | 전역 스로틀(~초당 8회) + 429 백오프 재시도 | 시세 API IP 제한(초당 약 10회) 내 버스트 방지 |
 | 캐시 워밍 | 부팅 시 백그라운드 프리페치 | 첫 사용자도 캐시 워밍 상태 |
 | 관측성 | `contextvars` 기반 rid를 3계층 로그에 주입 + `X-Request-Id` | Spring MDC처럼 요청 전 구간 추적 |
-| 마켓 유니버스 | 15개 KRW 마켓을 `/market/all`과 교집합 | 상장폐지 종목 자동 제외 (예: MATIC → POL) |
+| 마켓 유니버스 | 분석은 KRW 전체(~261종, `USE_ALL_KRW_MARKETS`) · 카테고리 매핑은 15종 | `/market/all` 교집합으로 상장폐지 자동 제외 (예: MATIC → POL) |
 | 카테고리 수익률 | 예시(더미) 데이터 유지 | 업비트가 코인 카테고리를 제공하지 않음 |
 | 라우터 prefix | `/api/markets` 등 플랫 구조 | `api/v1/` 버저닝 생략 |
 | 색상 컨벤션 | 상승 = 빨강 / 하락 = 파랑 | 한국 금융 UI 관행 |

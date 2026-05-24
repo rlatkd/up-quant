@@ -328,10 +328,10 @@ export default function CoinDetail() {
         </div>
       </div>
 
-      {/* 체결내역 + 종목정보 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">체결 내역</div>
+      {/* 체결내역 (종목 기본정보는 상단 가격 헤더와 중복되어 제거) */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">체결 내역</div>
+        <div className="max-h-96 overflow-y-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400">
@@ -356,26 +356,6 @@ export default function CoinDetail() {
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">종목 정보</div>
-          <div className="divide-y divide-gray-50">
-            {[
-              ['마켓',        ticker.market],
-              ['종목명',      ticker.korean_name],
-              ['현재가',      ticker.trade_price.toLocaleString() + ' KRW'],
-              ['전일 종가',   ticker.prev_closing_price.toLocaleString() + ' KRW'],
-              ['당일 고가',   ticker.high_price.toLocaleString() + ' KRW'],
-              ['당일 저가',   ticker.low_price.toLocaleString() + ' KRW'],
-              ['거래대금(24h)', fmtVolume(ticker.acc_trade_price_24h) + ' KRW'],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between px-4 py-2.5 text-sm">
-                <span className="text-gray-400">{k}</span>
-                <span className="text-gray-800 font-medium">{v}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 

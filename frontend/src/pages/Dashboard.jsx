@@ -29,6 +29,9 @@ const CATS = ['layer1', 'defi', 'meme', 'gaming', 'layer2']
 const DOM_COLORS = ['#f59e0b', '#6366f1', '#06b6d4', '#10b981', '#9ca3af']
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
 
+// 리스크-수익 산점도에 표시할 거래대금 상위 종목 수 (전체 261종은 점이 너무 많아 산만)
+const SCATTER_LIMIT = 30
+
 // 리스크-수익 산점도: 대부분 종목이 모여 있고 일부만 극단값이라,
 // 축은 분포 본체(IQR 펜스)까지만 그리고 스케일 밖 종목은 가장자리에 ◆로 따로 표기한다.
 // (정확한 값은 호버 툴팁으로 확인 — 굳이 축을 극단값까지 늘리지 않는다)
@@ -322,12 +325,16 @@ export default function Dashboard() {
   const changeScore = Math.min(100, Math.max(0, avgChange * 5 + 50))
   const fearGreedScore = Math.round(riseRatioPct * 0.6 + changeScore * 0.4)
 
-  // Scatter: 분포 본체(IQR 펜스 안)만 산점도에 그리고, 스케일 밖 종목은 아래 표로 분리한다.
-  const xR = bulkRange(coinStats.map(s => s.volatility))
-  const yR = bulkRange(coinStats.map(s => s.return_1m))
+  // Scatter: 거래대금 상위 N종만 대상으로, 분포 본체(IQR 펜스 안)만 산점도에 그리고
+  // 스케일 밖 종목은 아래 표로 분리한다. (전체 유니버스는 점이 너무 많아 분포가 산만)
+  const scatterUniverse = [...coinStats]
+    .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
+    .slice(0, SCATTER_LIMIT)
+  const xR = bulkRange(scatterUniverse.map(s => s.volatility))
+  const yR = bulkRange(scatterUniverse.map(s => s.return_1m))
   const isOutlier = s => s.volatility < xR.lo || s.volatility > xR.hi || s.return_1m < yR.lo || s.return_1m > yR.hi
-  const inliers = coinStats.filter(s => !isOutlier(s))
-  const outliers = [...coinStats.filter(isOutlier)].sort((a, b) => b.return_1m - a.return_1m)
+  const inliers = scatterUniverse.filter(s => !isOutlier(s))
+  const outliers = [...scatterUniverse.filter(isOutlier)].sort((a, b) => b.return_1m - a.return_1m)
   const scatterPoints = inliers.map(s => ({
     x: s.volatility, y: s.return_1m,
     color: returnColor(s.return_1m),
@@ -486,7 +493,7 @@ export default function Dashboard() {
       {/* Risk-Return scatter */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="text-sm font-semibold text-gray-700 mb-1">리스크-수익 분포</div>
-          <div className="text-xs text-gray-400 mb-3">분포 본체 · X: 변동성(30일 표준편차) · Y: 1개월 수익률 · 색상: 1개월 수익률(상승 빨강/하락 파랑) · 극단값 종목은 아래 표 (호버로 종목·값)</div>
+          <div className="text-xs text-gray-400 mb-3">거래대금 상위 {SCATTER_LIMIT}종 · X: 변동성(30일 표준편차) · Y: 1개월 수익률 · 색상: 1개월 수익률(상승 빨강/하락 파랑) · 극단값 종목은 아래 표 (호버로 종목·값)</div>
           <ResponsiveContainer width="100%" height={360}>
             <ScatterChart margin={{ top: 4, right: 24, bottom: 16, left: -4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />

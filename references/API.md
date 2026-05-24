@@ -16,14 +16,14 @@ UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open 
 
 ## 공통 사항
 
-### 지원 마켓 (15종)
-`config.MARKET_CATEGORIES`에 정의하며, 부팅 시 `/v1/market/all`과 교집합만 사용(상장폐지 종목 자동 제외).
+### 지원 마켓 (분석 유니버스 ~261종)
+분석 유니버스는 **업비트 KRW 마켓 전체(~261종)** — `config.USE_ALL_KRW_MARKETS`. 부팅 시 `/v1/market/all`과 교집합만 사용(상장폐지 종목 자동 제외). 코인↔카테고리 **수동 매핑**은 아래 15종(`config.MARKET_CATEGORIES`)에만 존재하며, 그 외 종목은 폴백 처리됩니다.
 ```
 KRW-BTC  KRW-ETH  KRW-XRP   KRW-SOL   KRW-DOGE
 KRW-ADA  KRW-LINK KRW-AVAX  KRW-DOT   KRW-ATOM
 KRW-NEAR KRW-SAND KRW-MANA  KRW-POL   KRW-1INCH
 ```
-> KRW-MATIC은 폴리곤 POL 마이그레이션으로 상장폐지되어 **KRW-POL**로 교체됨.
+> 위 15종은 **카테고리가 수동 매핑된 종목**입니다. KRW-MATIC은 폴리곤 POL 마이그레이션으로 상장폐지되어 **KRW-POL**로 교체됨.
 
 ### 오류 응답
 | 상태 코드 | 의미 | 본문 예시 |
