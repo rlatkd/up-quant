@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import threading
 import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -16,19 +16,25 @@ api_log = logging.getLogger("api")
 
 
 def _prefetch() -> None:
-    """부팅 직후 캐시 워밍: tickers를 한 번 받아 종목별 일봉/스파크라인 캐시를 채운다.
-    이후 모든 화면은 stale-while-revalidate로 즉시 응답한다. (실패해도 부팅엔 영향 없음)"""
+    """부팅 직후 캐시 워밍. 이후 모든 화면은 stale-while-revalidate로 즉시 응답한다.
+    (실패해도 부팅엔 영향 없음)
+    - get_tickers(): 현재가 + 종목별 스파크라인(시간봉)
+    - get_coin_stats(): 종목별 변동성·1개월수익률(일봉 팬아웃) — 대시보드 진입 시 대기하는
+      가장 무거운 호출이라 함께 워밍해야 재배포 직후 첫 방문자도 즉시 응답한다."""
     try:
-        from app.services import market_service
+        from app.services import market_service, analysis_service
         n = len(market_service.get_tickers())
-        logger.info("prefetch 완료: %d개 종목 캐시 워밍", n)
+        m = len(analysis_service.get_coin_stats())
+        logger.info("prefetch 완료: tickers %d종 + coin_stats %d종 캐시 워밍", n, m)
     except Exception as e:  # noqa: BLE001
         logger.warning("prefetch 실패 (서버는 정상 기동): %s", e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    threading.Thread(target=_prefetch, daemon=True).start()
+    # 워밍이 끝난 뒤 기동(blocking). 기동은 1~2분 느려지지만 첫 사용자도 콜드 없이 즉시 응답.
+    # 동기 httpx 호출이라 to_thread로 이벤트루프 밖에서 실행하되, 완료까지 대기한다.
+    await asyncio.to_thread(_prefetch)
     yield
 
 

@@ -39,26 +39,27 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 캔들은 **오름차순(오래된→최신)** 으로 반환 (lightweight-charts 요구). Upbit는 최신순이라 뒤집음.
 - `CandleItem.timestamp`=ms, `Trade.timestamp`=초(프론트가 ×1000), `EquityPoint.time`=초.
 - 프론트 캔들 interval: `minutes/{1|3|5|15|30|60|240}` | `days` | `weeks` | `months`.
+- **정렬**: `market_service.get_tickers()`는 **거래대금(`acc_trade_price_24h`) 내림차순**으로 반환(인기 종목 우선). 이를 그대로 따르는 코인목록(`/coins`)·비교분석(`/compare`)·스크리너(`/screener`)·대시보드 산점도가 동일 순서로 통일됨(`analysis_service.get_coin_stats()`도 `get_tickers()` 재사용). 코인목록 초기 정렬 헤더도 거래대금 desc(↓ 표시). **마켓현황(`/market`)은 자체 정렬**(상승률/하락률/거래대금 상위 등)이라 예외.
 
 ## 성능/관측성 (직접 구현, 외부 의존성 없음)
 
 - **캐시** `core/cache.py`: 인메모리 TTL + **stale-while-revalidate + single-flight**. 만료돼도 옛 값 즉시 반환, 갱신은 백그라운드 1스레드. 일봉은 종목별 200개 1회 fetch 후 슬라이스 공유(상관관계 ~1800ms→~5ms). TTL은 config. 유니버스 전체 확장에 따라 일봉/스파크라인 TTL은 장기화해 팬아웃 부하 억제.
 - **레이트리밋**: `clients/upbit_rest.py`에 전역 스로틀(~초당 8회) + 429 백오프 재시도. 캐싱 없으면 캔들 팬아웃으로 429 발생함(실증됨).
-- **부팅 프리페치**: `main.py` lifespan이 백그라운드로 `get_tickers()` 워밍.
+- **부팅 프리페치(동기 워밍)**: `main.py` lifespan이 `get_tickers()`+`get_coin_stats()`를 **동기로 워밍한 뒤 기동**(`await asyncio.to_thread(_prefetch)`). 기동이 1~2분(스로틀 초당 8회 × 약 780콜) 느려지는 대신 첫 사용자도 콜드 없이 즉시 응답. 대시보드·마켓·코인목록을 커버. 종목별 호가·체결·캔들(10 interval)·상관관계는 호출 수(수천)·실시간성(짧은 TTL) 때문에 프리페치 제외 → 해당 종목 첫 방문 시 fetch.
 - **통합 로깅**: `core/logging.py`의 `contextvars` 기반 요청 ID(rid)를 3계층 로그에 주입 — axios 인터셉터(프론트) / FastAPI 미들웨어(인바운드) / httpx `event_hook`(Upbit). 백엔드가 `X-Request-Id` 헤더로 전파. 같은 rid로 한 요청 전 구간 추적(Spring MDC 유사). 백그라운드 작업은 rid=`-`.
 
 ## UI 컨벤션
 
 - **색상**: 상승/매수/양(+) = 빨강, 하락/매도/음(−) = 파랑 (한국 거래소 관행). 헤더 네이비 `#093687`(업비트 톤).
 - **커서**: 클릭 가능 요소(`button`/`select`/onClick 행)에만 `cursor-pointer`, disabled엔 `disabled:cursor-not-allowed`. **일반 텍스트엔 `cursor-default`를 넣지 말 것**(브라우저 기본값에 위임, I-beam 신호 보존). 앵커는 기본 pointer라 생략.
-- 라우트 8개: `/`(대시보드) `/market` `/coins` `/coins/:market` `/compare` `/backtest` `/screener` `/help`. `/help`는 헤더 버튼에서 `window.open`으로 띄우는 **별도 창**이라 Layout(헤더) 밖 단독 라우트.
+- 라우트: `/`(대시보드) `/market` `/coins` `/coins/:market` 는 Layout(헤더) 안. `/tools`(부가기능 허브 — 비교·백테스트·스크리너 탭 전환, `ToolsHub.jsx`)와 `/help`(도움말)는 헤더 버튼에서 `window.open`으로 띄우는 **별도 창**이라 Layout 밖 단독 라우트. 헤더 메인 탭은 대시보드·마켓현황·코인목록 3개. 헤더는 `sticky top-0 z-50`로 고정.
 
 ## 작업 규칙
 
 - 사용자와 **한국어**로 소통.
 - **커밋은 사용자가 직접** 한다. 커밋 메시지는 추천만 하고, `git commit`/`push`는 실행하지 말 것.
 - **`.gitignore`: `*.md`는 기본 무시(로컬 메모용)**. 추적되는 마크다운은 `README.md`, `CLAUDE.md`, `references/*.md`뿐. `references/QAE_EDA_*`(원본 기획서 .docx/.pdf)는 의도적으로 제외(로컬 보관). 새 .md를 git에 올리려면 예외 규칙 추가 필요.
-- 문서 역할: 개요/구조/스크린샷 → `README.md`, API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**.
+- 문서 역할: 개요/구조/스크린샷 → `README.md`, API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, 기술 의사결정 기록(포트폴리오용, 고민·후보·선택) → `references/엔지니어링노트.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**.
 - **작업 후 문서 갱신 (필수)**: 코드를 바꾸면 **같은 작업 안에서** 관련 문서를 함께 갱신한다. (갱신 대상이던 `HANDOFF.md`·`docs/HISTORY.md`는 본 문서로 통합·삭제됨 — 더 이상 만들지 말 것.) 변경 유형 → 갱신할 문서:
   - 기능·화면·완료항목·로드맵 변경 → `README.md`
   - API 엔드포인트·쿼리 파라미터·응답 스키마 변경 → `references/API.md`
@@ -66,6 +67,7 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
   - 규칙·구조·데이터소스·성능·UI 컨벤션 변경 → 본 문서(`CLAUDE.md`)의 해당 섹션
   - 의미 있는 작업 단위 완료 → 본 문서 하단 **작업 이력**에 `Phase N` 추가 + **현재 상태 & 다음 작업** 갱신
   - 진행 상태가 바뀌면 메모리 `project_upquant.md`도 최신화 (레포 밖, 세션 컨텍스트 복원용)
+  - **기술적 의사결정(고민 → 후보 → 선택, 트레이드오프, "지금 안 하기로 한 것")이 오갔으면 → `references/엔지니어링노트.md`에 의사결정 형식으로 추가** (단순 작업 로그·자명한 환경 이슈는 제외하고, "왜 그렇게 골랐는가"가 남는 영양가 있는 판단만. 포트폴리오용)
 
 ## 현재 상태 & 다음 작업
 
@@ -74,9 +76,11 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 인메모리 캐시(SWR·single-flight)·부팅 프리페치·스로틀·429 재시도, rid 3계층 통합 로깅.
 - 변동성·1개월수익률·상관관계(실 캔들), MA크로스/RSI 백테스트.
 - 분석 유니버스 KRW 전체(~261종) 확장, 리스크-수익 산점도·마켓 트리맵·코인목록 스파크라인 개편.
+- 거래대금 기준 정렬 통일(코인목록·비교·스크리너·대시보드 산점도) — Phase 11.
 
 **다음 작업 (우선순위 순)**
-1. ⭐ **실제 화면 검증** — 백엔드+프론트 기동 후 261종 기준 확인: 리스크-수익 분포(수익률 색상·아웃라이어 표)·마켓 트리맵(상위30)/등락·거래대금 20위 표·코인목록 1일 스파크라인·비교분석 검색/스크롤 그리드. (콜드스타트 시 일봉+시간봉 캐시 워밍에 수십 초 소요 가능)
+0. ✅ **사용자 요청 묶음(2026-05-25) — 코드 완료, 브라우저 육안 검증만 남음**. 상세는 README "사용자 요청 (2026-05-25) — 완료". ①프리페치에 `get_coin_stats()` 워밍 추가(일봉 팬아웃 콜드 완화, 단일 인스턴스 전제) ②마켓 상단4개=거래대금 상위4개(`byVolume.slice(0,4)`) ③코인목록 거래대금 정렬 유지 ④코인상세 차트/호가 높이 통일(`h-[560px]`+차트 `autoSize`+호가 내부스크롤) ⑤비교·백테스트·스크리너→`/tools` 허브 새 창(`ToolsHub`), 헤더 탭 3개로 축소 ⑥헤더 `sticky top-0 z-50` ⑦마켓 트리맵 색상범례 ⑧스파크라인 변동성(Y축 `[dataMin,dataMax]`)+호버 툴팁. ※ESLint 통과, 실제 브라우저 육안 미검증(서버 꺼둠).
+1. ⭐ **실제 화면 검증(브라우저 육안)** — 거래대금 정렬은 API로 검증 완료(261종 내림차순). Phase 12 변경(허브 새 창·코인상세 레이아웃·스파크라인 등)도 육안 미검증. 남은 건 브라우저 육안: 리스크-수익 분포(수익률 색상·아웃라이어 표)·마켓 트리맵(상위30)/등락·거래대금 20위 표·코인목록 1일 스파크라인·비교분석 검색/스크롤 그리드. (콜드스타트 시 일봉+시간봉 캐시 워밍에 수십 초 소요 가능)
 2. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
 3. **카테고리 수익률 실데이터화 + 분류 적용** — 현재 더미(`analysis_service._MONTHLY_RAW`·`_make_cumulative_dummy`). 분류 소스 결정(수동 매핑 15종 vs 외부 API) → 월봉 집계로 월간/누적 대체 → 상관관계 히트맵·산점도 색상 실데이터화 → "예시" 배지 제거.
 4. **에러/로딩 상태 UI 개선**.
@@ -147,3 +151,20 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **비교분석**: Y축 고정(-30~50%), 검색·스크롤 그리드 선택, 초기화 버튼, 종목별 캔들 캐싱으로 기존 라인 재요청·재애니메이션 없이 추가.
 - **대시보드** 카테고리 차트(월별·누적·상관관계)에 "예시" 배지 표기.
 - **문서 통합**: `HANDOFF.md`·`docs/HISTORY.md`를 본 `CLAUDE.md`로 통합(중복 제거). README/API.md/계획서의 "유니버스 15종" 표기를 ~261종으로 정합, API.md/README의 `/analysis/correlation` 누락 보강.
+
+### Phase 11 — 거래대금 기준 정렬 통일 (2026-05-25)
+- 발단: 실제 화면 검증 중 "코인목록 기본 정렬 기준이 뭐냐" → 거래대금순(인기 종목 우선)으로 통일하기로 결정. (Phase 10 마무리 중 세션 한도 도달로 중단됐던 작업을 이어서 완료.)
+- **백엔드 `market_service.get_tickers()`**: 반환 직전 `acc_trade_price_24h` 내림차순 정렬. 캐시는 raw 응답만 보관하고 정렬은 매 호출 수행이라 캐시 무효화 불필요. 이 한 소스를 따르는 코인목록·비교분석·스크리너·대시보드 산점도가 모두 거래대금순으로 정합(`get_coin_stats()`도 `get_tickers()` 재사용).
+- **코인목록(`CoinList.jsx`)**: 초기 `sortKey`를 `acc_trade_price_24h`(desc)로 설정해 헤더에 정렬 표시(↓) 노출.
+- **마켓현황은 예외**: 상승률/하락률/거래대금 상위 등 의미상 다른 정렬을 유지. (단 상단 대표 카드 4개는 하드코딩 `FEATURED` 제거 → `byVolume.slice(0,4)`로 거래대금 상위 4개 동적 노출. 업비트 ticker가 시총 미제공이라 시총순은 불가, 거래대금이 정답.)
+- 검증: uvicorn 기동(Windows cp949 콘솔에서 `fastapi dev`의 이모지 배너가 `UnicodeEncodeError`로 죽어 `PYTHONIOENCODING=utf-8` + `uvicorn` 직접 실행으로 회피) 후 `/api/markets/tickers` 261종 전부 거래대금 내림차순 확인(SOON·ONDO·XRP·BTC… 순).
+
+### Phase 12 — 사용자 요청 UI/UX 개선 묶음 (2026-05-25)
+- **부팅 프리페치 확장 + 동기화**: `main.py:_prefetch`가 `get_coin_stats()`(일봉 팬아웃)까지 워밍. 이후 **백그라운드→동기로 전환**(`await asyncio.to_thread(_prefetch)`) → 워밍 완료 후 기동하므로 첫 사용자도 콜드 없음(기동 1~2분↑ 감수). 캐시는 프로세스 전역(인메모리)이라 단일 인스턴스 전제(멀티 인스턴스는 Redis 등 공유 캐시 필요 — 보류). 종목별 데이터(호가·체결·캔들·상관관계)는 호출 수/실시간성 때문에 프리페치 제외.
+- **마켓현황 상단 4개 카드**: `Market.jsx` `FEATURED` 하드코딩 제거 → `byVolume.slice(0,4)`(거래대금 상위 4개 동적). 업비트 Open API ticker는 시총 미제공(시총은 데이터랩 별도 계산)이라 거래대금이 정답.
+- **코인상세 레이아웃**: 차트(320px 고정)/호가창(~720px) 높이 불균형 해소 — 차트+호가 카드를 `h-[560px]` 동일 높이로 묶고, 캔들차트는 `autoSize`로 카드 채움, 호가창은 카드 높이 내부 스크롤(맨 위 기준 — 중앙 스크롤 시도했다 사용자 요청으로 철회).
+- **부가기능 허브 분리**: 비교·백테스트·스크리너를 메인 헤더 탭에서 제거 → 헤더 '부가기능' 버튼이 `window.open('/tools')`. 새 창 `ToolsHub.jsx`가 3개를 탭 전환(Layout 밖 단독 라우트). 메인 탭은 3개로 축소.
+- **헤더 sticky**: `sticky top-0 z-50`.
+- **마켓 트리맵 색상 범례**: 상승(빨강)/하락(파랑) + "칸 크기=거래대금·진할수록 등락폭 큼".
+- **스파크라인 개선**: 코인목록·마켓 상위4개 미니차트 Y축을 `[dataMin,dataMax]`로(0 기준 제거) 변동성 가시화 + 호버 시 가격 툴팁(`Tooltip`).
+- 검증: 프론트 ESLint 통과. **실제 브라우저 육안은 미검증**(서버 꺼둠) — 콜드스타트 캐시 워밍 수십 초.

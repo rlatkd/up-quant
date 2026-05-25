@@ -67,6 +67,8 @@ def get_tickers() -> list[Ticker]:
             w52_high=w52_high,
             w52_low=w52_low,
         ))
+    # 거래대금(24h) 내림차순 — 코인목록·비교·스크리너의 기본 노출 순서(인기 종목 우선)
+    result.sort(key=lambda t: t.acc_trade_price_24h, reverse=True)
     return result
 
 

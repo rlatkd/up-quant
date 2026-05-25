@@ -52,6 +52,7 @@ function CandlestickChart({ candles, indicators }) {
   useEffect(() => {
     if (!containerRef.current) return
     const chart = createChart(containerRef.current, {
+      autoSize: true,  // 컨테이너 크기에 맞춰 자동 리사이즈 (부모 flex 높이를 채움)
       attributionLogo: false,
       layout: { background: { color: '#ffffff' }, textColor: '#9ca3af' },
       grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
@@ -67,11 +68,7 @@ function CandlestickChart({ candles, indicators }) {
     seriesRef.current = { candle, chart }
     chartRef.current  = chart
 
-    const onResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
-    }
-    window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); chart.remove() }
+    return () => { chart.remove() }
   }, [])
 
   useEffect(() => {
@@ -114,7 +111,7 @@ function CandlestickChart({ candles, indicators }) {
     }
   }, [candles, indicators])
 
-  return <div ref={containerRef} style={{ height: 320 }} />
+  return <div ref={containerRef} className="w-full h-full" />
 }
 
 function RSIChart({ candles }) {
@@ -247,11 +244,11 @@ export default function CoinDetail() {
         </div>
       </div>
 
-      {/* 차트 + 호가창 */}
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-9 bg-white border border-gray-200 rounded-lg overflow-hidden">
+      {/* 차트 + 호가창 (카드 높이를 맞추고, 호가창은 내부 스크롤) */}
+      <div className="grid grid-cols-12 gap-4 h-[560px]">
+        <div className="col-span-9 bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
           {/* 시간 탭 + 지표 토글 */}
-          <div className="flex items-center justify-between border-b border-gray-100 px-2">
+          <div className="flex items-center justify-between border-b border-gray-100 px-2 shrink-0">
             <div className="flex">
               {INTERVALS.map((iv, i) => (
                 <button
@@ -288,10 +285,12 @@ export default function CoinDetail() {
               ))}
             </div>
           </div>
-          <div className="px-4 pb-2 pt-2">
-            <CandlestickChart candles={candles} indicators={indicators} />
+          <div className="px-4 pb-3 pt-2 flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0">
+              <CandlestickChart candles={candles} indicators={indicators} />
+            </div>
             {indicators.rsi && (
-              <div className="mt-1 border-t border-gray-100 pt-1">
+              <div className="mt-1 border-t border-gray-100 pt-1 shrink-0">
                 <div className="text-xs text-gray-400 mb-1 px-1">RSI(14)</div>
                 <RSIChart candles={candles} />
               </div>
@@ -299,11 +298,11 @@ export default function CoinDetail() {
           </div>
         </div>
 
-        {/* 호가창 */}
-        <div className="col-span-3 bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-gray-100 text-xs font-semibold text-gray-600">호가</div>
+        {/* 호가창 (차트와 같은 높이, 현재가 중심 스크롤) */}
+        <div className="col-span-3 bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+          <div className="px-3 py-2.5 border-b border-gray-100 text-xs font-semibold text-gray-600 shrink-0">호가</div>
           {orderbook ? (
-            <div className="text-xs">
+            <div className="text-xs flex-1 min-h-0 overflow-y-auto">
               {[...orderbook.asks].reverse().map((ask, i) => (
                 <div key={i} className="relative flex items-center px-3 py-1 hover:bg-blue-50">
                   <div className="absolute right-0 top-0 bottom-0 bg-blue-50" style={{ width: `${Math.min(75, ask.size * 25)}%` }} />

@@ -40,7 +40,7 @@ KRW-NEAR KRW-SAND KRW-MANA  KRW-POL   KRW-1INCH
 ## 1. Markets — `/api/markets`
 
 ### `GET /api/markets/tickers`
-전체 종목의 현재 시세 목록.
+전체 종목의 현재 시세 목록. **거래대금(24h) 내림차순 정렬**(인기 종목 우선) — 코인 목록·비교 분석·스크리너·대시보드 산점도가 이 순서를 공유한다.
 - **응답**: `Ticker[]`
 
 ### `GET /api/markets/tickers/{market}`

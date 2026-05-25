@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LineChart, Line, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTickers, useMarketSummary } from '../hooks/useTickers'
 
 const FILTERS = ['전체', '즐겨찾기', '상승', '하락', '보합']
@@ -43,8 +43,15 @@ function Sparkline({ data, change }) {
   return (
     <div style={{ width: 80, height: 32 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data.map(v => ({ v }))}>
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        <LineChart data={data.map(v => ({ v }))} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
+          {/* 변동폭이 작아도 보이도록 Y축을 데이터 범위로 타이트하게 (0 기준 X) */}
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Tooltip
+            contentStyle={{ fontSize: 11, padding: '2px 6px' }}
+            formatter={(v) => v.toLocaleString() + ' KRW'}
+            labelFormatter={() => ''}
+          />
+          <Line type="monotone" dataKey="v" name="가격" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -96,7 +103,7 @@ export default function CoinList() {
   const { summary, loading: sLoading } = useMarketSummary()
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('전체')
-  const [sortKey, setSortKey]     = useState(null)
+  const [sortKey, setSortKey]     = useState('acc_trade_price_24h')
   const [sortDir, setSortDir]     = useState('desc')
   const [favorites, setFavorites] = useState(loadFavorites)
 

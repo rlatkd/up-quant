@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { AreaChart, Area, ResponsiveContainer, Treemap } from 'recharts'
+import { AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 
-const FEATURED = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
+const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
 const RANK_LIMIT = 20      // 상승률·하락률·거래대금 표기 순위
 const TREEMAP_LIMIT = 30   // 시장 현황 트리맵에 표시할 메이저 종목 수 (거래대금 상위)
@@ -46,14 +46,21 @@ function MiniCard({ ticker }) {
         </div>
       </div>
       <ResponsiveContainer width="100%" height={48}>
-        <AreaChart data={data}>
+        <AreaChart data={data} margin={{ top: 3, bottom: 3, left: 0, right: 0 }}>
           <defs>
             <linearGradient id={`g-${ticker.market}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.15} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#g-${ticker.market})`} dot={false} isAnimationActive={false} />
+          {/* 변동폭이 작아도 보이도록 Y축을 데이터 범위로 타이트하게 (0 기준 X) */}
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Tooltip
+            contentStyle={{ fontSize: 11, padding: '2px 6px' }}
+            formatter={(v) => v.toLocaleString() + ' KRW'}
+            labelFormatter={() => ''}
+          />
+          <Area type="monotone" dataKey="v" name="가격" stroke={color} strokeWidth={1.5} fill={`url(#g-${ticker.market})`} dot={false} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </Link>
@@ -209,7 +216,7 @@ export default function Market() {
 
   const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)
   const byVolume = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
-  const featured = FEATURED.map(m => tickers.find(t => t.market === m)).filter(Boolean)
+  const featured = byVolume.slice(0, FEATURED_LIMIT)  // 거래대금 상위 4개
   // 트리맵은 종목이 많으면 정신없어 거래대금 상위(메이저)만 표시
   const treemapData = byVolume.slice(0, TREEMAP_LIMIT).map(t => ({
     name: t.market.replace('KRW-', ''),
@@ -247,8 +254,20 @@ export default function Market() {
 
       {/* 시장 현황 트리맵 (거래대금 상위 메이저) */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">
-          시장 현황 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {TREEMAP_LIMIT}종목</span>
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold text-gray-700">
+            시장 현황 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {TREEMAP_LIMIT}종목</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239,68,68,0.7)' }} />상승
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(59,130,246,0.7)' }} />하락
+            </span>
+            <span className="text-gray-300">|</span>
+            <span>칸 크기 = 거래대금 · 진할수록 등락폭 큼</span>
+          </div>
         </div>
         <div className="p-2">
           <ResponsiveContainer width="100%" height={320}>
