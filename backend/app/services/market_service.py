@@ -1,7 +1,11 @@
+from datetime import datetime, timezone, timedelta
+
 from app.clients import upbit_rest
 from app.core import config
 from app.core.cache import cached
 from app.schemas.market import Orderbook, OrderbookUnit, MarketSummary, Ticker, Trade
+
+_KST = timezone(timedelta(hours=9))  # 업비트 52주 고/저 달성일은 KST 기준
 
 
 def _korean_names() -> dict[str, str]:
@@ -44,6 +48,10 @@ def get_tickers() -> list[Ticker]:
         lambda: upbit_rest.get_tickers(markets),
     )
 
+    # "오늘 52주 고/저 경신" 판정 기준일(KST). 현재가가 고/저를 정확히 일치하는
+    # 순간은 거의 없어, 업비트가 주는 달성일(highest/lowest_52_week_date)로 판정한다.
+    today_kst = datetime.now(_KST).strftime("%Y-%m-%d")
+
     result: list[Ticker] = []
     for r in raw:
         m = r["market"]
@@ -62,8 +70,8 @@ def get_tickers() -> list[Ticker]:
             low_price=r["low_price"],
             prev_closing_price=r["prev_closing_price"],
             sparkline=_sparkline(m),
-            is_52w_high=bool(w52_high) and price >= w52_high,
-            is_52w_low=bool(w52_low) and price <= w52_low,
+            is_52w_high=r.get("highest_52_week_date") == today_kst,
+            is_52w_low=r.get("lowest_52_week_date") == today_kst,
             w52_high=w52_high,
             w52_low=w52_low,
         ))

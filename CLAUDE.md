@@ -30,12 +30,15 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 - **업비트 시세(Quotation) REST API**로 실연동. **인증/API Key 불필요** (거래소 API 아님).
 - 사용 엔드포인트: `/market/all`, `/ticker`, `/candles/*`, `/orderbook`, `/trades/ticks`.
-- **분석 유니버스는 KRW 마켓 전체(~261종)** — `core/config.py`의 `USE_ALL_KRW_MARKETS`. 부팅 시 `/market/all`과 **교집합만** 사용 → 상장폐지 종목 자동 제외. (예: `KRW-MATIC`은 POL 마이그레이션으로 폐지 → `KRW-POL` 사용). `MARKET_CATEGORIES`(15종 KRW)는 코인↔카테고리 **수동 매핑/폴백용**.
-- **카테고리별 월별/누적 수익률만 예시(더미)** — 업비트가 코인 카테고리를 제공하지 않음. 그 외 변동성·1개월수익률·상관관계는 실 캔들 기반.
+- **분석 유니버스는 KRW 마켓 전체(~261종)** — `core/config.py`의 `USE_ALL_KRW_MARKETS`. 부팅 시 `/market/all`과 **교집합만** 사용 → 상장폐지 종목 자동 제외. (예: `KRW-MATIC`은 POL 마이그레이션으로 폐지 → `KRW-POL` 사용).
+- **카테고리(섹터) 분류 = 업비트 데이터랩 '코인 분류' 스냅샷** (`app/data/upbit_sectors.json`). 업비트 시세 Open API는 카테고리를 안 주므로, 데이터랩(`datalab.upbit.com/sector?tab=marketMap`)의 Next.js RSC 페이로드를 **1회 스크랩**해 정적 파일로 보관. 261종 전체에 level1(대분류 5종: 스마트 컨트랙트 플랫폼·인프라·디파이·문화/엔터테인먼트·밈)/level2/level3 + marketCap. `config.MARKET_CATEGORIES`(market→level1)·`CATEGORY_LIST`(종목수 desc)·`MARKET_SUBCATEGORIES`로 노출. 스냅샷이라 신규 상장은 미분류(`None`), 분류 변경 시 재스크랩 필요. (스크랩 경위·후보 비교는 엔지니어링노트 §12)
+- **카테고리 수익률은 실데이터** — 섹터 소속 종목의 **월봉 close 동일가중 평균**으로 월별/누적 수익률 집계(`analysis_service`). 상관관계 히트맵은 프론트가 월별값으로 계산. (집계 방식·변동성 드래그는 엔지니어링노트 §14) 더 이상 더미 아님 → "예시" 배지는 "업비트 분류" 출처 배지로 대체.
 
 ## 필드/포맷 규약
 
 - `Ticker.change_rate` = Upbit `signed_change_rate`(부호 있음). `w52_high/low` = `highest/lowest_52_week_price`.
+- **52주 신고가/신저가 판정**: `Ticker.is_52w_high/low` = 업비트 `highest/lowest_52_week_date`가 **오늘(KST)인지**(=오늘 경신). 과거엔 `현재가 ≥/≤ 52주가`로 판정했으나 정확히 일치하는 순간이 거의 없어 전수 0개였음 → 달성일 기준으로 변경(엔지니어링노트 §11).
+- **카테고리 수익률 응답** `CategoryReturns` = `{ categories: [섹터명…], rows: [{ label, <섹터명>: 수익률%, … }] }`. (과거 고정 5필드 `CategoryMonthly`에서 동적 구조로 변경 — 섹터가 가변이므로). `/analysis/category/monthly`(최근 6개월)·`/cumulative?period=월|분기|년`.
 - 캔들은 **오름차순(오래된→최신)** 으로 반환 (lightweight-charts 요구). Upbit는 최신순이라 뒤집음.
 - `CandleItem.timestamp`=ms, `Trade.timestamp`=초(프론트가 ×1000), `EquityPoint.time`=초.
 - 프론트 캔들 interval: `minutes/{1|3|5|15|30|60|240}` | `days` | `weeks` | `months`.
@@ -45,7 +48,8 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 - **캐시** `core/cache.py`: 인메모리 TTL + **stale-while-revalidate + single-flight**. 만료돼도 옛 값 즉시 반환, 갱신은 백그라운드 1스레드. 일봉은 종목별 200개 1회 fetch 후 슬라이스 공유(상관관계 ~1800ms→~5ms). TTL은 config. 유니버스 전체 확장에 따라 일봉/스파크라인 TTL은 장기화해 팬아웃 부하 억제.
 - **레이트리밋**: `clients/upbit_rest.py`에 전역 스로틀(~초당 8회) + 429 백오프 재시도. 캐싱 없으면 캔들 팬아웃으로 429 발생함(실증됨).
-- **부팅 프리페치(동기 워밍)**: `main.py` lifespan이 `get_tickers()`+`get_coin_stats()`를 **동기로 워밍한 뒤 기동**(`await asyncio.to_thread(_prefetch)`). 기동이 1~2분(스로틀 초당 8회 × 약 780콜) 느려지는 대신 첫 사용자도 콜드 없이 즉시 응답. 대시보드·마켓·코인목록을 커버. 종목별 호가·체결·캔들(10 interval)·상관관계는 호출 수(수천)·실시간성(짧은 TTL) 때문에 프리페치 제외 → 해당 종목 첫 방문 시 fetch.
+- **성능 원칙 (중요)**: 클라우드/멀티 인스턴스 전제 — **대량 팬아웃(수백 콜)은 서버 기동 시 1회만** 하고, 이후엔 어떤 클라이언트가 접속하든 캐시 히트로 빨라야 한다. 클라이언트가 매 요청마다 수십~수백 콜을 떠안으면 안 됨. (새 무거운 집계를 추가하면 **프리페치 워밍 범위도 반드시 함께 갱신** — 안 그러면 첫 방문자가 콜드 비용을 떠안음)
+- **부팅 프리페치(동기 워밍)**: `main.py` lifespan이 `_prefetch()`를 **동기로 워밍한 뒤 기동**(`await asyncio.to_thread(_prefetch)`). 워밍 대상: `get_tickers()`(현재가+스파크라인) + `get_coin_stats()`(변동성·수익률, 일봉 팬아웃) + **`get_category_monthly()`/`cumulative(월·분기·년)`(섹터 월봉 261종 팬아웃, 콜드 ~1분; monthly가 만든 월봉 series를 cumulative 3종이 재사용해 fetch는 1회)**. 기동이 느려지는(스로틀 초당 8회) 대신 첫 사용자도 콜드 없이 즉시 응답. 대시보드·마켓·코인목록·카테고리를 커버. 종목별 호가·체결·캔들(10 interval)·상관관계는 호출 수(수천)·실시간성(짧은 TTL) 때문에 프리페치 제외 → 해당 종목 첫 방문 시 fetch.
 - **통합 로깅**: `core/logging.py`의 `contextvars` 기반 요청 ID(rid)를 3계층 로그에 주입 — axios 인터셉터(프론트) / FastAPI 미들웨어(인바운드) / httpx `event_hook`(Upbit). 백엔드가 `X-Request-Id` 헤더로 전파. 같은 rid로 한 요청 전 구간 추적(Spring MDC 유사). 백그라운드 작업은 rid=`-`.
 
 ## UI 컨벤션
@@ -67,7 +71,8 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
   - 규칙·구조·데이터소스·성능·UI 컨벤션 변경 → 본 문서(`CLAUDE.md`)의 해당 섹션
   - 의미 있는 작업 단위 완료 → 본 문서 하단 **작업 이력**에 `Phase N` 추가 + **현재 상태 & 다음 작업** 갱신
   - 진행 상태가 바뀌면 메모리 `project_upquant.md`도 최신화 (레포 밖, 세션 컨텍스트 복원용)
-  - **기술적 의사결정(고민 → 후보 → 선택, 트레이드오프, "지금 안 하기로 한 것")이 오갔으면 → `references/엔지니어링노트.md`에 의사결정 형식으로 추가** (단순 작업 로그·자명한 환경 이슈는 제외하고, "왜 그렇게 골랐는가"가 남는 영양가 있는 판단만. 포트폴리오용)
+  - **기술적 의사결정 → `references/엔지니어링노트.md`에 의사결정 형식(문제상황 → 후보/방법들 → 고민 → 선택 → 근거)으로 추가.** ⚠️ **사소한 판단이라도, 사용자와의 대화에서 얻을 수 있는 내용이면 꾸준히 기록**한다(이전의 "영양가 있는 것만" 기준을 완화 — 사용자 명시 요구 2026-05-26). 막다른 길·검증 과정·"지금 안 한 것"도 포함. 포트폴리오/회고용.
+  - **사용자가 대화 중 새로 제시한 규칙·원칙·요구사항(예: 성능 원칙, 문서화 규칙)은 본 `CLAUDE.md`의 해당 섹션에도 매번 반영**한다(2026-05-26 사용자 명시). 일회성 작업 지시가 아니라 앞으로도 지켜야 할 원칙이면 규칙으로 박아둔다.
 
 ## 현재 상태 & 다음 작업
 
@@ -77,13 +82,15 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 변동성·1개월수익률·상관관계(실 캔들), MA크로스/RSI 백테스트.
 - 분석 유니버스 KRW 전체(~261종) 확장, 리스크-수익 산점도·마켓 트리맵·코인목록 스파크라인 개편.
 - 거래대금 기준 정렬 통일(코인목록·비교·스크리너·대시보드 산점도) — Phase 11.
+- **카테고리(섹터) 분류 실데이터화** — 업비트 데이터랩 분류 스크랩(261종 5섹터) + 월봉 동일가중 수익률 + 부팅 워밍 — Phase 13.
 
 **다음 작업 (우선순위 순)**
-0. ✅ **사용자 요청 묶음(2026-05-25) — 코드 완료, 브라우저 육안 검증만 남음**. 상세는 README "사용자 요청 (2026-05-25) — 완료". ①프리페치에 `get_coin_stats()` 워밍 추가(일봉 팬아웃 콜드 완화, 단일 인스턴스 전제) ②마켓 상단4개=거래대금 상위4개(`byVolume.slice(0,4)`) ③코인목록 거래대금 정렬 유지 ④코인상세 차트/호가 높이 통일(`h-[560px]`+차트 `autoSize`+호가 내부스크롤) ⑤비교·백테스트·스크리너→`/tools` 허브 새 창(`ToolsHub`), 헤더 탭 3개로 축소 ⑥헤더 `sticky top-0 z-50` ⑦마켓 트리맵 색상범례 ⑧스파크라인 변동성(Y축 `[dataMin,dataMax]`)+호버 툴팁. ※ESLint 통과, 실제 브라우저 육안 미검증(서버 꺼둠).
-1. ⭐ **실제 화면 검증(브라우저 육안)** — 거래대금 정렬은 API로 검증 완료(261종 내림차순). Phase 12 변경(허브 새 창·코인상세 레이아웃·스파크라인 등)도 육안 미검증. 남은 건 브라우저 육안: 리스크-수익 분포(수익률 색상·아웃라이어 표)·마켓 트리맵(상위30)/등락·거래대금 20위 표·코인목록 1일 스파크라인·비교분석 검색/스크롤 그리드. (콜드스타트 시 일봉+시간봉 캐시 워밍에 수십 초 소요 가능)
-2. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
-3. **카테고리 수익률 실데이터화 + 분류 적용** — 현재 더미(`analysis_service._MONTHLY_RAW`·`_make_cumulative_dummy`). 분류 소스 결정(수동 매핑 15종 vs 외부 API) → 월봉 집계로 월간/누적 대체 → 상관관계 히트맵·산점도 색상 실데이터화 → "예시" 배지 제거.
-4. **에러/로딩 상태 UI 개선**.
+1. ⭐ **실제 화면 검증(브라우저 육안)** — Phase 12·13 모두 육안 미검증. 코드/빌드/ESLint·API는 검증됨. 남은 건 브라우저 육안: ⑴Phase 13 — 대시보드 카테고리 차트(누적 라인·월별 히트맵·상관관계, 한글 5섹터·"업비트 분류" 배지·실데이터), 코인목록 1일 스파크라인 **호버 툴팁이 그래프 안 가리는지**, 마켓현황 52주 신고/신저 배지(오늘 경신 종목 노출). ⑵Phase 12 — 허브 새 창·코인상세 레이아웃·트리맵 등. (콜드스타트 시 카테고리 월봉 워밍에 ~1분; 단 부팅 동기 워밍이라 기동 완료 후엔 즉시).
+2. **UI 업비트 톤으로 개선** — 색상·헤더마크·아이콘 등 전반을 업비트 느낌으로. ⚠️ **착수 전 사용자와 아이디어 공유 필수**(2026-05-26 사용자 요청).
+3. **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅(`useAnalysis`/`useCandles`/`useTickers`)·`Compare.jsx`의 effect 내 `setLoading(true)` 패턴. 사전 존재 이슈(이번 변경과 무관). 작업 다 마친 뒤 별도로(2026-05-26 사용자 지시).
+4. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
+5. **에러/로딩 상태 UI 개선**.
+6. **카테고리 분류 고도화(선택)** — 현재 level1(5섹터)만 사용. level2/level3 활용, 누적 수익률 변동성 드래그 표현 개선(기간 단축·정규화 지수), 분류 스냅샷 갱신 자동화.
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
 
@@ -168,3 +175,14 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **마켓 트리맵 색상 범례**: 상승(빨강)/하락(파랑) + "칸 크기=거래대금·진할수록 등락폭 큼".
 - **스파크라인 개선**: 코인목록·마켓 상위4개 미니차트 Y축을 `[dataMin,dataMax]`로(0 기준 제거) 변동성 가시화 + 호버 시 가격 툴팁(`Tooltip`).
 - 검증: 프론트 ESLint 통과. **실제 브라우저 육안은 미검증**(서버 꺼둠) — 콜드스타트 캐시 워밍 수십 초.
+
+### Phase 13 — 카테고리(섹터) 분류 실데이터화 + 스파크라인 툴팁·52주 판정 수정 (2026-05-26)
+사용자 요청 묶음. 의사결정 상세는 엔지니어링노트 §11~16.
+- **스파크라인 호버 툴팁(코인목록 1일)**: 80×32px 차트에서 커서 추적 툴팁이 그래프를 덮던 문제 → `allowEscapeViewBox`+`position={{x:0,y:-26}}`+`pointerEvents:none`으로 차트 위쪽 바깥 고정. (§16)
+- **52주 신고가/신저가 판정**: `price ≥/≤ 52주가`(전수 0개·죽은 기능) → 업비트 `highest/lowest_52_week_date`가 **오늘(KST)인지**로 변경(`market_service.py`). 거래소 표준(그날 경신 종일 유지). (§11)
+- **업비트 코인 분류 스크랩**: 공식 API 없음 확인(`datalab-api`는 일괄 400) → 데이터랩 `/sector?tab=marketMap` Next.js RSC 페이로드에서 261종 섹터(level1/2/3)+marketCap 정규식 추출 → `app/data/upbit_sectors.json` 정적 스냅샷. (§12)
+- **config 통합**: `MARKET_CATEGORIES`(영문 15종 수동) → JSON 로드(261종 level1). `CATEGORY_LIST`·`MARKET_SUBCATEGORIES` 추가. `TTL_CATEGORY=1800`.
+- **카테고리 수익률 실데이터화**(`analysis_service` 재작성): 더미(`_MONTHLY_RAW`·`_make_cumulative_dummy`) 제거 → 섹터 소속 종목 **월봉 close 동일가중 평균**. `_sector_monthly_avg_series()`(월봉 261종, 캐시) 공용 → monthly(6개월)·cumulative(월12/분기12/년5, period 리샘플)·상관관계(프론트 계산). 스키마 `CategoryMonthly`(고정 5필드)→`CategoryReturns{categories,rows}` 동적. (§13·14)
+- **부팅 프리페치 확장**: `_prefetch`에 `get_category_monthly()`+`cumulative(3종)` 워밍 추가 — 월봉 261종 팬아웃(콜드 ~1분)을 **기동 시 1회만**, 이후 클라이언트는 캐시 히트. (성능 원칙 §15)
+- **프론트**: `Dashboard.jsx` 영문 키 상수(CAT_COLORS/LABELS/CATS) 제거 → `catColor`(팔레트)+한글 섹터명 직접. `CorrHeatmap` 파라미터화. 누적차트 `data=cumulative.rows`·`dataKey="label"`·`cumulative.categories`. 월별 히트맵·산점도 동일. "예시" `DummyBadge`→"업비트 분류" `SourceBadge`. `useAnalysis` 초기값 `{categories,rows}`.
+- 검증: 백엔드 `py_compile` 전체 통과 + 카테고리 monthly(콜드 56s)/cumulative(series 재사용 0s) 실데이터 산출 확인. 프론트 `vite build` 658모듈 성공. ESLint는 사전 존재 `set-state-in-effect` 5건만(이번 변경 무관, 다음 작업). **브라우저 육안 미검증**.

@@ -46,8 +46,12 @@ function Sparkline({ data, change }) {
         <LineChart data={data.map(v => ({ v }))} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
           {/* 변동폭이 작아도 보이도록 Y축을 데이터 범위로 타이트하게 (0 기준 X) */}
           <YAxis hide domain={['dataMin', 'dataMax']} />
+          {/* 차트가 작아(80×32) 커서 추적 툴팁이 그래프를 덮으므로, 차트 위쪽 바깥에 고정 */}
           <Tooltip
-            contentStyle={{ fontSize: 11, padding: '2px 6px' }}
+            allowEscapeViewBox={{ x: true, y: true }}
+            position={{ x: 0, y: -26 }}
+            wrapperStyle={{ pointerEvents: 'none', zIndex: 20 }}
+            contentStyle={{ fontSize: 11, padding: '1px 6px', lineHeight: 1.3 }}
             formatter={(v) => v.toLocaleString() + ' KRW'}
             labelFormatter={() => ''}
           />

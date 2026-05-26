@@ -130,7 +130,7 @@ up-quant/
 │   │   ├── services/              # 비즈니스 로직 (업비트 응답 가공 + 캐싱)
 │   │   │   ├── market_service.py  # 현재가·한글명·호가·체결·요약·52주·스파크라인
 │   │   │   ├── candle_service.py  # 캔들 (일봉 200개 캐시 후 슬라이스 공유 · >200 페이지네이션)
-│   │   │   ├── analysis_service.py # 변동성·1개월수익률·상관관계 (카테고리 수익률은 예시 데이터)
+│   │   │   ├── analysis_service.py # 변동성·1개월수익률·상관관계·섹터 수익률 (월봉 동일가중, 실데이터)
 │   │   │   └── backtest_service.py # MA 크로스 · RSI 전략, SMA/RSI/MDD 계산
 │   │   └── routers/               # HTTP 엔드포인트
 │   │       ├── markets.py
@@ -251,8 +251,8 @@ npm run dev
 
 | Method | Path | 응답 모델 | 설명 |
 |--------|------|-----------|------|
-| `GET` | `/category/monthly` | `CategoryMonthly[]` | 카테고리별 월간 수익률 |
-| `GET` | `/category/cumulative` | `CategoryMonthly[]` | 카테고리별 누적 수익률 |
+| `GET` | `/category/monthly` | `CategoryReturns` | 섹터별 월간 수익률 (최근 6개월, 월봉 동일가중) |
+| `GET` | `/category/cumulative` | `CategoryReturns` | 섹터별 누적 수익률 (`period=월\|분기\|년`) |
 | `GET` | `/coins` | `CoinStat[]` | 코인별 변동성·1개월 수익률 (리스크-수익 산점도용) |
 | `GET` | `/correlation/{market}` | `CorrelationItem[]` | 지정 종목과 타 종목의 60일 종가 피어슨 상관관계 (내림차순) |
 
@@ -308,12 +308,12 @@ Trade         { timestamp, price, volume, side(BID|ASK) }
 
 ```text
 CandleItem      { timestamp(ms), open, high, low, close, volume }
-CategoryMonthly { month("YYYY-MM"), layer1, defi, meme, gaming, layer2 }
-CoinStat        { market, korean_name, category, volatility(%), return_1m(%), acc_trade_price_24h }
+CategoryReturns { categories[섹터명…], rows[{ label, <섹터명>: 수익률%, … }] }
+CoinStat        { market, korean_name, category(섹터·한글|null), volatility(%), return_1m(%), acc_trade_price_24h }
 CorrelationItem { market, korean_name, correlation(-1.0~1.0) }
 ```
 
-코인은 `layer1` · `defi` · `meme` · `gaming` · `layer2` 카테고리로 분류됩니다.
+코인은 업비트 데이터랩 '코인 분류' 기준 **5개 섹터**(`스마트 컨트랙트 플랫폼` · `인프라` · `디파이` · `문화/엔터테인먼트` · `밈`)로 분류됩니다.
 
 </details>
 
@@ -339,10 +339,11 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 | 캐싱 | 인메모리 TTL + stale-while-revalidate + single-flight | 만료 시에도 옛 값 즉시 응답, 갱신은 백그라운드 1스레드만 (콜드·스탬피드 회피) |
 | 일봉 캐시 통합 | 종목별 200개 1회 fetch 후 슬라이스 공유 | 스파크라인·통계·상관관계가 캔들을 재호출하지 않음 (상관관계 ~1800ms → ~5ms) |
 | 레이트리밋 | 전역 스로틀(~초당 8회) + 429 백오프 재시도 | 시세 API IP 제한(초당 약 10회) 내 버스트 방지 |
-| 캐시 워밍 | 부팅 시 **동기** 프리페치(tickers+coin_stats) 후 기동 | 기동 1~2분↑ 대신 첫 사용자도 콜드 없음 (종목별 호가·체결·캔들·상관관계는 호출 수/실시간성 때문에 제외) |
+| 캐시 워밍 | 부팅 시 **동기** 프리페치(tickers+coin_stats+카테고리 월봉) 후 기동 | 기동 느려지는 대신 첫 사용자도 콜드 없음. 대량 팬아웃은 기동 1회만, 이후 클라이언트는 캐시 히트 (종목별 호가·체결·캔들·상관관계는 호출 수/실시간성 때문에 제외) |
 | 관측성 | `contextvars` 기반 rid를 3계층 로그에 주입 + `X-Request-Id` | Spring MDC처럼 요청 전 구간 추적 |
-| 마켓 유니버스 | 분석은 KRW 전체(~261종, `USE_ALL_KRW_MARKETS`) · 카테고리 매핑은 15종 | `/market/all` 교집합으로 상장폐지 자동 제외 (예: MATIC → POL) |
-| 카테고리 수익률 | 예시(더미) 데이터 유지 | 업비트가 코인 카테고리를 제공하지 않음 |
+| 마켓 유니버스 | 분석은 KRW 전체(~261종, `USE_ALL_KRW_MARKETS`) | `/market/all` 교집합으로 상장폐지 자동 제외 (예: MATIC → POL) |
+| 코인 분류 | 업비트 데이터랩 '코인 분류' 스크랩 (정적 스냅샷 `upbit_sectors.json`, 5섹터) | 시세 API 미제공 → 데이터랩 RSC 1회 스크랩(엔지니어링노트 §12) |
+| 카테고리 수익률 | 섹터 소속 종목 월봉 **동일가중 평균**(실데이터) | 시총가중이 이상적이나 실시간 시총 부재로 보류(§14) |
 | 라우터 prefix | `/api/markets` 등 플랫 구조 | `api/v1/` 버저닝 생략 |
 | 색상 컨벤션 | 상승 = 빨강 / 하락 = 파랑 | 한국 금융 UI 관행 |
 | 헤더 색상 | `#093687` 네이비 | 업비트 헤더 톤 매칭 |
@@ -356,13 +357,13 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 
 ## 현재 상태 & 로드맵
 
-> ✅ 업비트 시세 Open API 실연동 완료. 카테고리별 수익률만 예시(더미) 데이터입니다.
+> ✅ 업비트 시세 Open API 실연동 완료. 카테고리 분류는 업비트 데이터랩 '코인 분류' 스냅샷, 수익률은 실 월봉 집계입니다.
 
 **완료**
 - [x] 백엔드 4개 라우터 (markets / candles / analysis / backtest) + 응답 스키마
 - [x] **업비트 시세 REST 실연동** — 현재가·캔들(분/일/주/월)·호가·체결·마켓목록·52주 고저
 - [x] 인메모리 TTL 캐시(stale-while-revalidate · single-flight) · 부팅 프리페치 · 요청 스로틀 · 429 재시도
-- [x] 카테고리 수익률(예시), 변동성·1개월 수익률·상관관계(실 캔들 기반) 계산
+- [x] 변동성·1개월 수익률·상관관계·섹터 수익률(월별/누적) — 모두 실 캔들 기반 계산
 - [x] MA 크로스 / RSI 백테스트 엔진 (자산 곡선·MDD·승률, 200캔들 초과 페이지네이션)
 - [x] 프론트 8개 페이지 (대시보드·마켓·코인목록·코인상세·비교분석·백테스트·스크리너·도움말) + 데이터 페칭 훅
 - [x] CoinDetail 캔들 인터벌 탭 (분/일/주/월 + MA·볼린저·RSI 지표 토글)
@@ -388,16 +389,19 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 - [x] **마켓현황 트리맵 색상 범례 추가** — 상승(빨강)/하락(파랑) + "칸 크기=거래대금·진할수록 등락폭 큼" 설명 (대시보드 산점도 색상 설명과 동일 취지)
 - [x] **스파크라인 변동성 가시화 + 호버 툴팁** — 코인목록·마켓 상위4개 미니차트의 Y축을 `[dataMin, dataMax]`로 타이트하게(0 기준 제거)하여 작은 변동도 보이도록, 호버 시 가격(KRW) 툴팁 표시
 
+**사용자 요청 (2026-05-26) — 완료 (코드/빌드 검증, 브라우저 육안 미검증)**
+- [x] **코인목록 1일 스파크라인 호버 툴팁이 그래프를 가리는 문제 수정** — 80×32px 차트에서 커서 추적 툴팁이 그래프를 덮던 것 → 차트 위쪽 바깥 고정(`allowEscapeViewBox`+`position`+`pointerEvents:none`)
+- [x] **52주 신고가/신저가 판정 수정** — `현재가 ≥/≤ 52주가`(전수 0개·죽은 기능)에서 업비트 `highest/lowest_52_week_date`가 **오늘(KST) 경신**인지로 변경
+- [x] **업비트 코인 분류(섹터) 실데이터화** — 데이터랩 '코인 분류'를 1회 스크랩(`upbit_sectors.json`, 261종 5섹터) → `config.MARKET_CATEGORIES` 교체 → 카테고리 월별/누적 수익률을 섹터 종목 **월봉 동일가중 평균**으로 실데이터화(`analysis_service` 재작성, 더미 제거) → 상관관계 히트맵·산점도 자동 실데이터화 → "예시" 배지를 "업비트 분류" 출처 배지로 대체 → 부팅 프리페치에 카테고리 워밍 추가(엔지니어링노트 §11~16)
+
 **다음 작업 (기존)**
 - [x] **실제 화면 검증(정적)** — 2026-05-25 Edge headless 스크린샷으로 확인: 거래대금 정렬(코인목록 ↓·쑨→온도→BTC순) · 마켓 상단4개=거래대금 상위 · 코인상세 차트/호가 높이 균형(autoSize) · 스파크라인 변동성 · 트리맵 색상 범례 · 부가기능 허브(`/tools`) 탭.
 - [ ] **실제 화면 검증(인터랙션, 남음)** — 정적 캡처로 못 본 동작: 호버 툴팁 · 헤더 sticky 스크롤 · 허브 탭 전환 · 스크리너 결과 종목 클릭 시 동작(부가기능 새 창에서 `navigate('/coins/X')` → 창이 코인상세로 전환되는지, `window.opener` 방식이 나을지). Playwright 등 인터랙션 구동 필요.
+- [ ] **UI 업비트 톤으로 개선** (색상·헤더마크·아이콘) — ⚠️ 착수 전 사용자와 아이디어 공유
+- [ ] **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·Compare.jsx의 effect 내 `setLoading(true)` 패턴(사전 존재 이슈)
 - [ ] WebSocket 실시간 시세 중계 (FastAPI WS → 프론트 Context)
-- [ ] **카테고리 데이터 실데이터화 + 분류 적용** (현재 더미: `analysis_service._MONTHLY_RAW` · `_make_cumulative_dummy`)
-  - [ ] 분류 소스 결정 — (A) `config.MARKET_CATEGORIES` 수동 매핑(현재 15종목만) vs (B) CoinGecko 등 외부 API에서 카테고리 수신(Upbit↔외부 심볼 매핑·다중 카테고리·레이트리밋 부담)
-  - [ ] **리스크-수익 분포 산점도 색상을 카테고리별로 반영** (현재는 1개월 수익률 기준 색상 — 분류 확정 시 카테고리 색 전환 검토)
-  - [ ] 월간 수익률: 카테고리 소속 코인의 월봉(`/v1/candles/months`) 수익률을 평균내어 `_MONTHLY_RAW` 대체
-  - [ ] 누적 수익률(월/분기/년): 실 월봉 집계로 `_make_cumulative_dummy` 대체 → 상관관계 히트맵도 실데이터화됨
-  - [ ] 실데이터 전환 완료 시 대시보드 "예시" 배지 제거
+- [x] **카테고리 데이터 실데이터화 + 분류 적용** (2026-05-26) — 업비트 데이터랩 '코인 분류' 스크랩으로 분류 소스 확정(수동 매핑·외부 API 대신), 월봉 동일가중 평균으로 월별/누적 실데이터화, 상관관계 히트맵 자동 실데이터화, "예시" 배지 제거
+  - [ ] (잔여) 리스크-수익 산점도 색상을 섹터별로 반영(현재는 1개월 수익률 색상) · 누적 변동성 드래그 표현 개선 · 분류 스냅샷 갱신 자동화
 - [ ] 에러/로딩 상태 UI 개선
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정

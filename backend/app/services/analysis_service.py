@@ -1,86 +1,122 @@
 import math
-import random
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 
 from app.core import config
 from app.core.cache import cached
 from app.core.config import MARKET_CATEGORIES
-from app.schemas.analysis import CategoryMonthly, CoinStat, CorrelationItem
+from app.schemas.analysis import CategoryReturns, CoinStat, CorrelationItem
 from app.services import candle_service, market_service
 
-# 카테고리 분류는 config로 중앙화 (Upbit는 카테고리를 제공하지 않음)
+# 카테고리(섹터) 분류는 config로 중앙화 — 업비트 데이터랩 '코인 분류' 스냅샷 기반.
 _CATEGORIES = MARKET_CATEGORIES
+_KST = timezone(timedelta(hours=9))  # 월봉 라벨은 KST 월 기준
 
-# 카테고리별 월간 수익률 — Upbit /v1/candles/months 기반으로 교체 예정
-_MONTHLY_RAW = [
-    {"month": "2025-12", "layer1": 12.3, "defi":  8.1, "meme":  22.5, "gaming": -3.2, "layer2":  5.4},
-    {"month": "2026-01", "layer1": -8.2, "defi": -12.1,"meme": -18.3, "gaming": -8.9, "layer2":-10.1},
-    {"month": "2026-02", "layer1": 15.6, "defi":  9.3, "meme":  28.7, "gaming":  2.1, "layer2": 11.2},
-    {"month": "2026-03", "layer1":  3.2, "defi": -2.1, "meme":   8.9, "gaming": -5.3, "layer2":  1.8},
-    {"month": "2026-04", "layer1": -5.1, "defi":  1.2, "meme": -12.4, "gaming": -8.7, "layer2": -3.9},
-    {"month": "2026-05", "layer1":  7.8, "defi":  4.1, "meme":  15.2, "gaming": -1.2, "layer2":  3.4},
-]
-
-_CATS = ["layer1", "defi", "meme", "gaming", "layer2"]
-
-# 카테고리별 기준 변동성 (period별 1회 수익률 범위)
-_PERIOD_RANGE = {
-    "월":  (-15.0, 25.0),
-    "분기": (-28.0, 45.0),
-    "년":  (-40.0, 90.0),
-}
-
-# 카테고리별 추세 보정 (year-over-year drift)
-_CAT_DRIFT = {
-    "layer1": 0.3,
-    "defi":   0.1,
-    "meme":   0.5,
-    "gaming": -0.1,
-    "layer2": 0.2,
+# 누적 수익률 기간 옵션 → (집계 단위 개월, 표시 구간 수)
+_PERIOD_SPEC = {
+    "월":  (1, 12),   # 최근 12개월
+    "분기": (3, 12),   # 최근 12분기(=36개월)
+    "년":  (12, 5),   # 최근 5년
 }
 
 
-def _make_cumulative_dummy(period: str) -> list[dict]:
-    rng = random.Random(42)
-    lo, hi = _PERIOD_RANGE.get(period, _PERIOD_RANGE["월"])
+def _month_label(ts_ms: int) -> str:
+    """캔들 timestamp(ms) → 'YYYY-MM' (KST 월 기준)."""
+    return datetime.fromtimestamp(ts_ms / 1000, tz=_KST).strftime("%Y-%m")
 
+
+def _sector_monthly_avg_series(n_months: int = 61) -> dict[str, list[tuple[str, float]]]:
+    """섹터별 월간 수익률(동일가중 평균) 시계열. {섹터: [(월라벨, 수익률%), ...]} (오래된→최신).
+
+    각 코인의 월봉 close로 전월 대비 수익률을 구해, 같은 달에 데이터가 있는 코인끼리
+    단순 평균한다. (업비트 시세 API는 시총을 주지 않아 시총가중 대신 동일가중)
+    261종 월봉 팬아웃이라 결과를 장기 캐시한다.
+    """
+    def build() -> dict[str, list[tuple[str, float]]]:
+        acc: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        for market, cat in _CATEGORIES.items():
+            candles = candle_service.get_candles(market, "months", count=n_months)
+            closes = [(_month_label(c.timestamp), c.close) for c in candles]
+            for i in range(1, len(closes)):
+                (lbl, c1), (_, c0) = closes[i], closes[i - 1]
+                if c0:
+                    acc[cat][lbl].append((c1 - c0) / c0 * 100)
+        result: dict[str, list[tuple[str, float]]] = {}
+        for cat in config.CATEGORY_LIST:
+            series = [(lbl, sum(v) / len(v)) for lbl, v in sorted(acc[cat].items()) if v]
+            result[cat] = series
+        return result
+
+    return cached("category:monthly_series", config.TTL_CATEGORY, build)
+
+
+def _all_labels(series: dict[str, list[tuple[str, float]]]) -> list[str]:
+    return sorted({lbl for s in series.values() for lbl, _ in s})
+
+
+def get_category_monthly() -> CategoryReturns:
+    """최근 6개월 섹터별 월간 수익률(%)."""
+    def build() -> CategoryReturns:
+        series = _sector_monthly_avg_series()
+        cats = config.CATEGORY_LIST
+        labels = _all_labels(series)[-6:]
+        cat_map = {c: dict(series[c]) for c in cats}
+        rows: list[dict] = []
+        for lbl in labels:
+            row: dict = {"label": lbl}
+            for c in cats:
+                row[c] = round(cat_map[c].get(lbl, 0.0), 2)
+            rows.append(row)
+        return CategoryReturns(categories=cats, rows=rows)
+
+    return cached("category:monthly", config.TTL_CATEGORY, build)
+
+
+def _period_key(label: str, period: str) -> str:
+    """월라벨 'YYYY-MM' → 구간 표시 라벨."""
+    y, m = label.split("-")
     if period == "분기":
-        labels = []
-        for y in range(2021, 2027):
-            for q in range(1, 5):
-                if (y, q) < (2021, 3):
-                    continue
-                if (y, q) > (2026, 2):
-                    break
-                labels.append(f"{y}Q{q}")
-    elif period == "년":
-        labels = [str(y) for y in range(2022, 2027)]
-    else:  # 월
-        labels = []
-        for y in range(2021, 2027):
-            for m in range(1, 13):
-                if (y, m) < (2021, 6):
-                    continue
-                if (y, m) > (2026, 5):
-                    break
-                labels.append(f"{y}-{m:02d}")
-
-    cum = {c: 100.0 for c in _CATS}
-    result = []
-    for label in labels:
-        for cat in _CATS:
-            r = rng.uniform(lo, hi) + _CAT_DRIFT[cat]
-            cum[cat] *= (1 + r / 100)
-        result.append({"month": label, **{cat: round(cum[cat] - 100, 2) for cat in _CATS}})
-    return result
+        return f"{y}Q{(int(m) - 1) // 3 + 1}"
+    if period == "년":
+        return y
+    return label  # 월
 
 
-def get_category_monthly() -> list[CategoryMonthly]:
-    return [CategoryMonthly(**row) for row in _MONTHLY_RAW]
+def get_category_cumulative(period: str = "월") -> CategoryReturns:
+    """기간별 섹터 누적 등락률(%) — 첫 구간 대비 누적곱."""
+    unit, n_units = _PERIOD_SPEC.get(period, _PERIOD_SPEC["월"])
 
+    def build() -> CategoryReturns:
+        series = _sector_monthly_avg_series()
+        cats = config.CATEGORY_LIST
+        labels = _all_labels(series)
+        cat_map = {c: dict(series[c]) for c in cats}
 
-def get_category_cumulative(period: str = "월") -> list[CategoryMonthly]:
-    rows = _make_cumulative_dummy(period)
-    return [CategoryMonthly(**row) for row in rows]
+        # 시간순 구간 키 목록 (유니크) → 최근 n_units개만
+        keys: list[str] = []
+        for lbl in labels:
+            k = _period_key(lbl, period)
+            if k not in keys:
+                keys.append(k)
+        sel = keys[-n_units:]
+
+        rows: list[dict] = []
+        cum = {c: 1.0 for c in cats}
+        for k in sel:
+            months_in = [lbl for lbl in labels if _period_key(lbl, period) == k]
+            row: dict = {"label": k}
+            for c in cats:
+                factor = 1.0
+                for lbl in months_in:
+                    r = cat_map[c].get(lbl)
+                    if r is not None:
+                        factor *= 1 + r / 100
+                cum[c] *= factor
+                row[c] = round((cum[c] - 1) * 100, 2)
+            rows.append(row)
+        return CategoryReturns(categories=cats, rows=rows)
+
+    return cached(f"category:cumulative:{period}", config.TTL_CATEGORY, build)
 
 
 def _volatility(market: str) -> float:
@@ -138,7 +174,7 @@ def get_correlation(market: str) -> list[CorrelationItem]:
 
 def _compute_coin_stats() -> list[CoinStat]:
     # 분석 유니버스 전체를 대상으로 변동성·1개월 수익률 산출 (공용 일봉 캐시 재사용).
-    # 카테고리는 수동 매핑에 있으면 부여, 없으면 None (분류 소스 확정 전).
+    # 카테고리는 업비트 섹터 스냅샷에 있으면 부여, 없으면 None (신규 상장 등).
     tickers = market_service.get_tickers()
     result = []
     for t in tickers:

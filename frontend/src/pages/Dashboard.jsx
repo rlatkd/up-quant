@@ -8,23 +8,10 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import { useCategoryMonthly, useCategoryCumulative, useCoinStats } from '../hooks/useAnalysis'
 
-const CAT_COLORS = {
-  layer1: '#6366f1',
-  defi:   '#10b981',
-  meme:   '#f59e0b',
-  gaming: '#ec4899',
-  layer2: '#8b5cf6',
-}
-
-const CAT_LABELS = {
-  layer1: 'Layer 1',
-  defi:   'DeFi',
-  meme:   'Meme',
-  gaming: 'Gaming',
-  layer2: 'Layer 2',
-}
-
-const CATS = ['layer1', 'defi', 'meme', 'gaming', 'layer2']
+// 카테고리(섹터)는 업비트 데이터랩 '코인 분류'에서 받아온 가변 목록(한글)이라,
+// 색상은 응답 categories 순서대로 팔레트를 매핑한다. 라벨은 섹터명(한글) 그대로 사용.
+const CAT_PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f43f5e']
+const catColor = (categories, cat) => CAT_PALETTE[Math.max(0, categories.indexOf(cat)) % CAT_PALETTE.length]
 
 const DOM_COLORS = ['#f59e0b', '#6366f1', '#06b6d4', '#10b981', '#9ca3af']
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
@@ -51,9 +38,9 @@ function bulkRange(vals, k = 2) {
 }
 const padDomain = (lo, hi) => { const p = (hi - lo) * 0.05 || 0.5; return [lo - p, hi + p] }
 
-// 카테고리 수익률은 업비트가 카테고리를 제공하지 않아 예시(더미) 데이터를 사용한다.
-function DummyBadge() {
-  return <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[10px] font-medium">예시</span>
+// 카테고리 분류는 업비트 데이터랩 '코인 분류' 스냅샷, 수익률은 실 월봉 집계.
+function SourceBadge() {
+  return <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 text-[10px] font-medium">업비트 분류</span>
 }
 
 function pearson(xs, ys) {
@@ -67,12 +54,12 @@ function pearson(xs, ys) {
   return dx * dy ? num / (dx * dy) : 0
 }
 
-function CorrHeatmap({ monthly }) {
-  if (!monthly.length) return null
-  const matrix = CATS.map(a =>
-    CATS.map(b => {
-      const xs = monthly.map(r => r[a])
-      const ys = monthly.map(r => r[b])
+function CorrHeatmap({ rows, categories }) {
+  if (!rows.length || !categories.length) return null
+  const matrix = categories.map(a =>
+    categories.map(b => {
+      const xs = rows.map(r => r[a])
+      const ys = rows.map(r => r[b])
       return parseFloat(pearson(xs, ys).toFixed(2))
     })
   )
@@ -88,26 +75,26 @@ function CorrHeatmap({ monthly }) {
       <thead>
         <tr>
           <th className="pb-2 pr-2 text-left text-gray-400 font-medium w-20"></th>
-          {CATS.map(c => (
+          {categories.map(c => (
             <th key={c} className="pb-2 text-center text-gray-400 font-medium">
               <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CAT_COLORS[c] }} />
-                {CAT_LABELS[c]}
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: catColor(categories, c) }} />
+                {c}
               </div>
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {CATS.map((a, i) => (
+        {categories.map((a, i) => (
           <tr key={a}>
             <td className="pr-2 py-1 text-gray-500 font-medium">
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CAT_COLORS[a] }} />
-                {CAT_LABELS[a]}
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: catColor(categories, a) }} />
+                {a}
               </div>
             </td>
-            {CATS.map((b, j) => {
+            {categories.map((b, j) => {
               const v = matrix[i][j]
               const { bg, text } = cellColor(v)
               return (
@@ -291,7 +278,8 @@ function MoversFeed({ tickers }) {
 }
 
 const PERIOD_OPTIONS = ['월', '분기', '년']
-const PERIOD_X_INTERVAL = { 월: 5, 분기: 1, 년: 0 }
+// 누적 rows 개수: 월 12 · 분기 12 · 년 5 → 라벨 겹침 방지용 표시 간격
+const PERIOD_X_INTERVAL = { 월: 1, 분기: 1, 년: 0 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -387,7 +375,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
-            <DummyBadge />
+            <SourceBadge />
           </div>
           <div className="flex gap-1">
             {PERIOD_OPTIONS.map(p => (
@@ -405,33 +393,33 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-        <div className="text-xs text-gray-400 mb-4">초기값 대비 누적 등락률 (%) · 난수 기반 예시 데이터 (실 시세 아님)</div>
+        <div className="text-xs text-gray-400 mb-4">기간 첫 구간 대비 누적 등락률 (%) · 섹터 소속 종목 동일가중 월봉 집계</div>
         {cumLoading ? (
           <div className="h-[220px] flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={cumulative} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
+            <LineChart data={cumulative.rows} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis
-                dataKey="month"
+                dataKey="label"
                 tick={{ fontSize: 11, fill: '#9ca3af' }}
                 interval={PERIOD_X_INTERVAL[cumPeriod]}
               />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => v + '%'} />
               <Tooltip
-                formatter={(v, name) => [v.toFixed(2) + '%', CAT_LABELS[name] || name]}
+                formatter={(v, name) => [v.toFixed(2) + '%', name]}
                 contentStyle={{ fontSize: 12, borderColor: '#e5e7eb' }}
               />
-              <Legend formatter={name => CAT_LABELS[name] || name} wrapperStyle={{ fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-              {CATS.map(cat => (
+              {cumulative.categories.map(cat => (
                 <Line
                   key={cat}
                   type="monotone"
                   dataKey={cat}
-                  stroke={CAT_COLORS[cat]}
+                  stroke={catColor(cumulative.categories, cat)}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -446,42 +434,42 @@ export default function Dashboard() {
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center gap-2 mb-0.5">
           <div className="text-sm font-semibold text-gray-700">카테고리 상관관계</div>
-          <DummyBadge />
+          <SourceBadge />
         </div>
-        <div className="text-xs text-gray-400 mb-4">월별 수익률 기반 피어슨 상관계수 (-1 ~ +1)</div>
-        <CorrHeatmap monthly={monthly} />
+        <div className="text-xs text-gray-400 mb-4">최근 6개월 섹터 수익률 기반 피어슨 상관계수 (-1 ~ +1)</div>
+        <CorrHeatmap rows={monthly.rows} categories={monthly.categories} />
       </div>
 
       {/* Monthly heatmap */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="flex items-center gap-2 mb-1">
             <div className="text-sm font-semibold text-gray-700">월별 카테고리 수익률</div>
-            <DummyBadge />
+            <SourceBadge />
           </div>
-          <div className="text-xs text-gray-400 mb-4">각 카테고리의 해당 월 평균 등락률 (%)</div>
+          <div className="text-xs text-gray-400 mb-4">각 섹터 소속 종목의 해당 월 평균 등락률 (%)</div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
-                  <th className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 w-20">카테고리</th>
-                  {monthly.map(row => (
-                    <th key={row.month} className="text-center text-xs text-gray-400 font-medium pb-2 px-1">
-                      {row.month.slice(2)}
+                  <th className="text-left text-xs text-gray-400 font-medium pb-2 pr-3 w-40">카테고리</th>
+                  {monthly.rows.map(row => (
+                    <th key={row.label} className="text-center text-xs text-gray-400 font-medium pb-2 px-1">
+                      {row.label.slice(2)}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {CATS.map(cat => (
+                {monthly.categories.map(cat => (
                   <tr key={cat}>
                     <td className="text-xs font-medium text-gray-600 py-1 pr-3">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CAT_COLORS[cat] }} />
-                        {CAT_LABELS[cat]}
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(monthly.categories, cat) }} />
+                        {cat}
                       </div>
                     </td>
-                    {monthly.map(row => (
-                      <HeatmapCell key={row.month} value={row[cat]} />
+                    {monthly.rows.map(row => (
+                      <HeatmapCell key={row.label} value={row[cat]} />
                     ))}
                   </tr>
                 ))}
@@ -523,7 +511,7 @@ export default function Dashboard() {
                   return (
                     <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs shadow-sm">
                       <div className="font-semibold text-gray-700 mb-1">{d.name}</div>
-                      {d.category && <div className="text-gray-500">{CAT_LABELS[d.category]}</div>}
+                      {d.category && <div className="text-gray-500">{d.category}</div>}
                       <div className="text-gray-600 mt-1">변동성 {d.x}% / 수익률 {d.y > 0 ? '+' : ''}{d.y}%</div>
                     </div>
                   )

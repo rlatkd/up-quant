@@ -1,6 +1,6 @@
 # UPquant API 명세서
 
-UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open API(시세, 인증 불필요)** 를 호출해 생성하며, 인메모리 TTL 캐시(stale-while-revalidate)로 제공됩니다. (단, 카테고리별 수익률만 예시 데이터)
+UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open API(시세, 인증 불필요)** 를 호출해 생성하며, 인메모리 TTL 캐시(stale-while-revalidate)로 제공됩니다. (카테고리 분류는 업비트 데이터랩 '코인 분류'를 1회 스크랩한 정적 스냅샷, 수익률은 실 월봉 집계)
 
 - **Base URL**: `http://localhost:8000`
 - **자동 생성 문서** (서버 실행 중일 때):
@@ -17,13 +17,14 @@ UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open 
 ## 공통 사항
 
 ### 지원 마켓 (분석 유니버스 ~261종)
-분석 유니버스는 **업비트 KRW 마켓 전체(~261종)** — `config.USE_ALL_KRW_MARKETS`. 부팅 시 `/v1/market/all`과 교집합만 사용(상장폐지 종목 자동 제외). 코인↔카테고리 **수동 매핑**은 아래 15종(`config.MARKET_CATEGORIES`)에만 존재하며, 그 외 종목은 폴백 처리됩니다.
+분석 유니버스는 **업비트 KRW 마켓 전체(~261종)** — `config.USE_ALL_KRW_MARKETS`. 부팅 시 `/v1/market/all`과 교집합만 사용(상장폐지 종목 자동 제외. 예: KRW-MATIC은 POL 마이그레이션으로 폐지 → KRW-POL).
+
+### 코인 분류 (섹터)
+코인↔섹터 매핑은 **업비트 데이터랩 '코인 분류'**(`datalab.upbit.com/sector`)를 1회 스크랩한 정적 스냅샷(`app/data/upbit_sectors.json`). 261종 전체에 3단계 분류(level1/2/3)가 있으며, 화면은 **대분류(level1) 5종**을 사용합니다(종목 수 순):
 ```
-KRW-BTC  KRW-ETH  KRW-XRP   KRW-SOL   KRW-DOGE
-KRW-ADA  KRW-LINK KRW-AVAX  KRW-DOT   KRW-ATOM
-KRW-NEAR KRW-SAND KRW-MANA  KRW-POL   KRW-1INCH
+스마트 컨트랙트 플랫폼(86)  인프라(80)  디파이(50)  문화/엔터테인먼트(34)  밈(11)
 ```
-> 위 15종은 **카테고리가 수동 매핑된 종목**입니다. KRW-MATIC은 폴리곤 POL 마이그레이션으로 상장폐지되어 **KRW-POL**로 교체됨.
+`config.MARKET_CATEGORIES`(market→level1) · `CATEGORY_LIST` · `MARKET_SUBCATEGORIES`로 노출. 스냅샷이라 신규 상장 종목은 미분류(`null`)일 수 있습니다.
 
 ### 오류 응답
 | 상태 코드 | 의미 | 본문 예시 |
@@ -83,18 +84,18 @@ KRW-NEAR KRW-SAND KRW-MANA  KRW-POL   KRW-1INCH
 ## 3. Analysis — `/api/analysis`
 
 ### `GET /api/analysis/category/monthly`
-카테고리별 월간 수익률 (최근 6개월 고정).
-- **응답**: `CategoryMonthly[]`
+섹터별 월간 수익률 (최근 6개월). 섹터 소속 종목의 월봉 close 동일가중 평균.
+- **응답**: `CategoryReturns`
 
 ### `GET /api/analysis/category/cumulative`
-카테고리별 누적 수익률 (최근 5년, 초기값 대비 %).
+섹터별 누적 수익률 (기간 첫 구간 대비 누적 %). 월봉 동일가중 평균을 period 단위로 리샘플 후 누적곱.
 - **쿼리 파라미터**:
 
   | 이름 | 타입 | 기본값 | 설명 |
   |------|------|--------|------|
-  | `period` | string | `월` | 집계 단위: `월` \| `분기` \| `년` (그 외 값은 `월`로 처리) |
+  | `period` | string | `월` | 집계 단위·구간 수: `월`(12개월) \| `분기`(12분기) \| `년`(5년) (그 외 값은 `월`로 처리) |
 
-- **응답**: `CategoryMonthly[]` (`month` 필드에 라벨이 들어감 — 예: `2026-05`, `2026Q2`, `2026`)
+- **응답**: `CategoryReturns` (`rows[].label`에 구간 라벨 — 예: `2026-05`, `2026Q2`, `2026`)
 
 ### `GET /api/analysis/coins`
 종목별 통계 (변동성·1개월 수익률 등).
@@ -162,8 +163,8 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 | `low_price` | float | 당일 저가 |
 | `prev_closing_price` | float | 전일 종가 |
 | `sparkline` | float[] | 미니 추세 차트용 가격 배열 |
-| `is_52w_high` | bool | 52주 신고가 여부 |
-| `is_52w_low` | bool | 52주 신저가 여부 |
+| `is_52w_high` | bool | 52주 신고가 **오늘(KST) 경신** 여부 (`highest_52_week_date == 오늘`) |
+| `is_52w_low` | bool | 52주 신저가 **오늘(KST) 경신** 여부 (`lowest_52_week_date == 오늘`) |
 | `w52_high` | float | 52주 최고가 |
 | `w52_low` | float | 52주 최저가 |
 
@@ -199,18 +200,19 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 | `open` / `high` / `low` / `close` | float | 시/고/저/종가 |
 | `volume` | float | 거래량 |
 
-### CategoryMonthly
+### CategoryReturns
+섹터가 가변(업비트 분류)이라 고정 필드 대신 동적 구조를 쓴다.
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| `month` | string | 기간 라벨 (`YYYY-MM` 등) |
-| `layer1` / `defi` / `meme` / `gaming` / `layer2` | float | 카테고리별 수익률 (%) |
+| `categories` | string[] | 섹터명 목록 (표시 순서, 한글). 예: `["스마트 컨트랙트 플랫폼", "인프라", …]` |
+| `rows` | object[] | 각 `{ "label": "구간라벨", "<섹터명>": 수익률%, … }`. `label`은 `YYYY-MM`·`YYYYQn`·`YYYY` |
 
 ### CoinStat
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `market` | string | 마켓 코드 |
 | `korean_name` | string | 한글 종목명 |
-| `category` | string | 카테고리 (`layer1`, `defi`, `meme`, `gaming`, `layer2`) |
+| `category` | string \| null | 업비트 섹터(대분류, 한글). 예: `인프라`, `디파이`. 미분류 종목은 `null` |
 | `volatility` | float | 30일 일간 수익률 표준편차 (%) |
 | `return_1m` | float | 1개월 총 수익률 (%) |
 | `acc_trade_price_24h` | float | 24h 누적 거래대금 |

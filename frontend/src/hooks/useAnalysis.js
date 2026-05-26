@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCategoryMonthly, getCategoryCumulative, getCoinStats, getCorrelation } from '../api/analysis'
 
+const EMPTY_RETURNS = { categories: [], rows: [] }
+
 export function useCategoryMonthly() {
-  const [data, setData] = useState([])
+  const [data, setData] = useState(EMPTY_RETURNS)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     getCategoryMonthly().then(setData).finally(() => setLoading(false))
@@ -11,7 +13,7 @@ export function useCategoryMonthly() {
 }
 
 export function useCategoryCumulative(period = '월') {
-  const [data, setData] = useState([])
+  const [data, setData] = useState(EMPTY_RETURNS)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     setLoading(true)

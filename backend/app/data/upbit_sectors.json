@@ -1,0 +1,1319 @@
+{
+    "source":  "업비트 데이터랩 코인 분류 (datalab.upbit.com/sector?tab=marketMap)",
+    "note":  "level1=대분류, level2=중분류, level3=소분류. 업비트 공식 산업군 분류를 1회 스크랩한 정적 스냅샷.",
+    "fetched_at":  "2026-05-26",
+    "sectors_level1":  [
+                           "인프라",
+                           "스마트 컨트랙트 플랫폼",
+                           "디파이",
+                           "문화/엔터테인먼트",
+                           "밈"
+                       ],
+    "coins":  {
+                  "KRW-BTC":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-XRP":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-CVC":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "DID"
+                              },
+                  "KRW-SC":  {
+                                 "level1":  "인프라",
+                                 "level2":  "DePIN",
+                                 "level3":  "스토리지"
+                             },
+                  "KRW-SNT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "월렛/메시징"
+                              },
+                  "KRW-XLM":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-STORJ":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "스토리지"
+                                },
+                  "KRW-BCH":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-POWR":  {
+                                   "level1":  "인프라",
+                                   "level2":  "지급결제 인프라",
+                                   "level3":  "지급결제 인프라"
+                               },
+                  "KRW-RVN":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-BOUNTY":  {
+                                     "level1":  "인프라",
+                                     "level2":  "디앱 인프라",
+                                     "level3":  "보안"
+                                 },
+                  "KRW-BSV":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-THETA":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "AI"
+                                },
+                  "KRW-BTT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "스토리지"
+                              },
+                  "KRW-ANKR":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-TFUEL":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "AI"
+                                },
+                  "KRW-AWE":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-HBAR":  {
+                                   "level1":  "인프라",
+                                   "level2":  "네트워크 인프라",
+                                   "level3":  "엔터프라이즈 블록체인"
+                               },
+                  "KRW-MED":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "의료 "
+                              },
+                  "KRW-DKA":  {
+                                  "level1":  "인프라",
+                                  "level2":  "네트워크 인프라",
+                                  "level3":  "물류"
+                              },
+                  "KRW-LINK":  {
+                                   "level1":  "인프라",
+                                   "level2":  "디앱 인프라",
+                                   "level3":  "오라클"
+                               },
+                  "KRW-MVL":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-STRAX":  {
+                                    "level1":  "인프라",
+                                    "level2":  "네트워크 인프라",
+                                    "level3":  "엔터프라이즈 블록체인"
+                                },
+                  "KRW-GLM":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "스토리지"
+                              },
+                  "KRW-FIL":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "스토리지"
+                              },
+                  "KRW-PUNDIX":  {
+                                     "level1":  "인프라",
+                                     "level2":  "지급결제 인프라",
+                                     "level3":  "지급결제 인프라"
+                                 },
+                  "KRW-GRT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-XEC":  {
+                                  "level1":  "인프라",
+                                  "level2":  "지급결제 인프라",
+                                  "level3":  "지급결제 인프라"
+                              },
+                  "KRW-MASK":  {
+                                   "level1":  "인프라",
+                                   "level2":  "유저 인프라",
+                                   "level3":  "월렛/메시징"
+                               },
+                  "KRW-LPT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-RENDER":  {
+                                     "level1":  "인프라",
+                                     "level2":  "DePIN",
+                                     "level3":  "AI"
+                                 },
+                  "KRW-T":  {
+                                "level1":  "인프라",
+                                "level2":  "네트워크 인프라",
+                                "level3":  "상호운용성/브릿지"
+                            },
+                  "KRW-API3":  {
+                                   "level1":  "인프라",
+                                   "level2":  "디앱 인프라",
+                                   "level3":  "오라클"
+                               },
+                  "KRW-ENS":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "DID"
+                              },
+                  "KRW-POLYX":  {
+                                    "level1":  "인프라",
+                                    "level2":  "네트워크 인프라",
+                                    "level3":  "엔터프라이즈 블록체인"
+                                },
+                  "KRW-HP":  {
+                                 "level1":  "인프라",
+                                 "level2":  "유저 인프라",
+                                 "level3":  "의료 "
+                             },
+                  "KRW-ID":  {
+                                 "level1":  "인프라",
+                                 "level2":  "유저 인프라",
+                                 "level3":  "DID"
+                             },
+                  "KRW-AXL":  {
+                                  "level1":  "인프라",
+                                  "level2":  "네트워크 인프라",
+                                  "level3":  "상호운용성/브릿지"
+                              },
+                  "KRW-PYTH":  {
+                                   "level1":  "인프라",
+                                   "level2":  "디앱 인프라",
+                                   "level3":  "오라클"
+                               },
+                  "KRW-ALT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "네트워크 인프라",
+                                  "level3":  "엔터프라이즈 블록체인"
+                              },
+                  "KRW-POKT":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-AKT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-ZRO":  {
+                                  "level1":  "인프라",
+                                  "level2":  "네트워크 인프라",
+                                  "level3":  "상호운용성/브릿지"
+                              },
+                  "KRW-ATH":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-W":  {
+                                "level1":  "인프라",
+                                "level2":  "네트워크 인프라",
+                                "level3":  "상호운용성/브릿지"
+                            },
+                  "KRW-CARV":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-SAFE":  {
+                                   "level1":  "인프라",
+                                   "level2":  "유저 인프라",
+                                   "level3":  "월렛/메시징"
+                               },
+                  "KRW-VIRTUAL":  {
+                                      "level1":  "인프라",
+                                      "level2":  "DePIN",
+                                      "level3":  "AI"
+                                  },
+                  "KRW-ARKM":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-KAITO":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "데이터 인프라"
+                                },
+                  "KRW-WAL":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "스토리지"
+                              },
+                  "KRW-WCT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "월렛/메시징"
+                              },
+                  "KRW-SIGN":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-HYPER":  {
+                                    "level1":  "인프라",
+                                    "level2":  "네트워크 인프라",
+                                    "level3":  "상호운용성/브릿지"
+                                },
+                  "KRW-RED":  {
+                                  "level1":  "인프라",
+                                  "level2":  "디앱 인프라",
+                                  "level3":  "오라클"
+                              },
+                  "KRW-FLOCK":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "AI"
+                                },
+                  "KRW-NEWT":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-SAHARA":  {
+                                     "level1":  "인프라",
+                                     "level2":  "DePIN",
+                                     "level3":  "AI"
+                                 },
+                  "KRW-ERA":  {
+                                  "level1":  "인프라",
+                                  "level2":  "네트워크 인프라",
+                                  "level3":  "상호운용성/브릿지"
+                              },
+                  "KRW-PROVE":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "데이터 인프라"
+                                },
+                  "KRW-WLD":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "DID"
+                              },
+                  "KRW-HOLO":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-ZKC":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-MIRA":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-2Z":  {
+                                 "level1":  "인프라",
+                                 "level2":  "DePIN",
+                                 "level3":  "데이터 인프라"
+                             },
+                  "KRW-ZBT":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-ENSO":  {
+                                   "level1":  "인프라",
+                                   "level2":  "네트워크 인프라",
+                                   "level3":  "상호운용성/브릿지"
+                               },
+                  "KRW-KITE":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-TRUST":  {
+                                    "level1":  "인프라",
+                                    "level2":  "DePIN",
+                                    "level3":  "데이터 인프라"
+                                },
+                  "KRW-ZKP":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-BREV":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-ELSA":  {
+                                   "level1":  "인프라",
+                                   "level2":  "유저 인프라",
+                                   "level3":  "월렛/메세징"
+                               },
+                  "KRW-SENT":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-TAO":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-SKR":  {
+                                  "level1":  "인프라",
+                                  "level2":  "유저 인프라",
+                                  "level3":  "월렛/메세징"
+                              },
+                  "KRW-ZAMA":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "데이터 인프라"
+                               },
+                  "KRW-PIEVERSE":  {
+                                       "level1":  "인프라",
+                                       "level2":  "유저 인프라",
+                                       "level3":  "월렛/메세징"
+                                   },
+                  "KRW-PRL":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "데이터 인프라"
+                              },
+                  "KRW-VVV":  {
+                                  "level1":  "인프라",
+                                  "level2":  "DePIN",
+                                  "level3":  "AI"
+                              },
+                  "KRW-TRAC":  {
+                                   "level1":  "인프라",
+                                   "level2":  "DePIN",
+                                   "level3":  "AI"
+                               },
+                  "KRW-ETH":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-NEO":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ETC":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-WAVES":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모놀리식 블록체인",
+                                    "level3":  "모놀리식 블록체인"
+                                },
+                  "KRW-QTUM":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-LSK":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-ARDR":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-ARK":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-MTL":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-ADA":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-TRX":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ICX":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-A":  {
+                                "level1":  "스마트 컨트랙트 플랫폼",
+                                "level2":  "모놀리식 블록체인",
+                                "level3":  "모놀리식 블록체인"
+                            },
+                  "KRW-ONT":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ZIL":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-IOST":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-IOTA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-ONG":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-GAS":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ELF":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-QKC":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-META":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-CRO":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-AERGO":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모놀리식 블록체인",
+                                    "level3":  "모놀리식 블록체인"
+                                },
+                  "KRW-ATOM":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-TT":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모놀리식 블록체인",
+                                 "level3":  "모놀리식 블록체인"
+                             },
+                  "KRW-VET":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-XTZ":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-HIVE":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-KAVA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-TOKAMAK":  {
+                                      "level1":  "스마트 컨트랙트 플랫폼",
+                                      "level2":  "모듈러 블록체인",
+                                      "level3":  "모듈러 블록체인"
+                                  },
+                  "KRW-DOT":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-ALGO":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-FCT2":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-INJ":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-CELO":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-STX":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-NEAR":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-SOL":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-CTC":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-AVAX":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-APT":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ASTR":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-ARB":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-EGLD":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-SUI":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-MINA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-SEI":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-MNT":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-ZETA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-TAIKO":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-BLAST":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-POL":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-CKB":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-MOVE":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-VANA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-SONIC":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-VTHO":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-BERA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-LAYER":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모놀리식 블록체인",
+                                    "level3":  "모놀리식 블록체인"
+                                },
+                  "KRW-TIA":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-MANTRA":  {
+                                     "level1":  "스마트 컨트랙트 플랫폼",
+                                     "level2":  "모놀리식 블록체인",
+                                     "level3":  "모놀리식 블록체인"
+                                 },
+                  "KRW-SOON":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-SOPH":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-LA":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모듈러 블록체인",
+                                 "level3":  "모듈러 블록체인"
+                             },
+                  "KRW-OP":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모듈러 블록체인",
+                                 "level3":  "모듈러 블록체인"
+                             },
+                  "KRW-IP":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모놀리식 블록체인",
+                                 "level3":  "모놀리식 블록체인"
+                             },
+                  "KRW-OPEN":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-LINEA":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-PLUME":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-0G":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모놀리식 블록체인",
+                                 "level3":  "모놀리식 블록체인"
+                             },
+                  "KRW-B3":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모듈러 블록체인",
+                                 "level3":  "모듈러 블록체인"
+                             },
+                  "KRW-XPL":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-SOMI":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-MON":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-ZK":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모듈러 블록체인",
+                                 "level3":  "모듈러 블록체인"
+                             },
+                  "KRW-AZTEC":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-ESP":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-ICP":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모놀리식 블록체인",
+                                  "level3":  "모놀리식 블록체인"
+                              },
+                  "KRW-KAT":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-CC":  {
+                                 "level1":  "스마트 컨트랙트 플랫폼",
+                                 "level2":  "모놀리식 블록체인",
+                                 "level3":  "모놀리식 블록체인"
+                             },
+                  "KRW-XCN":  {
+                                  "level1":  "스마트 컨트랙트 플랫폼",
+                                  "level2":  "모듈러 블록체인",
+                                  "level3":  "모듈러 블록체인"
+                              },
+                  "KRW-BLEND":  {
+                                    "level1":  "스마트 컨트랙트 플랫폼",
+                                    "level2":  "모듈러 블록체인",
+                                    "level3":  "모듈러 블록체인"
+                                },
+                  "KRW-MEGA":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-PROS":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모듈러 블록체인",
+                                   "level3":  "모듈러 블록체인"
+                               },
+                  "KRW-IRYS":  {
+                                   "level1":  "스마트 컨트랙트 플랫폼",
+                                   "level2":  "모놀리식 블록체인",
+                                   "level3":  "모놀리식 블록체인"
+                               },
+                  "KRW-USDT":  {
+                                   "level1":  "디파이",
+                                   "level2":  "스테이블 코인 그룹",
+                                   "level3":  "스테이블 코인"
+                               },
+                  "KRW-ZRX":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-KNC":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "애그리게이터"
+                              },
+                  "KRW-ORBS":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "애그리게이터"
+                               },
+                  "KRW-JST":  {
+                                  "level1":  "디파이",
+                                  "level2":  "예치",
+                                  "level3":  "렌딩"
+                              },
+                  "KRW-COMP":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "렌딩"
+                               },
+                  "KRW-SUN":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-UNI":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-AUCTION":  {
+                                      "level1":  "디파이",
+                                      "level2":  "교환",
+                                      "level3":  "DEX"
+                                  },
+                  "KRW-AAVE":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "렌딩"
+                               },
+                  "KRW-1INCH":  {
+                                    "level1":  "디파이",
+                                    "level2":  "교환",
+                                    "level3":  "애그리게이터"
+                                },
+                  "KRW-RAY":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-ONDO":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "RWA"
+                               },
+                  "KRW-JUP":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "애그리게이터"
+                              },
+                  "KRW-PENDLE":  {
+                                     "level1":  "디파이",
+                                     "level2":  "예치",
+                                     "level3":  "유동화 스테이킹/리스테이킹"
+                                 },
+                  "KRW-USDC":  {
+                                   "level1":  "디파이",
+                                   "level2":  "스테이블 코인 그룹",
+                                   "level3":  "스테이블 코인"
+                               },
+                  "KRW-USDS":  {
+                                   "level1":  "디파이",
+                                   "level2":  "스테이블 코인 그룹",
+                                   "level3":  "스테이블 코인"
+                               },
+                  "KRW-SKY":  {
+                                  "level1":  "디파이",
+                                  "level2":  "스테이블 코인 그룹",
+                                  "level3":  "스테이블 코인 연관 자산"
+                              },
+                  "KRW-DRIFT":  {
+                                    "level1":  "디파이",
+                                    "level2":  "교환",
+                                    "level3":  "선물/옵션 DEX"
+                                },
+                  "KRW-JTO":  {
+                                  "level1":  "디파이",
+                                  "level2":  "예치",
+                                  "level3":  "유동화 스테이킹/리스테이킹"
+                              },
+                  "KRW-COW":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "애그리게이터"
+                              },
+                  "KRW-ORCA":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "DEX"
+                               },
+                  "KRW-DEEP":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "DEX"
+                               },
+                  "KRW-KERNEL":  {
+                                     "level1":  "디파이",
+                                     "level2":  "예치",
+                                     "level3":  "유동화 스테이킹/리스테이킹"
+                                 },
+                  "KRW-ENA":  {
+                                  "level1":  "디파이",
+                                  "level2":  "스테이블 코인 그룹",
+                                  "level3":  "스테이블 코인 연관 자산"
+                              },
+                  "KRW-SYRUP":  {
+                                    "level1":  "디파이",
+                                    "level2":  "예치",
+                                    "level3":  "렌딩"
+                                },
+                  "KRW-AERO":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "DEX"
+                               },
+                  "KRW-TREE":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "유동화 스테이킹/리스테이킹"
+                               },
+                  "KRW-WLFI":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "렌딩"
+                               },
+                  "KRW-USD1":  {
+                                   "level1":  "디파이",
+                                   "level2":  "스테이블 코인 그룹",
+                                   "level3":  "스테이블 코인"
+                               },
+                  "KRW-PUMP":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "DEX"
+                               },
+                  "KRW-AVNT":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "RWA"
+                               },
+                  "KRW-BARD":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "유동화 스테이킹/리스테이킹"
+                               },
+                  "KRW-ETHFI":  {
+                                    "level1":  "디파이",
+                                    "level2":  "예치",
+                                    "level3":  "유동화 스테이킹/리스테이킹"
+                                },
+                  "KRW-SPK":  {
+                                  "level1":  "디파이",
+                                  "level2":  "예치",
+                                  "level3":  "렌딩"
+                              },
+                  "KRW-FLUID":  {
+                                    "level1":  "디파이",
+                                    "level2":  "교환",
+                                    "level3":  "DEX"
+                                },
+                  "KRW-IN":  {
+                                 "level1":  "디파이",
+                                 "level2":  "운용",
+                                 "level3":  "자산 운용"
+                             },
+                  "KRW-ORDER":  {
+                                    "level1":  "디파이",
+                                    "level2":  "교환",
+                                    "level3":  "DEX"
+                                },
+                  "KRW-FF":  {
+                                 "level1":  "디파이",
+                                 "level2":  "스테이블 코인 그룹",
+                                 "level3":  "스테이블 코인 연관 자산"
+                             },
+                  "KRW-F":  {
+                                "level1":  "디파이",
+                                "level2":  "교환",
+                                "level3":  "선물/옵션 DEX"
+                            },
+                  "KRW-CPOOL":  {
+                                    "level1":  "디파이",
+                                    "level2":  "예치",
+                                    "level3":  "렌딩"
+                                },
+                  "KRW-MMT":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-MET2":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "DEX"
+                               },
+                  "KRW-WET":  {
+                                  "level1":  "디파이",
+                                  "level2":  "교환",
+                                  "level3":  "DEX"
+                              },
+                  "KRW-XAUT":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "RWA"
+                               },
+                  "KRW-USDE":  {
+                                   "level1":  "디파이",
+                                   "level2":  "스테이블 코인 그룹",
+                                   "level3":  "스테이블 코인"
+                               },
+                  "KRW-CFG":  {
+                                  "level1":  "디파이",
+                                  "level2":  "예치",
+                                  "level3":  "RWA"
+                              },
+                  "KRW-EDGE":  {
+                                   "level1":  "디파이",
+                                   "level2":  "교환",
+                                   "level3":  "애그리게이터"
+                               },
+                  "KRW-CHIP":  {
+                                   "level1":  "디파이",
+                                   "level2":  "예치",
+                                   "level3":  "렌딩"
+                               },
+                  "KRW-UP2":  {
+                                  "level1":  "디파이",
+                                  "level2":  "예치",
+                                  "level3":  "렌딩"
+                              },
+                  "KRW-BAT":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "콘텐츠",
+                                  "level3":  "광고"
+                              },
+                  "KRW-STEEM":  {
+                                    "level1":  "문화/엔터테인먼트",
+                                    "level2":  "커뮤니티",
+                                    "level3":  "소셜/DAO"
+                                },
+                  "KRW-MANA":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "메타버스"
+                               },
+                  "KRW-IQ":  {
+                                 "level1":  "문화/엔터테인먼트",
+                                 "level2":  "콘텐츠",
+                                 "level3":  "교육/기타 콘텐츠"
+                             },
+                  "KRW-MOC":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "메타버스"
+                              },
+                  "KRW-MBL":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "콘텐츠",
+                                  "level3":  "미디어/스트리밍"
+                              },
+                  "KRW-BORA":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-WAXP":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-MLK":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "콘텐츠",
+                                  "level3":  "광고"
+                              },
+                  "KRW-CHZ":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "팬토큰",
+                                  "level3":  "스포츠"
+                              },
+                  "KRW-AHT":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "콘텐츠",
+                                  "level3":  "교육/기타 콘텐츠"
+                              },
+                  "KRW-HUNT":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "커뮤니티",
+                                   "level3":  "소셜/DAO"
+                               },
+                  "KRW-SAND":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "메타버스"
+                               },
+                  "KRW-AQT":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "NFT/게임"
+                              },
+                  "KRW-AXS":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "NFT/게임"
+                              },
+                  "KRW-CBK":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "커뮤니티",
+                                  "level3":  "소셜/DAO"
+                              },
+                  "KRW-YGG":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "NFT/게임"
+                              },
+                  "KRW-IMX":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "NFT/게임"
+                              },
+                  "KRW-AGLD":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-GMT":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "가상세계",
+                                  "level3":  "NFT/게임"
+                              },
+                  "KRW-BLUR":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-CYBER":  {
+                                    "level1":  "문화/엔터테인먼트",
+                                    "level2":  "커뮤니티",
+                                    "level3":  "소셜/DAO"
+                                },
+                  "KRW-BIGTIME":  {
+                                      "level1":  "문화/엔터테인먼트",
+                                      "level2":  "가상세계",
+                                      "level3":  "NFT/게임"
+                                  },
+                  "KRW-GAME2":  {
+                                    "level1":  "문화/엔터테인먼트",
+                                    "level2":  "가상세계",
+                                    "level3":  "NFT/게임"
+                                },
+                  "KRW-BEAM":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-G":  {
+                                "level1":  "문화/엔터테인먼트",
+                                "level2":  "커뮤니티",
+                                "level3":  "소셜/DAO"
+                            },
+                  "KRW-ME":  {
+                                 "level1":  "문화/엔터테인먼트",
+                                 "level2":  "가상세계",
+                                 "level3":  "NFT/게임"
+                             },
+                  "KRW-MOCA":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "메타버스"
+                               },
+                  "KRW-ANIME":  {
+                                    "level1":  "문화/엔터테인먼트",
+                                    "level2":  "가상세계",
+                                    "level3":  "NFT/게임"
+                                },
+                  "KRW-NXPC":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-SUPER":  {
+                                    "level1":  "문화/엔터테인먼트",
+                                    "level2":  "가상세계",
+                                    "level3":  "NFT/게임"
+                                },
+                  "KRW-ZORA":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "커뮤니티",
+                                   "level3":  "소셜/DAO"
+                               },
+                  "KRW-BIO":  {
+                                  "level1":  "문화/엔터테인먼트",
+                                  "level2":  "커뮤니티",
+                                  "level3":  "크라우드펀딩"
+                              },
+                  "KRW-BIRB":  {
+                                   "level1":  "문화/엔터테인먼트",
+                                   "level2":  "가상세계",
+                                   "level3":  "NFT/게임"
+                               },
+                  "KRW-DOGE":  {
+                                   "level1":  "밈",
+                                   "level2":  "밈",
+                                   "level3":  "밈"
+                               },
+                  "KRW-SHIB":  {
+                                   "level1":  "밈",
+                                   "level2":  "밈",
+                                   "level3":  "밈"
+                               },
+                  "KRW-PEPE":  {
+                                   "level1":  "밈",
+                                   "level2":  "밈",
+                                   "level3":  "밈"
+                               },
+                  "KRW-MEW":  {
+                                  "level1":  "밈",
+                                  "level2":  "밈",
+                                  "level3":  "밈"
+                              },
+                  "KRW-BONK":  {
+                                   "level1":  "밈",
+                                   "level2":  "밈",
+                                   "level3":  "밈"
+                               },
+                  "KRW-TRUMP":  {
+                                    "level1":  "밈",
+                                    "level2":  "밈",
+                                    "level3":  "밈"
+                                },
+                  "KRW-PENGU":  {
+                                    "level1":  "밈",
+                                    "level2":  "밈",
+                                    "level3":  "밈"
+                                },
+                  "KRW-MOODENG":  {
+                                      "level1":  "밈",
+                                      "level2":  "밈",
+                                      "level3":  "밈"
+                                  },
+                  "KRW-TOSHI":  {
+                                    "level1":  "밈",
+                                    "level2":  "밈",
+                                    "level3":  "밈"
+                                },
+                  "KRW-DOOD":  {
+                                   "level1":  "밈",
+                                   "level2":  "밈",
+                                   "level3":  "밈"
+                               },
+                  "KRW-WIF":  {
+                                  "level1":  "밈",
+                                  "level2":  "밈",
+                                  "level3":  "밈"
+                              }
+              }
+}
