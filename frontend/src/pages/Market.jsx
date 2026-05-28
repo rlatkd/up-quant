@@ -6,16 +6,10 @@ const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
 const RANK_LIMIT = 20      // 상승률·하락률·거래대금 표기 순위
 const TREEMAP_LIMIT = 30   // 시장 현황 트리맵에 표시할 메이저 종목 수 (거래대금 상위)
+const W52_LIMIT = 30       // 52주 신고/신저 배지 대상 = 거래대금 상위 N종 (유동성 낮은 잡코인 신저가 노이즈 제외)
 
 function fmtRate(r) {
   return (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
-}
-
-function fmtVolume(v) {
-  if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
-  if (v >= 1e8) return (v / 1e8).toFixed(0) + '억'
-  if (v >= 1e4) return (v / 1e4).toFixed(0) + '만'
-  return v.toLocaleString()
 }
 
 function changeColor(change) {
@@ -38,7 +32,7 @@ function MiniCard({ ticker }) {
         </div>
         <div className="text-right">
           <div className={`text-base font-bold ${changeColor(ticker.change)}`}>
-            {ticker.trade_price.toLocaleString()}
+            {ticker.trade_price.toLocaleString()}<span className="text-xs font-medium text-gray-400 ml-0.5">KRW</span>
           </div>
           <div className={`text-xs mt-0.5 ${changeColor(ticker.change)}`}>
             {fmtRate(ticker.change_rate)}
@@ -131,7 +125,7 @@ function VolumeTable({ rows, onRowClick }) {
                 </div>
               </td>
               <td className="px-4 py-2.5 text-right text-sm font-medium text-gray-700">
-                {fmtVolume(t.acc_trade_price_24h)}
+                {Math.round(t.acc_trade_price_24h).toLocaleString()}<span className="text-xs font-normal text-gray-400 ml-0.5">KRW</span>
               </td>
             </tr>
           ))}
@@ -142,8 +136,10 @@ function VolumeTable({ rows, onRowClick }) {
 }
 
 function W52Badges({ tickers }) {
-  const highs = tickers.filter(t => t.is_52w_high)
-  const lows  = tickers.filter(t => t.is_52w_low)
+  // 거래대금 상위 N종 안에서만 52주 경신을 추린다 (메이저 기준 — 유동성 낮은 잡코인 신저가 노이즈 제외)
+  const major = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, W52_LIMIT)
+  const highs = major.filter(t => t.is_52w_high)
+  const lows  = major.filter(t => t.is_52w_low)
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg px-5 py-3.5 flex items-center gap-6">
@@ -187,18 +183,33 @@ function TreemapCell({ x, y, width, height, name, change_rate }) {
     : `rgba(59,130,246,${opacity})`
   const sign = change_rate > 0 ? '+' : ''
 
+  // 칸 크기에 맞춰 폰트를 줄여 작은 칸에도 가능한 한 종목명을 표시한다(가로=이름 길이, 세로=칸 높이 기준).
+  // %는 두 줄이 들어갈 여유가 있을 때만 함께 표시.
+  const nameSize = Math.min(13, width / (name.length * 0.62), height / 2.4)
+  const showName = nameSize >= 6.5 && width > 24
+  const showPct = showName && height > 34 && width > 38
+  const pctSize = Math.max(8, Math.min(11, nameSize - 1))
+
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} fill={fill} stroke="#fff" strokeWidth={1} />
-      {width > 55 && height > 38 && (
-        <>
-          <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="#fff" fontSize={12} fontWeight="600">
-            {name}
-          </text>
-          <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="#fff" fontSize={11}>
-            {sign}{(change_rate * 100).toFixed(2)}%
-          </text>
-        </>
+      {showName && (
+        <text
+          x={x + width / 2}
+          y={y + height / 2 + (showPct ? -3 : nameSize * 0.35)}
+          textAnchor="middle" fill="#fff" fontSize={nameSize} fontWeight="600"
+        >
+          {name}
+        </text>
+      )}
+      {showPct && (
+        <text
+          x={x + width / 2}
+          y={y + height / 2 + pctSize + 2}
+          textAnchor="middle" fill="#fff" fontSize={pctSize}
+        >
+          {sign}{(change_rate * 100).toFixed(2)}%
+        </text>
       )}
     </g>
   )

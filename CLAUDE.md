@@ -37,12 +37,13 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 ## 필드/포맷 규약
 
 - `Ticker.change_rate` = Upbit `signed_change_rate`(부호 있음). `w52_high/low` = `highest/lowest_52_week_price`.
-- **52주 신고가/신저가 판정**: `Ticker.is_52w_high/low` = 업비트 `highest/lowest_52_week_date`가 **오늘(KST)인지**(=오늘 경신). 과거엔 `현재가 ≥/≤ 52주가`로 판정했으나 정확히 일치하는 순간이 거의 없어 전수 0개였음 → 달성일 기준으로 변경(엔지니어링노트 §11).
+- **52주 신고가/신저가 판정**: `Ticker.is_52w_high/low` = 업비트 `highest/lowest_52_week_date`가 **오늘(KST)인지**(=오늘 경신). 과거엔 `현재가 ≥/≤ 52주가`로 판정했으나 정확히 일치하는 순간이 거의 없어 전수 0개였음 → 달성일 기준으로 변경(엔지니어링노트 §11). **마켓현황 배지(`W52Badges`)는 거래대금 상위 30종(`Market.W52_LIMIT`)으로 한정 노출** — 하락장에 유동성 낮은 잡코인 신저가가 수십 개 깔리는 노이즈 제거(메이저 경신만 신호로 취급, 트리맵 30과 통일). 판정 자체는 전 종목 계산.
 - **카테고리 수익률 응답** `CategoryReturns` = `{ categories: [섹터명…], rows: [{ label, <섹터명>: 수익률%, … }] }`. (과거 고정 5필드 `CategoryMonthly`에서 동적 구조로 변경 — 섹터가 가변이므로). `/analysis/category/monthly`(최근 6개월)·`/cumulative?period=월|분기|년`.
 - 캔들은 **오름차순(오래된→최신)** 으로 반환 (lightweight-charts 요구). Upbit는 최신순이라 뒤집음.
 - `CandleItem.timestamp`=ms, `Trade.timestamp`=초(프론트가 ×1000), `EquityPoint.time`=초.
 - 프론트 캔들 interval: `minutes/{1|3|5|15|30|60|240}` | `days` | `weeks` | `months`.
 - **정렬**: `market_service.get_tickers()`는 **거래대금(`acc_trade_price_24h`) 내림차순**으로 반환(인기 종목 우선). 이를 그대로 따르는 코인목록(`/coins`)·비교분석(`/compare`)·스크리너(`/screener`)·대시보드 산점도가 동일 순서로 통일됨(`analysis_service.get_coin_stats()`도 `get_tickers()` 재사용). 코인목록 초기 정렬 헤더도 거래대금 desc(↓ 표시). **마켓현황(`/market`)은 자체 정렬**(상승률/하락률/거래대금 상위 등)이라 예외.
+- **금액 표기(거래대금·가격)**: 전체 원화 + **천단위 콤마 + 작은 회색 "KRW" 접미사**(B안, 2026-05-28 사용자 선택). 적용처: 대시보드 24h 총거래대금 KPI(`fmtKrw`+`text-xl`)·마켓현황 상단 카드 가격(`MiniCard`)·거래대금 상위 표(`VolumeTable`). 후보였던 "백만 단위(업비트 실제 방식)"·"조/억 한글"은 미채택 — "전체 표기로 있어보이게" 우선(엔지니어링노트 §17). **예외: 코인목록 표의 거래대금 컬럼은 `억` 단위(`fmtVolume`) 유지**(261행 밀도상 전체 콤마는 가독성 저하).
 
 ## 성능/관측성 (직접 구현, 외부 의존성 없음)
 
@@ -63,7 +64,8 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 사용자와 **한국어**로 소통.
 - **커밋은 사용자가 직접** 한다. 커밋 메시지는 추천만 하고, `git commit`/`push`는 실행하지 말 것.
 - **`.gitignore`: `*.md`는 기본 무시(로컬 메모용)**. 추적되는 마크다운은 `README.md`, `CLAUDE.md`, `references/*.md`뿐. `references/QAE_EDA_*`(원본 기획서 .docx/.pdf)는 의도적으로 제외(로컬 보관). 새 .md를 git에 올리려면 예외 규칙 추가 필요.
-- 문서 역할: 개요/구조/스크린샷 → `README.md`, API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, 기술 의사결정 기록(포트폴리오용, 고민·후보·선택) → `references/엔지니어링노트.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**.
+- 문서 역할: 개요/구조/스크린샷 **+ 사실·동작 정보(예: 캐시 TTL·동작 방식, 데이터 흐름)** → `README.md`(**정보 전달 목적 문서**), API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, 기술 의사결정 기록(**포트폴리오/회고용**, 고민·후보·선택) → `references/엔지니어링노트.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**.
+  - ⚠️ **엔지니어링노트는 "정보 정리처"가 아니다**(2026-05-28 사용자 명시). 사실·수치·동작 방식 같은 **정보(예: 캐싱 동작·TTL 표)는 `README.md`** 에 적고, 엔지니어링노트엔 **성장에 도움 될 고민·후보 비교·전략 방향성(회고/포트폴리오)** 만 남긴다. "정보를 어디 적지?" → 의사결정 과정/판단이면 엔지니어링노트, 사실/동작 설명이면 README.
 - **작업 후 문서 갱신 (필수)**: 코드를 바꾸면 **같은 작업 안에서** 관련 문서를 함께 갱신한다. (갱신 대상이던 `HANDOFF.md`·`docs/HISTORY.md`는 본 문서로 통합·삭제됨 — 더 이상 만들지 말 것.) 변경 유형 → 갱신할 문서:
   - 기능·화면·완료항목·로드맵 변경 → `README.md`
   - API 엔드포인트·쿼리 파라미터·응답 스키마 변경 → `references/API.md`
@@ -83,14 +85,18 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 분석 유니버스 KRW 전체(~261종) 확장, 리스크-수익 산점도·마켓 트리맵·코인목록 스파크라인 개편.
 - 거래대금 기준 정렬 통일(코인목록·비교·스크리너·대시보드 산점도) — Phase 11.
 - **카테고리(섹터) 분류 실데이터화** — 업비트 데이터랩 분류 스크랩(261종 5섹터) + 월봉 동일가중 수익률 + 부팅 워밍 — Phase 13.
+- **사용자 요청 UI 정리 묶음(2026-05-28)** — 대시보드(업비트분류 배지 제거·시장지배력 간격·상관관계 줄바꿈·공포탐욕 라벨·총거래대금 B안 표기), 마켓(52주 배지 상위30 한정·상단카드/거래대금 B안 표기·트리맵 폰트 스케일), 코인목록(중복 요약카드 제거) — Phase 14. (부가기능 헤더 복귀·도움말 정렬 2건은 사용자가 다음으로 보류)
 
 **다음 작업 (우선순위 순)**
-1. ⭐ **실제 화면 검증(브라우저 육안)** — Phase 12·13 모두 육안 미검증. 코드/빌드/ESLint·API는 검증됨. 남은 건 브라우저 육안: ⑴Phase 13 — 대시보드 카테고리 차트(누적 라인·월별 히트맵·상관관계, 한글 5섹터·"업비트 분류" 배지·실데이터), 코인목록 1일 스파크라인 **호버 툴팁이 그래프 안 가리는지**, 마켓현황 52주 신고/신저 배지(오늘 경신 종목 노출). ⑵Phase 12 — 허브 새 창·코인상세 레이아웃·트리맵 등. (콜드스타트 시 카테고리 월봉 워밍에 ~1분; 단 부팅 동기 워밍이라 기동 완료 후엔 즉시).
-2. **UI 업비트 톤으로 개선** — 색상·헤더마크·아이콘 등 전반을 업비트 느낌으로. ⚠️ **착수 전 사용자와 아이디어 공유 필수**(2026-05-26 사용자 요청).
-3. **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅(`useAnalysis`/`useCandles`/`useTickers`)·`Compare.jsx`의 effect 내 `setLoading(true)` 패턴. 사전 존재 이슈(이번 변경과 무관). 작업 다 마친 뒤 별도로(2026-05-26 사용자 지시).
-4. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
-5. **에러/로딩 상태 UI 개선**.
-6. **카테고리 분류 고도화(선택)** — 현재 level1(5섹터)만 사용. level2/level3 활용, 누적 수익률 변동성 드래그 표현 개선(기간 단축·정규화 지수), 분류 스냅샷 갱신 자동화.
+1. **[보류된 UI 요청 2건 — 다음 세션 우선]** 이번(2026-05-28) 묶음 11개 중 사용자가 다음으로 미룬 작업.
+   - ⑴ **부가기능 헤더 메뉴로 복귀**: 별도창(`window.open('/tools')`) 제거 → Layout 내 라우트로 환원, 비교·백테스트·스크리너 각각 **디폴트 종목/프리셋으로 진입 즉시 결과** 표시, "종목을 선택하세요" 안내문을 상세 `?` 툴팁으로 대체. (파일 다수: `App`·`Header`·`ToolsHub`·`Compare`·`Backtest`·`Screener` — 착수 전 설계 선택지 합의 필요: 탭 추가 vs 드롭다운, 디폴트 종목/프리셋, 툴팁 위치/내용)
+   - ⑵ **도움말(`Help.jsx`) 정렬**: 상단 범례 태그 줄바꿈 불균일(`flex-wrap`→균등 그리드). 더불어 stale 텍스트 정리("7일 스파크라인"→"1일", "현재 데이터는 데모용 더미" 문구는 실데이터로, 52주 배지 설명에 상위30 한정 반영).
+2. ⭐ **실제 화면 검증(브라우저 육안)** — Phase 12·13·14 모두 육안 미검증. 코드/빌드는 검증됨. ⑴Phase 14 — 대시보드 4건·마켓 4건·코인목록 카드제거 ⑵Phase 13 — 카테고리 차트 실데이터, 스파크라인 툴팁 안 가림. (콜드스타트 카테고리 월봉 워밍 ~1분, 단 동기 워밍이라 기동 후 즉시).
+3. **UI 업비트 톤으로 개선** — 색상·헤더마크·아이콘 등 전반. ⚠️ **착수 전 사용자와 아이디어 공유 필수**(2026-05-26).
+4. **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·`Compare.jsx`의 effect 내 `setLoading(true)`(사전 존재 이슈, 작업 다 마친 뒤·2026-05-26 지시).
+5. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
+6. **에러/로딩 상태 UI 개선**.
+7. **카테고리 분류 고도화(선택)** — level2/level3 활용, 누적 변동성 드래그 표현 개선, 분류 스냅샷 갱신 자동화.
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
 
@@ -186,3 +192,13 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **부팅 프리페치 확장**: `_prefetch`에 `get_category_monthly()`+`cumulative(3종)` 워밍 추가 — 월봉 261종 팬아웃(콜드 ~1분)을 **기동 시 1회만**, 이후 클라이언트는 캐시 히트. (성능 원칙 §15)
 - **프론트**: `Dashboard.jsx` 영문 키 상수(CAT_COLORS/LABELS/CATS) 제거 → `catColor`(팔레트)+한글 섹터명 직접. `CorrHeatmap` 파라미터화. 누적차트 `data=cumulative.rows`·`dataKey="label"`·`cumulative.categories`. 월별 히트맵·산점도 동일. "예시" `DummyBadge`→"업비트 분류" `SourceBadge`. `useAnalysis` 초기값 `{categories,rows}`.
 - 검증: 백엔드 `py_compile` 전체 통과 + 카테고리 monthly(콜드 56s)/cumulative(series 재사용 0s) 실데이터 산출 확인. 프론트 `vite build` 658모듈 성공. ESLint는 사전 존재 `set-state-in-effect` 5건만(이번 변경 무관, 다음 작업). **브라우저 육안 미검증**.
+
+### Phase 14 — 사용자 요청 UI 정리 묶음 (2026-05-28)
+사용자가 화면 검증 중 제시한 요청 묶음(원래 11건). 대화 중 캐싱 동작 질문·문서 배치 원칙 정리도 함께. 의사결정은 엔지니어링노트 §17·§18.
+- **문서 작업 (대화 중)**: ⑴캐싱 런타임 동작(TTL 표·SWR 3상태·lazy 재검증·fan-out 조건)을 **`README.md` "설계 노트 → 캐시 동작"** 섹션에 정리(처음에 엔지니어링노트에 넣었다 사용자 지적으로 README로 이동). ⑵그 경위로 **문서 배치 원칙 확립** — *엔지니어링노트=회고/포트폴리오용 고민·전략 방향성, README=사실·동작 정보*. CLAUDE.md "문서 역할"에 박고 메모리(`feedback_doc_placement`)에 저장.
+- **대시보드(`Dashboard.jsx`)**: ⑴'업비트 분류' 출처 배지(`SourceBadge`) 컴포넌트+사용처 3곳 제거. ⑵시장 지배력 범례 `flex-1`(폭 다 차지)→`w-[150px]`+`justify-center`로 코인명-% 간격 축소. ⑶공포·탐욕 게이지 라벨 잘림 — `viewBox 115→128`·height `110→122`로 확장(라벨 `y=120`이 잘리던 것). ⑷24h 총 거래대금 `fmtBillion`("1.8조") 제거 → 전체 콤마+작은 KRW(B안), 그 카드만 `text-xl`.
+- **상관관계 히트맵(`CorrHeatmap`)**: `table-layout:auto+w-full`이 긴 한글 섹터명을 공백에서 줄바꿈 → 헤더·행라벨 `whitespace-nowrap`+색점 `flex-shrink-0`, `overflow-x-auto` 안전망.
+- **마켓(`Market.jsx`)**: ⑴52주 신고/신저 배지를 거래대금 상위 30종(`W52_LIMIT`)으로 한정(잡코인 신저가 노이즈 제거, §18). ⑵상단 카드 `MiniCard` 가격에 작은 KRW 접미사. ⑶거래대금 상위 `VolumeTable` `fmtVolume`("2800억") 제거 → B안 전체 콤마+KRW. ⑷트리맵 `TreemapCell` 고정폰트+`width>55&&height>38` 게이트 제거 → 칸 크기·이름길이 기반 동적 폰트(6.5~13px), %는 두 줄 여유 시만(§17 연장).
+- **코인목록(`CoinList.jsx`)**: 상단 요약 4개 카드(대시보드 KPI와 중복: 총거래대금·BTC도미넌스 동일)가 구조 중복 → 제거. 죽은 `SummaryCard`·`useMarketSummary`·`summary`/`sLoading`·import 정리. 표는 유지(거래대금 컬럼 억 단위 유지).
+- **보류(다음 세션)**: 부가기능 헤더 메뉴 복귀(+디폴트 결과+? 툴팁)·도움말 태그 정렬 — 규모/토큰 고려해 사용자가 다음으로 넘김.
+- 검증: 변경마다 `vite build` 658모듈 성공. 죽은 참조 grep 확인. **브라우저 육안 미검증**(서버 미기동).

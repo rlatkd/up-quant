@@ -38,11 +38,6 @@ function bulkRange(vals, k = 2) {
 }
 const padDomain = (lo, hi) => { const p = (hi - lo) * 0.05 || 0.5; return [lo - p, hi + p] }
 
-// 카테고리 분류는 업비트 데이터랩 '코인 분류' 스냅샷, 수익률은 실 월봉 집계.
-function SourceBadge() {
-  return <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 text-[10px] font-medium">업비트 분류</span>
-}
-
 function pearson(xs, ys) {
   const n = xs.length
   if (n < 2) return 0
@@ -71,42 +66,44 @@ function CorrHeatmap({ rows, categories }) {
     return           { bg: 'rgba(59,130,246,0.75)',        text: '#fff' }
   }
   return (
-    <table className="w-full text-xs border-collapse">
-      <thead>
-        <tr>
-          <th className="pb-2 pr-2 text-left text-gray-400 font-medium w-20"></th>
-          {categories.map(c => (
-            <th key={c} className="pb-2 text-center text-gray-400 font-medium">
-              <div className="flex items-center justify-center gap-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: catColor(categories, c) }} />
-                {c}
-              </div>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {categories.map((a, i) => (
-          <tr key={a}>
-            <td className="pr-2 py-1 text-gray-500 font-medium">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: catColor(categories, a) }} />
-                {a}
-              </div>
-            </td>
-            {categories.map((b, j) => {
-              const v = matrix[i][j]
-              const { bg, text } = cellColor(v)
-              return (
-                <td key={b} className="py-1 px-1 text-center font-semibold rounded" style={{ backgroundColor: bg, color: text }}>
-                  {v.toFixed(2)}
-                </td>
-              )
-            })}
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr>
+            <th className="pb-2 pr-3 text-left text-gray-400 font-medium"></th>
+            {categories.map(c => (
+              <th key={c} className="pb-2 px-2 text-center text-gray-400 font-medium whitespace-nowrap">
+                <div className="flex items-center justify-center gap-1">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(categories, c) }} />
+                  {c}
+                </div>
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {categories.map((a, i) => (
+            <tr key={a}>
+              <td className="pr-3 py-1 text-gray-500 font-medium whitespace-nowrap">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(categories, a) }} />
+                  {a}
+                </div>
+              </td>
+              {categories.map((b, j) => {
+                const v = matrix[i][j]
+                const { bg, text } = cellColor(v)
+                return (
+                  <td key={b} className="py-1 px-3 text-center font-semibold rounded" style={{ backgroundColor: bg, color: text }}>
+                    {v.toFixed(2)}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -118,17 +115,14 @@ const FG_ZONES = [
   { s1: 75, s2: 100, color: '#ef4444', label: '극도 탐욕' },
 ]
 
-function fmtBillion(v) {
-  if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
-  if (v >= 1e8) return (v / 1e8).toFixed(0) + '억'
-  return v.toLocaleString()
-}
+// 전체 원화 콤마 표기 (업비트 톤). 예: 1,832,456,789,012 — "KRW"는 표시부에서 작게 덧붙인다.
+const fmtKrw = v => Math.round(v).toLocaleString()
 
-function KpiCard({ label, value, sub, color }) {
+function KpiCard({ label, value, sub, color, valueClass = 'text-2xl' }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg px-5 py-4">
       <div className="text-xs text-gray-400 mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${color || 'text-gray-800'}`}>{value}</div>
+      <div className={`${valueClass} font-bold ${color || 'text-gray-800'}`}>{value}</div>
       {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
     </div>
   )
@@ -186,14 +180,14 @@ function FearGreedGauge({ score }) {
   const ny = cy - (r - 18) * Math.sin(needleAngle)
 
   return (
-    <svg width="100%" height="110" viewBox="0 0 200 115">
+    <svg width="100%" height="122" viewBox="0 0 200 128">
       {FG_ZONES.map(z => (
         <path key={z.s1} d={arc(z.s1, z.s2)} fill="none" stroke={z.color} strokeWidth={14} />
       ))}
       <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#1f2937" strokeWidth={2.5} strokeLinecap="round" />
       <circle cx={cx} cy={cy} r={4.5} fill="#1f2937" />
       <text x={cx} y={cy + 17} textAnchor="middle" fontSize={22} fontWeight="700" fill={zone.color}>{score}</text>
-      <text x={cx} y={cy + 30} textAnchor="middle" fontSize={10} fill="#9ca3af">{zone.label}</text>
+      <text x={cx} y={cy + 31} textAnchor="middle" fontSize={11} fill="#9ca3af">{zone.label}</text>
     </svg>
   )
 }
@@ -210,7 +204,7 @@ function MarketDominance({ tickers }) {
   const data = [...majors, { name: '기타', value: othersValue }]
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-center gap-5">
       <PieChart width={120} height={120}>
         <Pie
           data={data}
@@ -222,7 +216,7 @@ function MarketDominance({ tickers }) {
           {data.map((_, i) => <Cell key={i} fill={DOM_COLORS[i]} />)}
         </Pie>
       </PieChart>
-      <div className="flex flex-col gap-2 flex-1">
+      <div className="flex flex-col gap-2 w-[150px]">
         {data.map((d, i) => (
           <div key={d.name} className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
@@ -337,7 +331,11 @@ export default function Dashboard() {
     <div className="space-y-4">
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-4">
-        <KpiCard label="24h 총 거래대금" value={fmtBillion(totalVolume)} />
+        <KpiCard
+          label="24h 총 거래대금"
+          value={<span className="whitespace-nowrap">{fmtKrw(totalVolume)}<span className="text-sm font-medium text-gray-400 ml-1">KRW</span></span>}
+          valueClass="text-xl"
+        />
         <KpiCard
           label="상승 코인 비율"
           value={riseRatio + '%'}
@@ -373,10 +371,7 @@ export default function Dashboard() {
       {/* Cumulative returns */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
-            <SourceBadge />
-          </div>
+          <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
           <div className="flex gap-1">
             {PERIOD_OPTIONS.map(p => (
               <button
@@ -432,20 +427,14 @@ export default function Dashboard() {
 
       {/* 카테고리 상관관계 히트맵 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="flex items-center gap-2 mb-0.5">
-          <div className="text-sm font-semibold text-gray-700">카테고리 상관관계</div>
-          <SourceBadge />
-        </div>
+        <div className="text-sm font-semibold text-gray-700 mb-0.5">카테고리 상관관계</div>
         <div className="text-xs text-gray-400 mb-4">최근 6개월 섹터 수익률 기반 피어슨 상관계수 (-1 ~ +1)</div>
         <CorrHeatmap rows={monthly.rows} categories={monthly.categories} />
       </div>
 
       {/* Monthly heatmap */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-sm font-semibold text-gray-700">월별 카테고리 수익률</div>
-            <SourceBadge />
-          </div>
+          <div className="text-sm font-semibold text-gray-700 mb-1">월별 카테고리 수익률</div>
           <div className="text-xs text-gray-400 mb-4">각 섹터 소속 종목의 해당 월 평균 등락률 (%)</div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">

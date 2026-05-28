@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { useTickers, useMarketSummary } from '../hooks/useTickers'
+import { useTickers } from '../hooks/useTickers'
 
 const FILTERS = ['전체', '즐겨찾기', '상승', '하락', '보합']
 const FILTER_MAP = { '전체': null, '상승': 'RISE', '하락': 'FALL', '보합': 'EVEN' }
@@ -62,15 +62,6 @@ function Sparkline({ data, change }) {
   )
 }
 
-function SummaryCard({ label, value, color = 'text-gray-800' }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-4">
-      <div className="text-xs text-gray-400 mb-1.5">{label}</div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-    </div>
-  )
-}
-
 function SortTh({ label, col, sortKey, sortDir, onSort, className = '' }) {
   const active = sortKey === col
   return (
@@ -104,7 +95,6 @@ function W52Bar({ current, low, high }) {
 export default function CoinList() {
   const navigate = useNavigate()
   const { tickers, loading: tLoading } = useTickers()
-  const { summary, loading: sLoading } = useMarketSummary()
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('전체')
   const [sortKey, setSortKey]     = useState('acc_trade_price_24h')
@@ -121,7 +111,7 @@ export default function CoinList() {
     })
   }, [])
 
-  if (tLoading || sLoading) return (
+  if (tLoading) return (
     <div className="py-24 flex justify-center">
       <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
     </div>
@@ -160,16 +150,6 @@ export default function CoinList() {
 
   return (
     <div className="space-y-4">
-      {/* 시장 요약 카드 */}
-      {summary && (
-        <div className="grid grid-cols-4 gap-4">
-          <SummaryCard label="24h 총 거래대금" value={fmtVolume(summary.total_volume)} />
-          <SummaryCard label="상승 종목" value={`${summary.up_count}개`} color="text-red-500" />
-          <SummaryCard label="하락 종목" value={`${summary.down_count}개`} color="text-blue-500" />
-          <SummaryCard label="BTC 도미넌스" value={`${summary.btc_dominance}%`} />
-        </div>
-      )}
-
       {/* 코인 테이블 */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
