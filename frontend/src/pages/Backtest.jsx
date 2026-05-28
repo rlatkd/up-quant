@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer,
@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 import { runMaCross, runRsi } from '../api/backtest'
+import InfoTooltip from '../components/InfoTooltip'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
@@ -54,6 +55,12 @@ export default function Backtest() {
     }
   }
 
+  // 진입 즉시 기본 전략(KRW-BTC·MA 크로스) 결과를 보여준다 (마운트 후 마이크로태스크 — 동기 setState 회피)
+  useEffect(() => {
+    Promise.resolve().then(handleRun)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (tLoading) return <Spinner />
 
   const equityData = result?.equity.map(e => ({
@@ -67,7 +74,12 @@ export default function Backtest() {
     <div className="space-y-4">
       {/* 설정 패널 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-4">백테스트 설정</div>
+        <div className="text-sm font-semibold text-gray-700 mb-4">
+          백테스트 설정
+          <InfoTooltip>
+            과거 일봉으로 매매 전략을 시뮬레이션합니다. 전략(MA 크로스 / RSI 역추세)·종목·파라미터를 정하고 [백테스트 실행]을 누르면 자산 곡선·총수익률·MDD(최대 낙폭)·승률·거래 내역이 나옵니다. 기본값(KRW-BTC·MA 크로스)으로 결과가 미리 실행돼 있습니다.
+          </InfoTooltip>
+        </div>
         <div className="grid grid-cols-4 gap-4">
           {/* 전략 */}
           <div>

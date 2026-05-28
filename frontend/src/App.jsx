@@ -4,7 +4,9 @@ import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import CoinList from './pages/CoinList'
 import CoinDetail from './pages/CoinDetail'
-import ToolsHub from './pages/ToolsHub'
+import Compare from './pages/Compare'
+import Backtest from './pages/Backtest'
+import Screener from './pages/Screener'
 import Help from './pages/Help'
 
 function App() {
@@ -16,10 +18,13 @@ function App() {
           <Route path="/market" element={<Market />} />
           <Route path="/coins" element={<CoinList />} />
           <Route path="/coins/:market" element={<CoinDetail />} />
+          {/* 부가기능 — 헤더 탭으로 노출, Layout(헤더) 안에서 렌더 */}
+          <Route path="/compare" element={<Compare />} />
+          <Route path="/backtest" element={<Backtest />} />
+          <Route path="/screener" element={<Screener />} />
         </Route>
-        {/* 도움말·부가기능(비교/백테스트/스크리너)은 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더 */}
+        {/* 도움말만 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더 */}
         <Route path="/help" element={<Help />} />
-        <Route path="/tools" element={<ToolsHub />} />
       </Routes>
     </BrowserRouter>
   )

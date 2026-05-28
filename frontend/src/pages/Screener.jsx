@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { getCoinStats } from '../api/analysis'
+import InfoTooltip from '../components/InfoTooltip'
 
 const FIELDS = [
   { key: 'change_rate',   label: '등락률',       unit: '%'  },
@@ -81,9 +82,9 @@ export default function Screener() {
     setResults(null)
   }
 
-  function handleRun() {
-    const filtered = merged.filter(coin =>
-      conditions.every(cond => {
+  function evaluate(conds) {
+    return merged.filter(coin =>
+      conds.every(cond => {
         const v = parseFloat(cond.value)
         if (isNaN(v)) return true
         const actual = coin[cond.field]
@@ -93,7 +94,10 @@ export default function Screener() {
         else                      return actual <= v
       })
     )
-    setResults(filtered)
+  }
+
+  function handleRun() {
+    setResults(evaluate(conditions))
   }
 
   function handleReset() {
@@ -101,13 +105,29 @@ export default function Screener() {
     setResults(null)
   }
 
+  // 진입 즉시 '급등주' 프리셋 결과를 보여준다 (데이터 준비되면 1회)
+  const didInit = useRef(false)
+  useEffect(() => {
+    if (didInit.current || !merged.length) return
+    didInit.current = true
+    const conds = PRESETS[0].conditions.map(c => ({ id: _uid++, ...c }))
+    setConditions(conds)
+    setResults(evaluate(conds))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merged])
+
   if (tLoading || statsLoading) return <Spinner />
 
   return (
     <div className="space-y-4">
       {/* 조건 설정 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-3">스크리닝 조건</div>
+        <div className="text-sm font-semibold text-gray-700 mb-3">
+          스크리닝 조건
+          <InfoTooltip>
+            원하는 조건을 모두 만족하는 종목만 걸러냅니다. 프리셋 버튼으로 자주 쓰는 조건을 채우거나, [+ 조건 추가]로 항목(등락률·거래대금·변동성·1개월 수익률·52주 위치)·연산자·값을 직접 지정한 뒤 [스크리닝 실행]하세요. 결과 행을 클릭하면 코인 상세로 이동합니다. 기본으로 '급등주' 프리셋 결과가 표시됩니다.
+          </InfoTooltip>
+        </div>
 
         {/* 프리셋 */}
         <div className="flex flex-wrap gap-2 mb-4">

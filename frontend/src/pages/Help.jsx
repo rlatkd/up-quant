@@ -18,7 +18,7 @@ function Tag({ tone, children }) {
     info:   'bg-gray-100 text-gray-500',      // 정적 표시 (클릭 동작 없음)
   }
   return (
-    <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium flex-shrink-0 ${tones[tone]}`}>
+    <span className={`inline-block whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-medium ${tones[tone]}`}>
       {children}
     </span>
   )
@@ -46,9 +46,9 @@ const GUIDE = [
     summary: '거래대금·등락률 중심으로 시장 상황을 살펴봅니다.',
     features: [
       { tone: 'nav',  name: '주요 종목 카드 (BTC·ETH·XRP·SOL)', desc: '미니 차트와 함께 표시되며, 카드를 클릭하면 해당 코인 상세 페이지로 이동합니다.' },
-      { tone: 'nav',  name: '52주 신고가 / 신저가 배지', desc: '신고가(빨강)·신저가(파랑) 종목 배지입니다. 배지를 클릭하면 상세 페이지로 이동합니다.' },
-      { tone: 'nav',  name: '상승률 상위 / 하락률 상위 테이블', desc: '각각 상위 8종목을 표시합니다. 행을 클릭하면 상세 페이지로 이동합니다.' },
-      { tone: 'info', name: '거래대금 TOP 5', desc: '24h 거래대금 상위 5종목의 가로 막대 차트입니다.' },
+      { tone: 'nav',  name: '52주 신고가 / 신저가 배지', desc: '오늘 52주 최고가/최저가를 경신한 종목 배지입니다(신고가 빨강·신저가 파랑). 노이즈를 줄이려 거래대금 상위 30종만 표시하며, 배지를 클릭하면 상세 페이지로 이동합니다.' },
+      { tone: 'nav',  name: '상승률 상위 / 하락률 상위 테이블', desc: '각각 상위 20종목을 표시합니다. 행을 클릭하면 상세 페이지로 이동합니다.' },
+      { tone: 'nav',  name: '거래대금 상위 테이블', desc: '24h 거래대금 상위 20종목을 표로 표시합니다. 행을 클릭하면 상세 페이지로 이동합니다.' },
       { tone: 'info', name: '시장 현황 트리맵', desc: '사각형 크기 = 거래대금, 색상 = 등락(빨강 상승 / 파랑 하락, 진할수록 변동 큼). 표시 전용입니다.' },
     ],
   },
@@ -62,7 +62,7 @@ const GUIDE = [
       { tone: 'action', name: '종목 검색창', desc: '한글명 또는 심볼(예: BTC)을 입력하면 실시간으로 필터링됩니다.' },
       { tone: 'action', name: '컬럼 정렬 (종목명·현재가·24h등락·거래대금)', desc: '헤더를 클릭할 때마다 내림차순(↓) → 오름차순(↑) → 정렬 해제(↕) 순으로 3단계 순환합니다.' },
       { tone: 'action', name: '별 아이콘 (즐겨찾기)', desc: '별을 클릭하면 즐겨찾기에 추가/해제됩니다. 브라우저(localStorage)에 저장되어 새로고침해도 유지됩니다.' },
-      { tone: 'info',   name: '7일 스파크라인 / 52주 위치 바', desc: '최근 7일 추세 선과, 52주 최저~최고가 대비 현재 위치(%)를 막대로 표시합니다.' },
+      { tone: 'info',   name: '1일 스파크라인 / 52주 위치 바', desc: '최근 24시간(1시간봉) 추세 선과, 52주 최저~최고가 대비 현재 위치(%)를 막대로 표시합니다.' },
       { tone: 'nav',    name: '행(Row) 클릭', desc: '별 아이콘을 제외한 행 어디든 클릭하면 해당 코인 상세 페이지로 이동합니다.' },
     ],
   },
@@ -139,7 +139,7 @@ function Section({ item }) {
       <ul className="divide-y divide-gray-50">
         {item.features.map((f, i) => (
           <li key={i} className="px-5 py-3 flex gap-3">
-            <div className="pt-0.5">
+            <div className="pt-0.5 flex-shrink-0">
               <Tag tone={f.tone}>
                 {f.tone === 'nav' ? '이동' : f.tone === 'action' ? '동작' : '표시'}
               </Tag>
@@ -170,7 +170,7 @@ export default function Help() {
           UPquant의 모든 페이지와 기능, 그리고 클릭 시 일어나는 동작을 정리한 안내서입니다.
           각 기능 앞의 태그로 동작 유형을 구분합니다.
         </p>
-        <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
           <div className="flex items-center gap-1.5">
             <Tag tone="nav">이동</Tag>
             <span className="text-xs text-gray-500">클릭 시 다른 페이지로 이동</span>
@@ -202,7 +202,7 @@ export default function Help() {
           <li>마우스 커서가 손 모양으로 바뀌는 요소는 클릭할 수 있습니다.</li>
           <li>이 설명서는 별도 창이라, 메인 화면 옆에 두고 보면서 사용할 수 있습니다.</li>
           <li>각 항목의 <span className="font-mono text-indigo-500">경로 ↗</span>를 누르면 <span className="font-medium">메인 창</span>이 해당 페이지로 이동합니다.</li>
-          <li>현재 데이터는 데모용 더미 데이터로, 실제 시세와 다를 수 있습니다.</li>
+          <li>모든 데이터는 업비트 시세 Open API에서 실시간으로 받아옵니다(인증 불필요). 카테고리 분류는 업비트 데이터랩 '코인 분류' 기준입니다.</li>
         </ul>
       </div>
 

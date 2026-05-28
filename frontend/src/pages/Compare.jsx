@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 import api from '../api/client'
+import InfoTooltip from '../components/InfoTooltip'
 
 const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6']
 
@@ -22,7 +23,8 @@ function Spinner() {
 
 export default function Compare() {
   const { tickers, loading: tLoading } = useTickers()
-  const [selected, setSelected] = useState([])
+  // 진입 즉시 결과가 보이도록 메이저 3종을 기본 선택 (BTC·ETH·XRP)
+  const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const [query, setQuery] = useState('')
   // 종목별 캔들을 캐시해 두고, 선택이 바뀌어도 이미 받은 종목은 재요청하지 않는다.
   const [candlesByMarket, setCandlesByMarket] = useState({})
@@ -89,7 +91,12 @@ export default function Compare() {
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="text-sm font-semibold text-gray-700">종목 선택</div>
+            <div className="text-sm font-semibold text-gray-700">
+              종목 선택
+              <InfoTooltip>
+                여러 종목의 최근 90일 수익률을 같은 출발선(0%)에서 겹쳐 비교합니다. 아래 그리드에서 최대 5개까지 클릭해 선택/해제하고, 검색창으로 종목을 찾을 수 있습니다. 선택한 종목은 고유 색 라인으로 표시되며, 칩의 ✕로도 해제됩니다. 기본으로 BTC·ETH·XRP가 선택돼 있습니다.
+              </InfoTooltip>
+            </div>
             <div className="text-xs text-gray-400 mt-0.5">최대 5개 · {selected.length}/5 선택됨</div>
           </div>
           <div className="flex items-center gap-2">

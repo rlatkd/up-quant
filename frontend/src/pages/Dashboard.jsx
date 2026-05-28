@@ -70,7 +70,7 @@ function CorrHeatmap({ rows, categories }) {
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr>
-            <th className="pb-2 pr-3 text-left text-gray-400 font-medium"></th>
+            <th className="pb-2 pr-3 text-left text-gray-400 font-medium w-40"></th>
             {categories.map(c => (
               <th key={c} className="pb-2 px-2 text-center text-gray-400 font-medium whitespace-nowrap">
                 <div className="flex items-center justify-center gap-1">
