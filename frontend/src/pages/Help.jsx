@@ -13,7 +13,7 @@ function goToPage(route) {
 // 동작 유형 태그
 function Tag({ tone, children }) {
   const tones = {
-    nav:    'bg-indigo-50 text-indigo-600',   // 클릭 시 페이지 이동
+    nav:    'bg-brand-50 text-brand-600',   // 클릭 시 페이지 이동
     action: 'bg-emerald-50 text-emerald-600', // 화면 내 동작 (토글/필터/실행)
     info:   'bg-gray-100 text-gray-500',      // 정적 표시 (클릭 동작 없음)
   }
@@ -123,14 +123,14 @@ const COLOR_RULES = [
 
 function Section({ item }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
         <h2 className="text-base font-bold text-gray-800">{item.title}</h2>
         <button
           type="button"
           onClick={() => goToPage(item.route)}
           title="메인 창에서 이 페이지 열기"
-          className="text-xs font-mono text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors cursor-pointer"
+          className="text-xs font-mono text-brand-500 bg-brand-50 px-2 py-0.5 rounded hover:bg-brand-100 transition-colors cursor-pointer"
         >
           {item.routeLabel || item.route} ↗
         </button>
@@ -164,7 +164,7 @@ export default function Help() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
       {/* 인트로 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
+      <div className="bg-white border border-gray-200 rounded-md p-6">
         <h1 className="text-lg font-bold text-gray-800 mb-1.5">사용 설명서</h1>
         <p className="text-sm text-gray-500 leading-relaxed">
           UPquant의 모든 페이지와 기능, 그리고 클릭 시 일어나는 동작을 정리한 안내서입니다.
@@ -187,7 +187,7 @@ export default function Help() {
       </div>
 
       {/* 기본 규칙 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 mb-3">기본 규칙</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           {COLOR_RULES.map(r => (
@@ -201,7 +201,7 @@ export default function Help() {
           <li>국내 거래소 관례를 따라 <span className="text-red-500 font-medium">상승은 빨강</span>, <span className="text-blue-500 font-medium">하락은 파랑</span>입니다.</li>
           <li>마우스 커서가 손 모양으로 바뀌는 요소는 클릭할 수 있습니다.</li>
           <li>이 설명서는 별도 창이라, 메인 화면 옆에 두고 보면서 사용할 수 있습니다.</li>
-          <li>각 항목의 <span className="font-mono text-indigo-500">경로 ↗</span>를 누르면 <span className="font-medium">메인 창</span>이 해당 페이지로 이동합니다.</li>
+          <li>각 항목의 <span className="font-mono text-brand-500">경로 ↗</span>를 누르면 <span className="font-medium">메인 창</span>이 해당 페이지로 이동합니다.</li>
           <li>모든 데이터는 업비트 시세 Open API에서 실시간으로 받아옵니다(인증 불필요). 카테고리 분류는 업비트 데이터랩 '코인 분류' 기준입니다.</li>
         </ul>
       </div>

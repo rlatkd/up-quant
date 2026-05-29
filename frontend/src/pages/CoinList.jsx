@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
+import PageHeader from '../components/ui/PageHeader'
 
 const FILTERS = ['전체', '즐겨찾기', '상승', '하락', '보합']
 const FILTER_MAP = { '전체': null, '상승': 'RISE', '하락': 'FALL', '보합': 'EVEN' }
@@ -71,7 +72,7 @@ function SortTh({ label, col, sortKey, sortDir, onSort, className = '' }) {
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={active ? 'text-indigo-400' : 'text-gray-300'}>
+        <span className={active ? 'text-brand-400' : 'text-gray-300'}>
           {active ? (sortDir === 'desc' ? '↓' : '↑') : '↕'}
         </span>
       </span>
@@ -86,7 +87,7 @@ function W52Bar({ current, low, high }) {
     <div className="flex flex-col items-end gap-1.5">
       <span className="text-xs text-gray-500">{clamped}%</span>
       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full bg-indigo-400" style={{ width: `${clamped}%` }} />
+        <div className="h-full rounded-full bg-brand-400" style={{ width: `${clamped}%` }} />
       </div>
     </div>
   )
@@ -113,7 +114,7 @@ export default function CoinList() {
 
   if (tLoading) return (
     <div className="py-24 flex justify-center">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
     </div>
   )
 
@@ -150,8 +151,10 @@ export default function CoinList() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="코인 목록" description="KRW 마켓 전체 종목 · 정렬·검색·즐겨찾기" />
+
       {/* 코인 테이블 */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
           {/* 필터 탭 */}
           <div className="flex gap-1">
@@ -161,7 +164,7 @@ export default function CoinList() {
                 onClick={() => setFilter(f)}
                 className={`px-3 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
                   filter === f
-                    ? 'bg-indigo-500 text-white'
+                    ? 'bg-brand-500 text-white'
                     : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
@@ -178,7 +181,7 @@ export default function CoinList() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="종목 검색"
-            className="border border-gray-200 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-indigo-400 transition-colors"
+            className="border border-gray-200 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-brand-400 transition-colors"
           />
         </div>
 

@@ -55,7 +55,10 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 ## UI 컨벤션
 
-- **색상**: 상승/매수/양(+) = 빨강, 하락/매도/음(−) = 파랑 (한국 거래소 관행). 헤더 네이비 `#093687`(업비트 톤).
+- **색상(업비트 톤, Phase 15)**: 상승/매수/양(+) = 빨강, 하락/매도/음(−) = 파랑 (한국 거래소 관행, **의미색은 고정·불변**). **액센트 = 업비트 블루** — `brand-500 #1763b6`(버튼·활성탭·포커스·스피너·선택강조 등 크롬 전부), 헤더 네이비 `brand-700 #093687`. **과거 indigo(보라빛) 액센트를 전 페이지 교체**. 색 토큰은 `index.css`의 `@theme`(`--color-brand-*`)로 정의 → `bg-brand-500`·`text-brand-600` 등으로 사용. **페이지 배경 옅은 회색**(`bg-gray-50`)에 흰 카드, 카드 라운드 `rounded-md`(과거 `rounded-lg`에서 완화). 본문 폰트 **Pretendard**(`index.css` CDN import).
+- **구분용 색 팔레트**: 방향 없는 시리즈/섹터 구분색은 `src/theme.js`의 `SERIES`(절제된 7색)·`DOM_COLORS`(지배력 도넛 = 브랜드 블루 농담)로 **한 곳에서** 관리. Dashboard(`CAT_PALETTE = SERIES`)·Compare(`COLORS`)가 import. (과거 컴포넌트마다 흩어져 튀던 indigo/emerald/violet 정리.) ⚠️ 의미색과 안 헷갈리게 순수 red/blue는 SERIES에서 제외. (CoinDetail 지표 토글 MA/Bollinger/RSI 색은 차트 오버레이와 묶여 있어 미변경.)
+- **로고/헤더**: 로고는 **흰색 기울임꼴 워드마크 `UPquant`**(별도 아이콘 마크 없음 — 사용자가 "업비트엔 그런 거 없다"고 명시). 동그란 "UP" 아이콘은 **favicon/앱 아이콘에만**(파란 원 + 흰 기울임 UP, `public/favicon.svg`). 헤더 탭 글씨 볼드(비활성 `font-semibold`·활성 `font-bold`).
+- **공용 UI 컴포넌트**(`src/components/ui/`): `PageHeader`(페이지 상단 제목+설명, **전 페이지 적용**)·`Spinner`·`Card`/`CardHeader`·`StatCard`. 카드 스타일·간격·제목을 한 곳에서 통일하려는 토대. (Card/StatCard는 생성만 해뒀고 기존 KpiCard/MetricCard는 이미 톤이 맞아 미적용 — 필요 시 교체.)
 - **커서**: 클릭 가능 요소(`button`/`select`/onClick 행)에만 `cursor-pointer`, disabled엔 `disabled:cursor-not-allowed`. **일반 텍스트엔 `cursor-default`를 넣지 말 것**(브라우저 기본값에 위임, I-beam 신호 보존). 앵커는 기본 pointer라 생략.
 - 라우트: `/`(대시보드) `/market` `/coins` `/coins/:market` **+ `/compare`·`/backtest`·`/screener`(부가기능)** 는 Layout(헤더) 안. `/help`(도움말)만 헤더 **? 버튼**에서 `window.open`으로 띄우는 **별도 창**이라 Layout 밖 단독 라우트. **헤더 메인 탭은 6개**(대시보드·마켓현황·코인목록·비교분석·백테스트·스크리너). 헤더는 `sticky top-0 z-50`로 고정. (과거 부가기능을 `/tools` 새 창 허브 `ToolsHub`로 뒀다가 발견성·즉시성 때문에 **헤더 탭으로 환원**, `ToolsHub.jsx` 삭제 — 엔지니어링노트 §9.) 부가기능 3종은 **진입 즉시 디폴트 결과**(비교=BTC·ETH·XRP 기본선택 / 백테스트=BTC·MA크로스 자동실행 / 스크리너='급등주' 자동실행) + 제목 옆 `?` 안내 툴팁(공용 `components/InfoTooltip.jsx`).
 
@@ -86,11 +89,11 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 거래대금 기준 정렬 통일(코인목록·비교·스크리너·대시보드 산점도) — Phase 11.
 - **카테고리(섹터) 분류 실데이터화** — 업비트 데이터랩 분류 스크랩(261종 5섹터) + 월봉 동일가중 수익률 + 부팅 워밍 — Phase 13.
 - **사용자 요청 UI 정리 묶음(2026-05-28)** — 대시보드(업비트분류 배지 제거·시장지배력 간격·상관관계 줄바꿈+좌측열 폭 통일·공포탐욕 라벨·총거래대금 B안 표기), 마켓(52주 배지 상위30 한정·상단카드/거래대금 B안 표기·트리맵 폰트 스케일), 코인목록(중복 요약카드 제거), **부가기능 헤더 탭 복귀(+디폴트 결과·`?` 툴팁), 도움말 정리** — Phase 14. (도움말·대시보드 Edge 스크린샷 육안 확인)
+- **UI 업비트 톤 대개편 + 콘텐츠 재배치(2026-05-29)** — 액센트 indigo(보라)→업비트 블루 전 페이지 교체, 페이지 배경 회색·라운드 완화·Pretendard 폰트, 로고(흰 기울임 워드마크·원형 제거)·favicon·헤더 탭 볼드, 구분색 팔레트 `theme.js`로 통일, 공용 컴포넌트(`components/ui/`)+PageHeader 전 페이지, 대시보드 순서 `누적→월별→상관`(원천→파생)·마켓 "시장 현황→거래대금 비중 지도"·주요종목 라벨 — Phase 15. (빌드 통과, 브라우저 육안 미검증)
 
 **다음 작업 (우선순위 순)**
 1. ⭐ **실제 화면 검증(브라우저 육안)** — Phase 12·13은 여전히 육안 미검증(코드/빌드 검증됨). Phase 14는 도움말·대시보드를 Edge 스크린샷으로 확인했으나 **마켓현황·부가기능 3종은 미확인**. (콜드 워밍 ~1분, 동기 워밍이라 기동 후 즉시). 참고: Windows cp949 콘솔은 `PYTHONIOENCODING=utf-8` + `uvicorn` 직접 실행. 백엔드 CORS는 `:5173`만 허용 → 스크린샷도 `:5173`에서.
-2. **UI 업비트 톤으로 개선** — 색상·헤더마크·아이콘 등 전반. ⚠️ **착수 전 사용자와 아이디어 공유 필수**(2026-05-26).
-   - **구분용 색 팔레트 통일**(2026-05-28 추가) — 섹터/시리즈 구분 색이 컴포넌트별 배열로 흩어짐(`CAT_PALETTE`·`DOM_COLORS`·Compare/Backtest `COLORS`). 공용 테마로 모아 전 페이지 통일. **의미 색(빨강 상승/파랑 하락/회색 중립)은 이미 일관** — 통일 대상은 "방향 없는 구분용" 팔레트뿐. 위 톤 개선과 묶어서.
+2. ✅ **(완료 Phase 15, 2026-05-29) UI 업비트 톤 개선 + 구분색 팔레트 통일** — 액센트 블루화·로고·Pretendard·배경 회색·라운드 완화·`theme.js` 팔레트·공용 컴포넌트·PageHeader까지 완료. **잔여**: ⑴마켓 트리맵 상단 이동(취향이라 보류) ⑵CoinDetail 지표 토글 색(차트 오버레이까지 함께 봐야 함) ⑶`Card`/`StatCard` 실제 적용(현재 생성만, 기존 KpiCard/MetricCard 유지).
 3. **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·`Compare.jsx`의 effect 내 `setLoading(true)`(사전 존재 이슈, 작업 다 마친 뒤·2026-05-26 지시).
 4. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
 5. **에러/로딩 상태 UI 개선**.
@@ -195,10 +198,20 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 사용자가 화면 검증 중 제시한 요청 묶음(원래 11건). 대화 중 캐싱 동작 질문·문서 배치 원칙 정리도 함께. 의사결정은 엔지니어링노트 §17·§18.
 - **문서 작업 (대화 중)**: ⑴캐싱 런타임 동작(TTL 표·SWR 3상태·lazy 재검증·fan-out 조건)을 **`README.md` "설계 노트 → 캐시 동작"** 섹션에 정리(처음에 엔지니어링노트에 넣었다 사용자 지적으로 README로 이동). ⑵그 경위로 **문서 배치 원칙 확립** — *엔지니어링노트=회고/포트폴리오용 고민·전략 방향성, README=사실·동작 정보*. CLAUDE.md "문서 역할"에 박고 메모리(`feedback_doc_placement`)에 저장.
 - **대시보드(`Dashboard.jsx`)**: ⑴'업비트 분류' 출처 배지(`SourceBadge`) 컴포넌트+사용처 3곳 제거. ⑵시장 지배력 범례 `flex-1`(폭 다 차지)→`w-[150px]`+`justify-center`로 코인명-% 간격 축소. ⑶공포·탐욕 게이지 라벨 잘림 — `viewBox 115→128`·height `110→122`로 확장(라벨 `y=120`이 잘리던 것). ⑷24h 총 거래대금 `fmtBillion`("1.8조") 제거 → 전체 콤마+작은 KRW(B안), 그 카드만 `text-xl`.
-- **상관관계 히트맵(`CorrHeatmap`)**: `table-layout:auto+w-full`이 긴 한글 섹터명을 공백에서 줄바꿈 → 헤더·행라벨 `whitespace-nowrap`+색점 `flex-shrink-0`, `overflow-x-auto` 안전망.
+- **상관관계 히트맵(`CorrHeatmap`)**: `table-layout:auto+w-full`이 긴 한글 섹터명을 공백에서 줄바꿈 → 헤더·행라벨 `whitespace-nowrap`+색점 `flex-shrink-0`, `overflow-x-auto` 안전망. (이후 데이터 컬럼 폭을 균등 분할하기 위해 `table-fixed`로 전환 — 좌측 라벨 컬럼만 `w-40` 고정, 나머지 섹터 컬럼은 남는 폭을 동일 분할. 좁아진 칸에서 긴 섹터명이 넘치지 않도록 **헤더의 `whitespace-nowrap`은 제거**해 칸 안 줄바꿈 허용, 좌측 행라벨은 `w-40`이라 nowrap 유지.)
 - **마켓(`Market.jsx`)**: ⑴52주 신고/신저 배지를 거래대금 상위 30종(`W52_LIMIT`)으로 한정(잡코인 신저가 노이즈 제거, §18). ⑵상단 카드 `MiniCard` 가격에 작은 KRW 접미사. ⑶거래대금 상위 `VolumeTable` `fmtVolume`("2800억") 제거 → B안 전체 콤마+KRW. ⑷트리맵 `TreemapCell` 고정폰트+`width>55&&height>38` 게이트 제거 → 칸 크기·이름길이 기반 동적 폰트(6.5~13px), %는 두 줄 여유 시만(§17 연장).
 - **코인목록(`CoinList.jsx`)**: 상단 요약 4개 카드(대시보드 KPI와 중복: 총거래대금·BTC도미넌스 동일)가 구조 중복 → 제거. 죽은 `SummaryCard`·`useMarketSummary`·`summary`/`sLoading`·import 정리. 표는 유지(거래대금 컬럼 억 단위 유지).
 - **부가기능 헤더 탭 복귀**: 별도 창(`/tools`·`ToolsHub.jsx` 삭제) → 비교·백테스트·스크리너를 **헤더 탭 6개**·Layout 라우트로 환원(`Header`·`App`). 진입 즉시 디폴트 결과(비교 BTC·ETH·XRP 기본선택 / 백테스트 BTC·MA크로스 자동실행 / 스크리너 '급등주' 자동실행). 빈 안내문은 공용 `?` 툴팁 `InfoTooltip`로 대체. 자동실행이 `set-state-in-effect` 신규 발생하지 않도록 Backtest는 `Promise.resolve().then`(마이크로태스크), Screener는 `didInit` ref 가드 + deps disable 주석으로 처리(엔지니어링노트 §9 재검토).
 - **도움말 정리**: 기능 행 태그가 flex 축소로 세로 쪼개짐(`표→시`) → 래퍼 `flex-shrink-0` + 태그 `whitespace-nowrap`. 상단 범례 `flex-wrap`→균등 3열 그리드. stale 텍스트(7일→1일·"더미"→실데이터·52주 상위30·상위20/거래대금표) 정정.
 - **대시보드 상관관계 좌측 열 폭**: 월별 수익률 표(`w-40`)와 폭이 달라 보임 → `CorrHeatmap` 좌측 th도 `w-40`으로 통일.
 - 검증: 변경마다 `vite build` 658모듈 성공. ESLint 신규 0(사전 존재 5건 유지). 도움말·대시보드는 **Edge headless 스크린샷으로 육안 확인**(태그 정상·KRW 표기·공포탐욕 라벨·상관관계 폭 통일).
+
+### Phase 15 — UI 업비트 톤 대개편 + 콘텐츠 재배치 (2026-05-29)
+사용자가 "UI가 업비트 같지 않다"며 톤 개선을 요청. 진단/의사결정은 엔지니어링노트 §19~21. (대화 초중반엔 작은 UI 수정들을 핑퐁으로 처리 → 공포탐욕 게이지 라벨 겹침·시장지배력 간격·급등급락 divide 넘침/5종목·누적수익률 마우스 보간·상관 히트맵 동적 스케일·산점도 호버 영역·산점도 범례 2줄 등. 이후 "한 번에 다 해라"로 전환.)
+- **토대**: `index.css`에 `@theme` 색 토큰(`--color-brand-50~800`, 업비트 블루 `#1763b6`/네이비 `#093687`) + Pretendard CDN import + 페이지 배경 회색·탭형 숫자. `src/theme.js`(SERIES·DOM_COLORS). `src/components/ui/`(Spinner·Card/CardHeader·StatCard·PageHeader).
+- **액센트 일괄 교체**: 8개 페이지 `indigo-*`→`brand-*`, `rounded-lg`→`rounded-md` (replace_all). Layout 배경 `bg-white`→`bg-gray-50`.
+- **로고/아이콘**: 시안 막대 3개 → 제거. 헤더는 **흰 기울임꼴 워드마크 `UPquant`만**(원형 아이콘 없음 — 사용자 명시). `favicon.svg`는 파란 원+흰 기울임 "UP"(과거 보라 마크 교체). 헤더 탭 글씨 볼드.
+- **구분색 팔레트 통일**: Dashboard `CAT_PALETTE`→`SERIES`, `DOM_COLORS` import, Compare `COLORS`→`SERIES` (튀던 indigo/emerald/violet 정리).
+- **콘텐츠 재배치**: 대시보드 `누적→상관→월별`을 `누적→월별→상관`으로(상관은 월별의 파생이므로 원천 뒤). 마켓 "시장 현황" 트리맵 카드명→"거래대금 비중 지도"(페이지명 "마켓 현황"과 중복 제거), 주요종목 4카드에 "거래대금 상위" 라벨 추가. PageHeader 전 페이지(대시보드·마켓·코인목록·비교·백테스트·스크리너) 적용.
+- **부수**: 작업 중 Help.jsx의 문법 오타(`const tones = {Z`) 발견·수정.
+- 검증: `vite build` 통과(647ms). ESLint 신규 0(사전 5건 유지). **브라우저 육안 미검증**(`npm run dev`로 확인 필요, Pretendard는 인터넷 필요).

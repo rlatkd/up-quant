@@ -197,7 +197,7 @@ export default function CoinDetail() {
 
   if (loading || !ticker) return (
     <div className="py-24 flex justify-center">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
     </div>
   )
 
@@ -212,7 +212,7 @@ export default function CoinDetail() {
   return (
     <div className="space-y-4">
       {/* 상단 가격 정보 */}
-      <div className="bg-white border border-gray-200 rounded-lg px-6 py-4">
+      <div className="bg-white border border-gray-200 rounded-md px-6 py-4">
         <div className="flex items-center gap-10">
           <div className="min-w-[120px]">
             <div className="text-xs text-gray-400 mb-0.5">{market}</div>
@@ -246,7 +246,7 @@ export default function CoinDetail() {
 
       {/* 차트 + 호가창 (카드 높이를 맞추고, 호가창은 내부 스크롤) */}
       <div className="grid grid-cols-12 gap-4 h-[560px]">
-        <div className="col-span-9 bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+        <div className="col-span-9 bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col">
           {/* 시간 탭 + 지표 토글 */}
           <div className="flex items-center justify-between border-b border-gray-100 px-2 shrink-0">
             <div className="flex">
@@ -299,7 +299,7 @@ export default function CoinDetail() {
         </div>
 
         {/* 호가창 (차트와 같은 높이, 현재가 중심 스크롤) */}
-        <div className="col-span-3 bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+        <div className="col-span-3 bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col">
           <div className="px-3 py-2.5 border-b border-gray-100 text-xs font-semibold text-gray-600 shrink-0">호가</div>
           {orderbook ? (
             <div className="text-xs flex-1 min-h-0 overflow-y-auto">
@@ -328,7 +328,7 @@ export default function CoinDetail() {
       </div>
 
       {/* 체결내역 (종목 기본정보는 상단 가격 헤더와 중복되어 제거) */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">체결 내역</div>
         <div className="max-h-96 overflow-y-auto">
           <table className="w-full">
@@ -359,12 +359,12 @@ export default function CoinDetail() {
       </div>
 
       {/* 상관관계 분석 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 mb-0.5">타 종목 상관관계</div>
         <div className="text-xs text-gray-400 mb-4">60일 일봉 종가 기준 피어슨 상관계수</div>
         <div className="grid grid-cols-7 gap-2">
           {corrData.slice(0, 14).map(item => (
-            <div key={item.market} className={`rounded-lg px-3 py-2.5 text-center ${corrColor(item.correlation)}`}>
+            <div key={item.market} className={`rounded-md px-3 py-2.5 text-center ${corrColor(item.correlation)}`}>
               <div className="text-xs font-semibold">{item.market.replace('KRW-', '')}</div>
               <div className="text-xs text-gray-500 mt-0.5">{item.korean_name}</div>
               <div className="text-sm font-bold mt-1">{item.correlation.toFixed(2)}</div>

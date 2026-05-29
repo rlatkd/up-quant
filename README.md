@@ -144,7 +144,8 @@ up-quant/
 │   ├── src/
 │   │   ├── main.jsx               # 진입점
 │   │   ├── App.jsx                # 라우트 정의
-│   │   ├── index.css              # Tailwind 엔트리
+│   │   ├── index.css              # Tailwind 엔트리 + @theme 색 토큰(업비트 블루) · Pretendard 폰트 · 페이지 배경
+│   │   ├── theme.js               # 구분용 색 팔레트 (SERIES · DOM_COLORS) — 시리즈/섹터 색 한 곳 관리
 │   │   ├── api/                   # axios 호출 래퍼
 │   │   │   ├── client.js          # axios 인스턴스 (baseURL) + 요청/응답 로깅 인터셉터
 │   │   │   ├── markets.js
@@ -156,6 +157,7 @@ up-quant/
 │   │   │   ├── useCandles.js
 │   │   │   └── useAnalysis.js
 │   │   ├── components/
+│   │   │   ├── ui/                # 공용 UI (PageHeader · Spinner · Card/CardHeader · StatCard)
 │   │   │   ├── InfoTooltip.jsx    # 제목 옆 ? 호버 안내 툴팁 (부가기능 공용)
 │   │   │   └── layout/            # Header · Layout
 │   │   └── pages/                 # 라우트별 페이지
@@ -428,10 +430,18 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 - [x] **도움말 정리** — 기능 행 태그 세로 쪼개짐(`표→시`) 수정(flex-shrink), 상단 범례 균등 그리드, stale 텍스트(7일→1일·더미→실데이터·52주 상위30) 정정
 - [x] **대시보드 상관관계 좌측 카테고리 열 폭**을 월별 수익률 표와 통일(`w-40`)
 
+**사용자 요청 (2026-05-29) — UI 업비트 톤 대개편 + 콘텐츠 재배치 — 완료 (빌드 검증, 브라우저 육안 미검증)**
+- [x] **액센트 업비트 블루화** — 전 페이지 `indigo`(보라빛) → `brand`(업비트 블루 `#1763b6`, 네이비 `#093687`). 색 토큰을 `index.css` `@theme`로 정의
+- [x] **전반 톤** — 페이지 배경 옅은 회색(`bg-gray-50`)·카드 라운드 완화(`rounded-md`)·본문 폰트 Pretendard
+- [x] **로고/아이콘** — 헤더는 흰색 기울임꼴 워드마크 `UPquant`(원형 아이콘 제거), favicon은 파란 원+흰 기울임 "UP", 헤더 탭 글씨 볼드
+- [x] **구분용 색 팔레트 통일** — `src/theme.js`(`SERIES`·`DOM_COLORS`)로 모아 Dashboard·Compare가 import (튀던 indigo/emerald/violet 정리)
+- [x] **공용 컴포넌트 토대** — `components/ui/`(PageHeader·Spinner·Card·StatCard), PageHeader를 전 페이지 상단에 적용
+- [x] **콘텐츠 재배치** — 대시보드 `누적→월별→상관`(원천→파생) · 마켓 "시장 현황"→"거래대금 비중 지도"·주요종목 "거래대금 상위" 라벨
+
 **다음 작업 (기존)**
 - [x] **실제 화면 검증(정적)** — 2026-05-25 Edge headless 스크린샷으로 확인: 거래대금 정렬(코인목록 ↓·쑨→온도→BTC순) · 마켓 상단4개=거래대금 상위 · 코인상세 차트/호가 높이 균형(autoSize) · 스파크라인 변동성 · 트리맵 색상 범례 · 부가기능 허브(`/tools`) 탭.
-- [ ] **UI 업비트 톤으로 개선** (색상·헤더마크·아이콘) — ⚠️ 착수 전 사용자와 아이디어 공유
-  - [ ] **구분용 색 팔레트 통일** — 섹터/시리즈 구분 색이 컴포넌트별 배열로 흩어짐(`CAT_PALETTE`·`DOM_COLORS`·Compare/Backtest `COLORS`). 공용 테마로 모아 전 페이지 통일(의미 색=빨강 상승/파랑 하락/회색은 이미 일관). 위 톤 개선과 묶어서 진행
+- [x] **UI 업비트 톤으로 개선** (색상·헤더마크·아이콘) — Phase 15 완료 (위 2026-05-29 블록)
+  - [x] **구분용 색 팔레트 통일** — `src/theme.js`(`SERIES`·`DOM_COLORS`)로 통일, Dashboard·Compare import
 - [ ] **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·Compare.jsx의 effect 내 `setLoading(true)` 패턴(사전 존재 이슈)
 - [ ] WebSocket 실시간 시세 중계 (FastAPI WS → 프론트 Context)
 - [x] **카테고리 데이터 실데이터화 + 분류 적용** (2026-05-26) — 업비트 데이터랩 '코인 분류' 스크랩으로 분류 소스 확정(수동 매핑·외부 API 대신), 월봉 동일가중 평균으로 월별/누적 실데이터화, 상관관계 히트맵 자동 실데이터화, "예시" 배지 제거

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { getCoinStats } from '../api/analysis'
 import InfoTooltip from '../components/InfoTooltip'
+import PageHeader from '../components/ui/PageHeader'
 
 const FIELDS = [
   { key: 'change_rate',   label: '등락률',       unit: '%'  },
@@ -27,7 +28,7 @@ let _uid = 0
 function Spinner() {
   return (
     <div className="flex justify-center py-16">
-      <div className="w-7 h-7 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-7 h-7 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
     </div>
   )
 }
@@ -120,8 +121,10 @@ export default function Screener() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="코인 스크리너" description="원하는 조건을 모두 만족하는 종목만 필터링" />
+
       {/* 조건 설정 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 mb-3">
           스크리닝 조건
           <InfoTooltip>
@@ -135,7 +138,7 @@ export default function Screener() {
             <button
               key={p.label}
               onClick={() => applyPreset(p)}
-              className="px-3 py-1 text-xs border border-gray-200 rounded-full text-gray-500 cursor-pointer hover:border-indigo-400 hover:text-indigo-500 transition-colors"
+              className="px-3 py-1 text-xs border border-gray-200 rounded-full text-gray-500 cursor-pointer hover:border-brand-400 hover:text-brand-500 transition-colors"
             >
               {p.label}
             </button>
@@ -152,14 +155,14 @@ export default function Screener() {
               <select
                 value={cond.field}
                 onChange={e => updateCondition(cond.id, { field: e.target.value })}
-                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
+                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-brand-400"
               >
                 {FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
               <select
                 value={cond.op}
                 onChange={e => updateCondition(cond.id, { op: e.target.value })}
-                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
+                className="border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-brand-400"
               >
                 {OPS.map(op => <option key={op} value={op}>{op}</option>)}
               </select>
@@ -168,7 +171,7 @@ export default function Screener() {
                 value={cond.value}
                 onChange={e => updateCondition(cond.id, { value: e.target.value })}
                 placeholder="값"
-                className="w-24 border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                className="w-24 border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
               />
               <span className="text-xs text-gray-400 w-4">{FIELDS.find(f => f.key === cond.field)?.unit}</span>
               <button
@@ -191,7 +194,7 @@ export default function Screener() {
           <button
             onClick={handleRun}
             disabled={conditions.length === 0}
-            className="px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             스크리닝 실행
           </button>
@@ -208,7 +211,7 @@ export default function Screener() {
 
       {/* 결과 */}
       {results !== null && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <div className="text-sm font-semibold text-gray-700">스크리닝 결과</div>
             <div className="text-xs text-gray-400">
@@ -265,7 +268,7 @@ export default function Screener() {
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-indigo-400 rounded-full"
+                            className="h-full bg-brand-400 rounded-full"
                             style={{ width: `${Math.min(100, Math.max(0, coin.w52_pos))}%` }}
                           />
                         </div>
@@ -281,7 +284,7 @@ export default function Screener() {
       )}
 
       {results === null && (
-        <div className="bg-white border border-gray-200 rounded-lg py-16 text-center text-sm text-gray-400">
+        <div className="bg-white border border-gray-200 rounded-md py-16 text-center text-sm text-gray-400">
           조건을 설정하고 스크리닝을 실행하세요
         </div>
       )}

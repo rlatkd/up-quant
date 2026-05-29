@@ -7,6 +7,7 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import { runMaCross, runRsi } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
+import PageHeader from '../components/ui/PageHeader'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
@@ -15,7 +16,7 @@ const STRATEGIES = [
 
 function MetricCard({ label, value, color = 'text-gray-800' }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-4 text-center">
+    <div className="bg-white border border-gray-200 rounded-md px-5 py-4 text-center">
       <div className="text-xs text-gray-400 mb-1.5">{label}</div>
       <div className={`text-xl font-bold ${color}`}>{value}</div>
     </div>
@@ -25,7 +26,7 @@ function MetricCard({ label, value, color = 'text-gray-800' }) {
 function Spinner() {
   return (
     <div className="flex justify-center py-16">
-      <div className="w-7 h-7 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-7 h-7 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
     </div>
   )
 }
@@ -72,8 +73,10 @@ export default function Backtest() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="전략 백테스트" description="과거 일봉으로 매매 전략 성과를 시뮬레이션" />
+
       {/* 설정 패널 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 mb-4">
           백테스트 설정
           <InfoTooltip>
@@ -90,7 +93,7 @@ export default function Backtest() {
                   key={s.key}
                   onClick={() => setStrategy(s.key)}
                   className={`flex-1 py-1.5 text-xs rounded font-medium cursor-pointer transition-colors ${
-                    strategy === s.key ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    strategy === s.key ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
                   {s.label}
@@ -105,7 +108,7 @@ export default function Backtest() {
             <select
               value={market}
               onChange={e => setMarket(e.target.value)}
-              className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-indigo-400"
+              className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-brand-400"
             >
               {tickers.map(t => (
                 <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} {t.korean_name}</option>
@@ -120,14 +123,14 @@ export default function Backtest() {
                 <label className="text-xs text-gray-500 mb-1.5 block">단기 MA</label>
                 <input type="number" value={params.fast} min={2} max={50}
                   onChange={e => setParam('fast', e.target.value)}
-                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
                 />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1.5 block">장기 MA</label>
                 <input type="number" value={params.slow} min={5} max={200}
                   onChange={e => setParam('slow', e.target.value)}
-                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
                 />
               </div>
             </>
@@ -137,7 +140,7 @@ export default function Backtest() {
                 <label className="text-xs text-gray-500 mb-1.5 block">RSI 기간</label>
                 <input type="number" value={params.period} min={5} max={30}
                   onChange={e => setParam('period', e.target.value)}
-                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                  className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
                 />
               </div>
               <div className="flex gap-2">
@@ -145,14 +148,14 @@ export default function Backtest() {
                   <label className="text-xs text-gray-500 mb-1.5 block">과매도</label>
                   <input type="number" value={params.oversold} min={10} max={45}
                     onChange={e => setParam('oversold', e.target.value)}
-                    className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                    className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
                   />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs text-gray-500 mb-1.5 block">과매수</label>
                   <input type="number" value={params.overbought} min={55} max={90}
                     onChange={e => setParam('overbought', e.target.value)}
-                    className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                    className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400"
                   />
                 </div>
               </div>
@@ -165,13 +168,13 @@ export default function Backtest() {
             <label className="text-xs text-gray-500 mb-1.5 block">데이터 기간 (일봉 캔들 수)</label>
             <input type="number" value={params.count} min={60} max={500}
               onChange={e => setParam('count', e.target.value)}
-              className="border border-gray-200 rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-indigo-400"
+              className="border border-gray-200 rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-brand-400"
             />
           </div>
           <button
             onClick={handleRun}
             disabled={loading}
-            className="mt-5 px-6 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="mt-5 px-6 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? '실행 중...' : '백테스트 실행'}
           </button>
@@ -195,7 +198,7 @@ export default function Backtest() {
           </div>
 
           {/* 자산 곡선 */}
-          <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <div className="bg-white border border-gray-200 rounded-md p-5">
             <div className="text-sm font-semibold text-gray-700 mb-0.5">자산 곡선</div>
             <div className="text-xs text-gray-400 mb-4">초기 자본 100 기준</div>
             <ResponsiveContainer width="100%" height={240}>
@@ -212,7 +215,7 @@ export default function Backtest() {
 
           {/* 거래 내역 */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="bg-white border border-gray-200 rounded-md p-5">
               <div className="text-sm font-semibold text-gray-700 mb-0.5">거래별 손익</div>
               <div className="text-xs text-gray-400 mb-4">매도 기준 거래별 손익률 (%)</div>
               <ResponsiveContainer width="100%" height={180}>
@@ -229,7 +232,7 @@ export default function Backtest() {
               </ResponsiveContainer>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">거래 내역</div>
               <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
                 <table className="w-full text-xs">
@@ -265,7 +268,7 @@ export default function Backtest() {
       )}
 
       {!result && !loading && (
-        <div className="bg-white border border-gray-200 rounded-lg py-16 text-center text-sm text-gray-400">
+        <div className="bg-white border border-gray-200 rounded-md py-16 text-center text-sm text-gray-400">
           설정을 입력하고 백테스트를 실행하세요
         </div>
       )}

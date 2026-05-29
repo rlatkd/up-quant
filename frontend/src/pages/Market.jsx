@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
+import PageHeader from '../components/ui/PageHeader'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
@@ -24,7 +25,7 @@ function MiniCard({ ticker }) {
   const data = ticker.sparkline.map(v => ({ v }))
 
   return (
-    <Link to={`/coins/${ticker.market}`} className="block bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
+    <Link to={`/coins/${ticker.market}`} className="block bg-white border border-gray-200 rounded-md p-4 hover:border-gray-300 transition-colors">
       <div className="flex justify-between items-start mb-3">
         <div>
           <div className="text-xs text-gray-400">{ticker.market.replace('KRW-', '')}</div>
@@ -63,7 +64,7 @@ function MiniCard({ ticker }) {
 
 function RankTable({ title, rows, color, onRowClick }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
       <div className={`px-4 py-3 border-b border-gray-100 text-sm font-semibold ${color}`}>{title}</div>
       <table className="w-full">
         <thead>
@@ -102,7 +103,7 @@ function RankTable({ title, rows, color, onRowClick }) {
 
 function VolumeTable({ rows, onRowClick }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">거래대금 상위</div>
       <table className="w-full">
         <thead>
@@ -142,7 +143,7 @@ function W52Badges({ tickers }) {
   const lows  = major.filter(t => t.is_52w_low)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-3.5 flex items-center gap-6">
+    <div className="bg-white border border-gray-200 rounded-md px-5 py-3.5 flex items-center gap-6">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs font-semibold text-red-500 flex-shrink-0 w-20">52주 신고가</span>
         {highs.length === 0
@@ -221,7 +222,7 @@ export default function Market() {
 
   if (loading) return (
     <div className="py-24 flex justify-center">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
     </div>
   )
 
@@ -238,9 +239,14 @@ export default function Market() {
 
   return (
     <div className="space-y-4">
-      {/* 주요 종목 카드 */}
-      <div className="grid grid-cols-4 gap-4">
-        {featured.map(t => <MiniCard key={t.market} ticker={t} />)}
+      <PageHeader title="마켓 현황" description="거래대금·등락률 중심으로 시장 상황을 한눈에 봅니다." />
+
+      {/* 주요 종목 (거래대금 상위) */}
+      <div>
+        <div className="text-xs font-medium text-gray-400 mb-2">주요 종목 · 거래대금 상위 {FEATURED_LIMIT}</div>
+        <div className="grid grid-cols-4 gap-4">
+          {featured.map(t => <MiniCard key={t.market} ticker={t} />)}
+        </div>
       </div>
 
       {/* 52주 신고가/신저가 배지 */}
@@ -264,10 +270,10 @@ export default function Market() {
       </div>
 
       {/* 시장 현황 트리맵 (거래대금 상위 메이저) */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
           <div className="text-sm font-semibold text-gray-700">
-            시장 현황 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {TREEMAP_LIMIT}종목</span>
+            거래대금 비중 지도 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {TREEMAP_LIMIT}종목</span>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-400">
             <span className="flex items-center gap-1">

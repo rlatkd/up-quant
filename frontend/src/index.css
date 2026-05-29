@@ -1,1 +1,39 @@
 @import "tailwindcss";
+/* 업비트 톤 본문 글씨체 (한국 금융 UI 표준 산세리프) */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css");
+
+/* ── 디자인 토큰 ──────────────────────────────────────────
+   액센트 = 업비트 블루 계열. 헤더 네이비(#093687)를 brand-700로 두고
+   그보다 밝은 #1763b6를 기본 액센트(brand-500)로 잡아, 기존 indigo(보라빛)를 대체.
+   의미색(상승 빨강 / 하락 파랑)은 Tailwind 기본 red/blue 그대로 사용(미변경). */
+@theme {
+  --color-brand-50:  #eef4fb;
+  --color-brand-100: #d8e6f6;
+  --color-brand-200: #b6d1ed;
+  --color-brand-300: #8ab4e1;
+  --color-brand-400: #4a8fd1;
+  --color-brand-500: #1763b6;
+  --color-brand-600: #0f4f96;
+  --color-brand-700: #093687;
+  --color-brand-800: #082b6a;
+
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  /* 흰 카드가 또렷하게 분리되도록 페이지는 옅은 회색 (업비트식 구획감) */
+  background-color: #f4f5f7;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 숫자가 주인공인 화면 — 자릿수가 흔들리지 않게 표/수치는 탭형 숫자 */
+table, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
