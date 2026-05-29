@@ -30,12 +30,13 @@
 
 ## 화면 구성
 
-헤더 탭 6개(대시보드·마켓현황·코인목록·비교분석·백테스트·스크리너) + 코인 상세(하위 라우트)로 구성된 SPA입니다. 도움말은 헤더 **? 버튼 → `window.open` 별도 창**입니다.
+헤더 탭 7개를 **시각적 2그룹**으로 — *시장 파악*(대시보드·마켓현황·섹터분석·코인목록) │ *분석 도구*(스크리너·비교분석·백테스트) — 묶고, 코인 상세(하위 라우트)를 더한 SPA입니다. 도움말은 헤더 **? 버튼 → `window.open` 별도 창**입니다.
 
 | 경로 | 페이지 | 설명 | 참고 스타일 |
 |------|--------|------|------------|
-| `/` | **Dashboard** (대시보드) | KPI 카드 · 공포·탐욕 게이지 · 시장 지배력 도넛 · 급등/급락 피드 · 카테고리 누적수익률(월/분기/년) · 상관관계 히트맵 · 월별 수익률 히트맵 · 리스크-수익 산점도 | Finviz |
+| `/` | **Dashboard** (대시보드) | "지금 시장" 요약 + 하이라이트 진입점 — KPI 카드 · **히어로: 비트코인 추세 차트(전폭, 3·6·12개월)** · 공포·탐욕 게이지 · 시장 지배력 도넛 · 급등/급락 피드 · 하이라이트 3카드(이번 달 섹터 성과 · 거래대금 상위 Top5 · 52주 신고/신저 요약, 각각 깊은 페이지로 드릴다운) | Finviz |
 | `/market` | **Market** (마켓 현황) | 미니 차트 카드 · 52주 신고가/신저가 배지 · 상승률/하락률 테이블 · 거래대금 TOP5 · 거래대금 트리맵 | — |
+| `/sectors` | **Sectors** (섹터 분석) | 카테고리 누적수익률(월/분기/년, 세로 확대·곡선) · 월별 수익률 히트맵 · 상관관계 히트맵 · 리스크-수익 산점도 | — |
 | `/coins` | **CoinList** (코인 목록) | 검색 · 필터 탭 · 3단계 정렬 · 즐겨찾기(localStorage) · 52주 위치 바 · 스파크라인 | CoinGecko |
 | `/coins/:market` | **CoinDetail** (코인 상세) | 캔들차트(분/일/주/월 + MA·볼린저·RSI 토글) · 호가창 · 체결 내역 · 타 종목 상관관계 | Upbit |
 | `/compare` | **Compare** (비교 분석) | 최대 5종목 90일 누적 등락률 겹쳐 비교 (헤더 탭, 진입 시 BTC·ETH·XRP 기본 선택) | — |
@@ -165,6 +166,7 @@ up-quant/
 │   │       ├── Market.jsx
 │   │       ├── CoinList.jsx
 │   │       ├── CoinDetail.jsx
+│   │       ├── Sectors.jsx        # 섹터 분석 (카테고리 수익률·상관·리스크수익)
 │   │       ├── Compare.jsx        # 비교 분석 (헤더 탭)
 │   │       ├── Backtest.jsx       # 백테스트  (헤더 탭)
 │   │       ├── Screener.jsx       # 스크리너  (헤더 탭)
@@ -391,7 +393,7 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 - [x] 인메모리 TTL 캐시(stale-while-revalidate · single-flight) · 부팅 프리페치 · 요청 스로틀 · 429 재시도
 - [x] 변동성·1개월 수익률·상관관계·섹터 수익률(월별/누적) — 모두 실 캔들 기반 계산
 - [x] MA 크로스 / RSI 백테스트 엔진 (자산 곡선·MDD·승률, 200캔들 초과 페이지네이션)
-- [x] 프론트 8개 페이지 (대시보드·마켓·코인목록·코인상세·비교분석·백테스트·스크리너·도움말) + 데이터 페칭 훅
+- [x] 프론트 9개 페이지 (대시보드·마켓·섹터분석·코인목록·코인상세·비교분석·백테스트·스크리너·도움말) + 데이터 페칭 훅
 - [x] CoinDetail 캔들 인터벌 탭 (분/일/주/월 + MA·볼린저·RSI 지표 토글)
 - [x] rid 기반 3계층 통합 로깅 (axios 인터셉터 · FastAPI 미들웨어 · httpx event_hook)
 - [x] 비교분석 렌더링 개선 — 종목별 캔들 캐싱으로 기존 라인 재요청·재애니메이션 없이 추가만
@@ -449,3 +451,17 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 - [ ] 에러/로딩 상태 UI 개선
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정
+
+---
+
+## 진행 중 체크리스트 (2026-05-29 세션, 토큰 한도로 중단)
+
+다음 세션에서 이어서 진행. **⚠️ 0번을 먼저 해야 빌드 복구됨.**
+
+- [ ] **0. ⚠️(최우선) `Sectors.jsx` 빌드 깨짐 복구** — 리스크-수익 산점도를 마켓으로 옮기려고 import(`useNavigate`·`ScatterChart`·`Scatter`·`ZAxis`·`Tooltip`·`useCoinStats`)와 헬퍼(`returnColor`·`ScatterDot`·`quantile`·`bulkRange`·`padDomain`·`lerp`·`SCATTER_LIMIT`)를 **이미 삭제**했으나, `Sectors()` 컴포넌트가 아직 이들을 참조(`navigate`·`coinStats`·`statsLoading`·scatter 계산 블록·`{/* Risk-Return scatter */}` 섹션)함 → 컴포넌트에서 ⑴`navigate`/`useCoinStats`/`statsLoading` 제거(로딩 가드 `monthlyLoading`만) ⑵scatter 계산 블록·산점도 JSX 섹션 삭제 ⑶`return` 최상단에 **카테고리 설명 카드** 추가(헬퍼 `CAT_DESC`·`catColor`는 이미 추가됨, `monthly.categories` 순회).
+- [ ] **1. 마켓 현황**: 상승률/하락률/거래대금 순위 개수 축소(`RANK_LIMIT` 20→10) + **리스크-수익 분포(산점도)를 마켓으로 이동**(Sectors에서 들어낸 산점도 + 헬퍼 `quantile`/`bulkRange`/`padDomain`/`returnColor`/`ScatterDot`/`SCATTER_LIMIT` + `useCoinStats` + scatter 계산 + JSX를 `Market.jsx`로 이식).
+- [ ] **2. 섹터 분석**: 리스크-수익 분포 제거(위 0번) + 상단 카테고리 설명 추가(위 0번).
+- [ ] **3. 코인 목록 개편**: 업비트식 master-detail — 우측 코인 리스트 사이드바 + 메인에 선택 코인 상세(차트·호가·체결), 기존 인사이트(지표 토글·타종목 상관관계) 결합. `CoinDetail` 본문을 `CoinDetailView({market})`로 추출해 재사용 권장.
+- [ ] **4. 문서 일괄 갱신**: 위 변경들을 `CLAUDE.md`(UI 컨벤션·역할분담·Phase 16 이력)·`README`·`엔지니어링노트`·메모리에 반영. (이번 세션의 헤더 드롭다운/로고 PNG/PageHeader 제거/대시보드 시세표·레이아웃 재배치는 일부 문서 반영됨 — 마켓·섹터·코인목록 개편분 추가 필요.)
+
+> 이번 세션 완료분(참고): 헤더 개편(로고 PNG·활성 흰밑줄 제거·서비스 더보기 호버 드롭다운·active=경로만·호버 옅은 흰색), 전 페이지 PageHeader 제거, 대시보드 시세표 중심 재설계 + 레이아웃 재배치(섹터/52주 위·급등급락 시세 높이·공포탐욕/지배력 아래) + 시세 스파크라인 호버 가격, favicon/지배력 색/누적수익률 곡선·세로확대·Y축 헤드룸.

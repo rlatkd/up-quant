@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { getCoinStats } from '../api/analysis'
 import InfoTooltip from '../components/InfoTooltip'
-import PageHeader from '../components/ui/PageHeader'
 
 const FIELDS = [
   { key: 'change_rate',   label: '등락률',       unit: '%'  },
@@ -121,7 +120,6 @@ export default function Screener() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="코인 스크리너" description="원하는 조건을 모두 만족하는 종목만 필터링" />
 
       {/* 조건 설정 */}
       <div className="bg-white border border-gray-200 rounded-md p-5">

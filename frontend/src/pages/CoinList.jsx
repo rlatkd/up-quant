@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import PageHeader from '../components/ui/PageHeader'
 
 const FILTERS = ['전체', '즐겨찾기', '상승', '하락', '보합']
 const FILTER_MAP = { '전체': null, '상승': 'RISE', '하락': 'FALL', '보합': 'EVEN' }
@@ -151,7 +150,6 @@ export default function CoinList() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="코인 목록" description="KRW 마켓 전체 종목 · 정렬·검색·즐겨찾기" />
 
       {/* 코인 테이블 */}
       <div className="bg-white border border-gray-200 rounded-md overflow-hidden">

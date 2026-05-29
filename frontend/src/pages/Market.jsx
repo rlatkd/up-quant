@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import PageHeader from '../components/ui/PageHeader'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
@@ -239,7 +238,6 @@ export default function Market() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="마켓 현황" description="거래대금·등락률 중심으로 시장 상황을 한눈에 봅니다." />
 
       {/* 주요 종목 (거래대금 상위) */}
       <div>

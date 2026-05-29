@@ -7,7 +7,6 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import { runMaCross, runRsi } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
-import PageHeader from '../components/ui/PageHeader'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
@@ -73,7 +72,6 @@ export default function Backtest() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="전략 백테스트" description="과거 일봉으로 매매 전략 성과를 시뮬레이션" />
 
       {/* 설정 패널 */}
       <div className="bg-white border border-gray-200 rounded-md p-5">

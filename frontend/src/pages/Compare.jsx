@@ -6,7 +6,6 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import api from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
-import PageHeader from '../components/ui/PageHeader'
 
 import { SERIES as COLORS } from '../theme'
 
@@ -88,7 +87,6 @@ export default function Compare() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="비교 분석" description="여러 종목의 90일 수익률을 같은 출발선(0%)에서 겹쳐 비교" />
 
       {/* 코인 선택 */}
       <div className="bg-white border border-gray-200 rounded-md p-5">

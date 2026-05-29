@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import CoinList from './pages/CoinList'
 import CoinDetail from './pages/CoinDetail'
+import Sectors from './pages/Sectors'
 import Compare from './pages/Compare'
 import Backtest from './pages/Backtest'
 import Screener from './pages/Screener'
@@ -18,6 +19,7 @@ function App() {
           <Route path="/market" element={<Market />} />
           <Route path="/coins" element={<CoinList />} />
           <Route path="/coins/:market" element={<CoinDetail />} />
+          <Route path="/sectors" element={<Sectors />} />
           {/* 부가기능 — 헤더 탭으로 노출, Layout(헤더) 안에서 렌더 */}
           <Route path="/compare" element={<Compare />} />
           <Route path="/backtest" element={<Backtest />} />
