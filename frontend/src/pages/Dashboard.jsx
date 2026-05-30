@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { PieChart, Pie, Cell, AreaChart, Area, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import { useCategoryMonthly } from '../hooks/useAnalysis'
+import { useCategoryMonthly, useCoinStats } from '../hooks/useAnalysis'
 import { DOM_COLORS } from '../theme'
+import CartButton from '../components/CartButton'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
 const PRICE_TABLE_N = 13    // 시세 표(거래대금 상위) 행 수 — 우측 위젯 스택 높이에 맞춤(2-컬럼 정렬)
@@ -21,6 +22,203 @@ const FG_ZONES = [
 
 // 전체 원화 콤마 표기 (업비트 톤). 예: 1,832,456,789,012 — "KRW"는 표시부에서 작게 덧붙인다.
 const fmtKrw = v => Math.round(v).toLocaleString()
+
+// ─── Opportunity Feed ────────────────────────────────────────────
+// "오늘 새로 생긴 시그널"을 4가지 카드로 묶어 사용자 동선을 시작점으로 만든다.
+// (기존 KPI/도넛은 "상태 보고"라 '그래서 뭐?'가 없었음 — 시그널은 '이걸 봐라'로 능동)
+// 백엔드 신규 없이 기존 데이터(tickers·coinStats·monthly)로 합성.
+
+const OPPORTUNITY_MAJORS_N = 30  // 52주·급등급락 시그널 대상 = 거래대금 상위 N (잡코인 노이즈 제외)
+
+// 종목 칩 — 클릭은 상세 이동, 옆 + 버튼은 카트 담기
+function StockChip({ market, korean_name, value, valueColor, navigate }) {
+  return (
+    <div className="inline-flex items-stretch border border-gray-200 rounded-md overflow-hidden hover:border-brand-300 transition-colors">
+      <button
+        type="button"
+        onClick={() => navigate(`/coins/${market}`)}
+        className="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer hover:bg-gray-50 transition-colors"
+        title={korean_name}
+      >
+        <span className="font-semibold text-gray-700">{market.replace('KRW-', '')}</span>
+        {value != null && <span className={`tabular-nums font-medium ${valueColor || ''}`}>{value}</span>}
+      </button>
+      <div className="flex items-center border-l border-gray-200 bg-gray-50">
+        <CartButton market={market} />
+      </div>
+    </div>
+  )
+}
+
+function SignalCard({ title, hint, accent, children, count, link, linkLabel }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-md p-4 flex flex-col min-h-[180px]">
+      <div className="flex items-center justify-between mb-0.5">
+        <div className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <span className={`inline-block w-1 h-4 rounded-sm ${accent}`} />
+          {title}
+          {count != null && count > 0 && (
+            <span className="text-xs text-gray-400 font-normal">({count})</span>
+          )}
+        </div>
+        {link && (
+          <Link to={link} className="text-[11px] text-brand-600 hover:underline">{linkLabel} →</Link>
+        )}
+      </div>
+      <div className="text-[11px] text-gray-400 mb-2.5">{hint}</div>
+      <div className="flex-1">{children}</div>
+    </div>
+  )
+}
+
+function OpportunityFeed({ tickers, coinStats, monthly }) {
+  const navigate = useNavigate()
+
+  // 1. 52주 새 경신 (거래대금 상위 30 한정)
+  const major = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, OPPORTUNITY_MAJORS_N)
+  const newHighs = major.filter(t => t.is_52w_high)
+  const newLows  = major.filter(t => t.is_52w_low)
+
+  // 2. 급등 시그널 (전체 중 상승률 상위, 최소 2% 이상)
+  const gainers = [...tickers]
+    .filter(t => t.change_rate > 0.02)
+    .sort((a, b) => b.change_rate - a.change_rate)
+    .slice(0, 6)
+
+  // 3. 안정 상승 모멘텀 — 1개월 수익률 양수 + 변동성 적당히 낮음 (수익/변동성 비율 상위)
+  //    "변동성 1단위당 수익이 좋은" 종목 — 리스크 조정 수익률(샤프 풍) 단순화 버전
+  const stable = [...coinStats]
+    .filter(s => s.return_1m > 5 && s.volatility > 0 && s.volatility < 5 && s.acc_trade_price_24h > 5e9)
+    .sort((a, b) => (b.return_1m / b.volatility) - (a.return_1m / a.volatility))
+    .slice(0, 6)
+
+  // 4. 섹터 로테이션 — 이번 달 vs 지난 달 평균 수익률 차이 큰 섹터 (절대값 큰 순)
+  const last = monthly.rows[monthly.rows.length - 1] || {}
+  const prev = monthly.rows[monthly.rows.length - 2] || {}
+  const sectorRot = monthly.categories
+    .map(cat => ({ cat, last: last[cat] ?? 0, prev: prev[cat] ?? 0, delta: (last[cat] ?? 0) - (prev[cat] ?? 0) }))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 4)
+
+  const todayStr = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-md p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="text-base font-semibold text-gray-800">오늘의 시그널</div>
+          <div className="text-xs text-gray-400 mt-0.5">{todayStr} · 시장에 새로 생긴 변화 — 종목 칩 클릭으로 상세, + 버튼으로 분석 카트에 담기</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+
+        {/* 1. 52주 새 경신 */}
+        <SignalCard
+          title="52주 신고/신저 경신"
+          hint={`거래대금 상위 ${OPPORTUNITY_MAJORS_N}종 중 오늘 경신`}
+          accent="bg-red-400"
+          count={newHighs.length + newLows.length}
+          link="/market" linkLabel="마켓 현황"
+        >
+          {newHighs.length === 0 && newLows.length === 0 ? (
+            <div className="text-xs text-gray-400 py-3">오늘 새로 경신한 메이저 종목 없음</div>
+          ) : (
+            <div className="space-y-2">
+              {newHighs.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-red-500 font-semibold mb-1">▲ 신고가 {newHighs.length}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {newHighs.slice(0, 6).map(t => (
+                      <StockChip key={t.market} market={t.market} korean_name={t.korean_name}
+                        value={`+${(t.change_rate * 100).toFixed(1)}%`} valueColor="text-red-500" navigate={navigate} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {newLows.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-blue-500 font-semibold mb-1">▼ 신저가 {newLows.length}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {newLows.slice(0, 6).map(t => (
+                      <StockChip key={t.market} market={t.market} korean_name={t.korean_name}
+                        value={`${(t.change_rate * 100).toFixed(1)}%`} valueColor="text-blue-500" navigate={navigate} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </SignalCard>
+
+        {/* 2. 급등 (>+2%) */}
+        <SignalCard
+          title="급등"
+          hint="전일 대비 +2% 이상 상승"
+          accent="bg-red-500"
+          count={gainers.length}
+          link="/market" linkLabel="상승률 표"
+        >
+          {gainers.length === 0 ? (
+            <div className="text-xs text-gray-400 py-3">오늘 급등 종목 없음</div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {gainers.map(t => (
+                <StockChip key={t.market} market={t.market} korean_name={t.korean_name}
+                  value={`+${(t.change_rate * 100).toFixed(1)}%`} valueColor="text-red-500" navigate={navigate} />
+              ))}
+            </div>
+          )}
+        </SignalCard>
+
+        {/* 3. 안정 상승 모멘텀 */}
+        <SignalCard
+          title="안정 상승 모멘텀"
+          hint="1개월 +5% 이상 · 변동성 5% 이하 (수익/변동성 비율 상위)"
+          accent="bg-emerald-500"
+          count={stable.length}
+          link="/screener" linkLabel="조건 스크리닝"
+        >
+          {stable.length === 0 ? (
+            <div className="text-xs text-gray-400 py-3">조건 만족 종목 없음</div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {stable.map(s => (
+                <StockChip key={s.market} market={s.market} korean_name={s.korean_name}
+                  value={`+${s.return_1m.toFixed(1)}%`} valueColor="text-emerald-600" navigate={navigate} />
+              ))}
+            </div>
+          )}
+        </SignalCard>
+
+        {/* 4. 섹터 로테이션 */}
+        <SignalCard
+          title="섹터 로테이션"
+          hint="이번 달 vs 지난 달 평균 수익률 변화 큰 섹터"
+          accent="bg-violet-500"
+          link="/sectors" linkLabel="섹터 분석"
+        >
+          {sectorRot.length === 0 ? (
+            <div className="text-xs text-gray-400 py-3">섹터 데이터 없음</div>
+          ) : (
+            <div className="space-y-1.5">
+              {sectorRot.map(s => {
+                const up = s.delta >= 0
+                return (
+                  <Link key={s.cat} to="/sectors" className="flex items-center justify-between gap-2 text-xs hover:bg-gray-50 rounded px-1.5 py-1 transition-colors">
+                    <span className="text-gray-700 truncate">{s.cat}</span>
+                    <span className={`tabular-nums font-medium flex items-center gap-0.5 flex-shrink-0 ${up ? 'text-red-500' : 'text-blue-500'}`}>
+                      {up ? '▲' : '▼'}{Math.abs(s.delta).toFixed(1)}%p
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </SignalCard>
+      </div>
+    </div>
+  )
+}
 
 function KpiCard({ label, value, sub, color, valueClass = 'text-2xl' }) {
   return (
@@ -77,6 +275,7 @@ function PriceTable({ tickers }) {
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400">
             <th className="px-3 py-2 text-right font-medium w-9">#</th>
+            <th className="w-6"></th>
             <th className="px-3 py-2 text-left font-medium">코인</th>
             <th className="px-3 py-2 text-right font-medium">현재가</th>
             <th className="px-3 py-2 text-right font-medium">24h</th>
@@ -91,6 +290,7 @@ function PriceTable({ tickers }) {
               className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
             >
               <td className="px-3 py-2.5 text-right text-xs text-gray-400 tabular-nums">{i + 1}</td>
+              <td className="pl-1 pr-1 py-2.5 text-center"><CartButton market={t.market} /></td>
               <td className="px-3 py-2.5">
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
@@ -295,6 +495,7 @@ function W52Summary({ tickers }) {
 export default function Dashboard() {
   const { tickers, loading: tickersLoading } = useTickers()
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
+  const { data: coinStats } = useCoinStats()  // Opportunity Feed의 "안정 상승 모멘텀"용
 
   if (tickersLoading || monthlyLoading) {
     return (
@@ -322,6 +523,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
+      {/* Opportunity Feed — "오늘의 시그널" 최상단 액션 트리거 */}
+      <OpportunityFeed tickers={tickers} coinStats={coinStats} monthly={monthly} />
+
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-5">
         <KpiCard

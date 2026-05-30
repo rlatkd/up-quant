@@ -1,5 +1,12 @@
+import math
+from statistics import mean, pstdev
+
 from app.schemas.backtest import BacktestResult, EquityPoint, TradeRecord, BacktestMetrics
 from app.services import candle_service
+
+# 암호화폐는 365일 거래 → 일별 수익률을 √365로 연율화 (전통 주식은 √252)
+_ANNUALIZE_SQRT = math.sqrt(365)
+_ANNUALIZE_DAYS = 365
 
 
 def _sma(prices: list[float], period: int) -> list[float | None]:
@@ -35,6 +42,32 @@ def _compute_mdd(equity: list[float]) -> float:
         if dd > mdd:
             mdd = dd
     return round(mdd, 2)
+
+
+def _compute_risk_adjusted(equity: list[float], mdd_pct: float) -> tuple[float, float, float]:
+    """일별 equity로부터 Sharpe·Sortino·Calmar 계산. 무위험수익률 0 가정."""
+    if len(equity) < 2:
+        return 0.0, 0.0, 0.0
+    # 일별 수익률 시리즈
+    rets = [equity[i] / equity[i - 1] - 1 for i in range(1, len(equity)) if equity[i - 1] > 0]
+    if not rets:
+        return 0.0, 0.0, 0.0
+    avg = mean(rets)
+    sd = pstdev(rets) if len(rets) > 1 else 0.0
+    sharpe = (avg / sd) * _ANNUALIZE_SQRT if sd > 0 else 0.0
+    # Sortino: 손실(음수 수익률)만의 표준편차
+    downside = [r for r in rets if r < 0]
+    dsd = pstdev(downside) if len(downside) > 1 else 0.0
+    sortino = (avg / dsd) * _ANNUALIZE_SQRT if dsd > 0 else 0.0
+    # Calmar: 연율화 수익률 / MDD. equity는 100 기준이라 누적수익률 = equity[-1]/equity[0] - 1.
+    if equity[0] > 0 and mdd_pct > 0:
+        total_growth = equity[-1] / equity[0]
+        years = len(equity) / _ANNUALIZE_DAYS
+        ann_return = total_growth ** (1 / years) - 1 if years > 0 and total_growth > 0 else 0.0
+        calmar = ann_return / (mdd_pct / 100)
+    else:
+        calmar = 0.0
+    return round(sharpe, 2), round(sortino, 2), round(calmar, 2)
 
 
 def run_ma_cross(
@@ -92,15 +125,20 @@ def run_ma_cross(
     sell_count = sum(1 for t in trades if t.side == "SELL")
     win_rate = round(wins / sell_count * 100, 1) if sell_count else 0.0
     equity_values = [e.value for e in equity]
+    mdd = _compute_mdd(equity_values)
+    sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
 
     return BacktestResult(
         equity=equity,
         trades=trades,
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
-            mdd=_compute_mdd(equity_values),
+            mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
+            sharpe=sharpe,
+            sortino=sortino,
+            calmar=calmar,
         ),
     )
 
@@ -155,14 +193,19 @@ def run_rsi_strategy(
     sell_count = sum(1 for t in trades if t.side == "SELL")
     win_rate = round(wins / sell_count * 100, 1) if sell_count else 0.0
     equity_values = [e.value for e in equity]
+    mdd = _compute_mdd(equity_values)
+    sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
 
     return BacktestResult(
         equity=equity,
         trades=trades,
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
-            mdd=_compute_mdd(equity_values),
+            mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
+            sharpe=sharpe,
+            sortino=sortino,
+            calmar=calmar,
         ),
     )

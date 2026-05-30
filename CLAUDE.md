@@ -68,14 +68,14 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 사용자와 **한국어**로 소통.
 - **커밋은 사용자가 직접** 한다. 커밋 메시지는 추천만 하고, `git commit`/`push`는 실행하지 말 것.
 - **`.gitignore`: `*.md`는 기본 무시(로컬 메모용)**. 추적되는 마크다운은 `README.md`, `CLAUDE.md`, `references/*.md`뿐. `references/QAE_EDA_*`(원본 기획서 .docx/.pdf)는 의도적으로 제외(로컬 보관). 새 .md를 git에 올리려면 예외 규칙 추가 필요.
-- 문서 역할: 개요/구조/스크린샷 **+ 사실·동작 정보(예: 캐시 TTL·동작 방식, 데이터 흐름)** → `README.md`(**정보 전달 목적 문서**), API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, 기술 의사결정 기록(**포트폴리오/회고용**, 고민·후보·선택) → `references/엔지니어링노트.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**.
+- 문서 역할: 개요/구조/스크린샷 **+ 사실·동작 정보(예: 캐시 TTL·동작 방식, 데이터 흐름)** → `README.md`(**정보 전달 목적 문서**), API 명세 → `references/API.md`, 계획서 → `references/프로젝트계획서.md`, 기술 의사결정 기록(**포트폴리오/회고용**, 고민·후보·선택) → `references/엔지니어링노트.md`, **작업 이력·진행 상태·세션 인계 → 본 문서 하단**, 페이지 IA·중복 진단·아이디어 비축·P0~P3 진행 → `pages.md`(루트, `.gitignore`에 예외로 추적됨).
   - ⚠️ **엔지니어링노트는 "정보 정리처"가 아니다**(2026-05-28 사용자 명시). 사실·수치·동작 방식 같은 **정보(예: 캐싱 동작·TTL 표)는 `README.md`** 에 적고, 엔지니어링노트엔 **성장에 도움 될 고민·후보 비교·전략 방향성(회고/포트폴리오)** 만 남긴다. "정보를 어디 적지?" → 의사결정 과정/판단이면 엔지니어링노트, 사실/동작 설명이면 README.
 - **작업 후 문서 갱신 (필수)**: 코드를 바꾸면 **같은 작업 안에서** 관련 문서를 함께 갱신한다. (갱신 대상이던 `HANDOFF.md`·`docs/HISTORY.md`는 본 문서로 통합·삭제됨 — 더 이상 만들지 말 것.) 변경 유형 → 갱신할 문서:
   - 기능·화면·완료항목·로드맵 변경 → `README.md`
   - API 엔드포인트·쿼리 파라미터·응답 스키마 변경 → `references/API.md`
   - 계획·범위·적용 상태 변경 → `references/프로젝트계획서.md`
   - 규칙·구조·데이터소스·성능·UI 컨벤션 변경 → 본 문서(`CLAUDE.md`)의 해당 섹션
-  - 의미 있는 작업 단위 완료 → 본 문서 하단 **작업 이력**에 `Phase N` 추가 + **현재 상태 & 다음 작업** 갱신
+  - 의미 있는 작업 단위 완료 → 본 문서 하단 **작업 이력**에 `Phase N` 추가 + **현재 상태 & 다음 작업** 갱신 (+ 페이지 구성 바뀌면 `pages.md` 트리/로드맵도 함께 갱신)
   - 진행 상태가 바뀌면 메모리 `project_upquant.md`도 최신화 (레포 밖, 세션 컨텍스트 복원용)
   - **기술적 의사결정 → `references/엔지니어링노트.md`에 의사결정 형식(문제상황 → 후보/방법들 → 고민 → 선택 → 근거)으로 추가.** ⚠️ **사소한 판단이라도, 사용자와의 대화에서 얻을 수 있는 내용이면 꾸준히 기록**한다(이전의 "영양가 있는 것만" 기준을 완화 — 사용자 명시 요구 2026-05-26). 막다른 길·검증 과정·"지금 안 한 것"도 포함. 포트폴리오/회고용.
   - **사용자가 대화 중 새로 제시한 규칙·원칙·요구사항(예: 성능 원칙, 문서화 규칙)은 본 `CLAUDE.md`의 해당 섹션에도 매번 반영**한다(2026-05-26 사용자 명시). 일회성 작업 지시가 아니라 앞으로도 지켜야 할 원칙이면 규칙으로 박아둔다.
@@ -92,14 +92,19 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **사용자 요청 UI 정리 묶음(2026-05-28)** — 대시보드(업비트분류 배지 제거·시장지배력 간격·상관관계 줄바꿈+좌측열 폭 통일·공포탐욕 라벨·총거래대금 B안 표기), 마켓(52주 배지 상위30 한정·상단카드/거래대금 B안 표기·트리맵 폰트 스케일), 코인목록(중복 요약카드 제거), **부가기능 헤더 탭 복귀(+디폴트 결과·`?` 툴팁), 도움말 정리** — Phase 14. (도움말·대시보드 Edge 스크린샷 육안 확인)
 - **UI 업비트 톤 대개편 + 콘텐츠 재배치(2026-05-29)** — 액센트 indigo(보라)→업비트 블루 전 페이지 교체, 페이지 배경 회색·라운드 완화·Pretendard 폰트, 로고(흰 기울임 워드마크·원형 제거)·favicon·헤더 탭 볼드, 구분색 팔레트 `theme.js`로 통일, 공용 컴포넌트(`components/ui/`)+PageHeader 전 페이지, 대시보드 순서 `누적→월별→상관`(원천→파생)·마켓 "시장 현황→거래대금 비중 지도"·주요종목 라벨 — Phase 15. (빌드 통과, 브라우저 육안 미검증)
 - **IA 재편 + 대시보드 재설계 + 차트/색 디테일(2026-05-29)** — **섹터 분석 `/sectors` 신설**(대시보드의 카테고리 3종+산점도 이동), **대시보드를 시세 표(거래대금 상위 16) 중심 2-컬럼 + 인사이트 위젯 + 하단 섹터성과·52주로 재설계**(BTC 단독 히어로는 폐기), 헤더는 메인 4탭 + **"서비스 더보기" 드롭다운**(스크리너·비교·백테스트, 빨간점), 로고 굵게(`font-black`)·favicon PNG, 지배력/시리즈 팔레트 hue 분리·밝게, 누적수익률 세로 확대·natural 곡선·Y축 헤드룸 — Phase 16. (빌드·ESLint·py_compile 통과, 브라우저 육안 미검증)
+- **빌드 복구 + 잡정리(2026-05-30 전반)** — Phase 17. ⑴Phase 16 잔여 깨짐 복구(Sectors.jsx의 useNavigate/useCoinStats/scatter 헬퍼 미import 정리, 섹터 안내 카드 추가) ⑵ESLint `set-state-in-effect` 5건 해결(loading을 `loadedKey !== currentKey` 파생값으로 — useTicker/useCandles/useCategoryCumulative/useCorrelation/Compare. effect에 cancelled cleanup 추가) ⑶PostCSS `@import must precede all other statements` 경고 해결(Pretendard `@import`를 `index.html` `<link>`로 이동 — Tailwind v4가 펼치며 밀려서 무시되던 실제 폰트 로드 실패도 함께 수정) ⑷마켓 순위 표 RANK_LIMIT 20→10 ⑸리스크-수익 산점도를 섹터→마켓현황으로 이식(`SCATTER_LIMIT=100` 신규 정의, 기존 미정의 참조 버그도 함께 해결) ⑹코인목록 master-detail 개편(`CoinDetailView({market})` named export로 분리, `CoinList`를 좌 col-9 상세 + 우 col-3 슬림 사이드바로 재작성, `/coins`·`/coins/:market` 단일 컴포넌트로 통합).
+- **IA·인사이트 + 허세용 지표(2026-05-30 후반)** — Phase 18. ⑴백테스트에 **Sharpe·Sortino·Calmar** 리스크 조정 지표(일별 equity 수익률 √365 연율화, BacktestMetrics 스키마 확장) ⑵**분석 카트 도입** — `AnalysisCartContext`(localStorage) + 공용 `CartButton`(+/✓ 토글), 헤더 카운트 배지+드롭다운(담긴 종목·×해제·비교/백테스트 진입), 종목 행/카드 5곳(Dashboard 시세표·Market 순위3종·CoinList 사이드바·Screener 결과·Sectors 모달)에 + 버튼, Compare/Backtest 진입 시 카트 종목으로 초기값 자동 채움, Screener에 "결과 전체 카트 담기" ⑶Sectors **섹터 드릴다운 모달**(섹터 안내 카드를 button으로 → 모달에 소속 종목 표 + 평균 수익률·총 거래대금 헤더 + 카트 버튼·행 클릭 상세 이동·ESC/바깥 클릭 닫힘) ⑷Dashboard에 **Opportunity Feed**(최상단, 4-카드 시그널 — 52주 새 경신·급등(>+2%)·안정 상승 모멘텀(`return_1m/volatility` 비율 상위, Sharpe 풍 단순화)·섹터 로테이션(이번 달 vs 지난 달 ▲▼). 종목 칩에 카트 + 클릭 상세 통합 `StockChip` 헬퍼).
 
 **다음 작업 (우선순위 순)**
-1. ⭐ **실제 화면 검증(브라우저 육안)** — Phase 12·13은 여전히 육안 미검증(코드/빌드 검증됨). Phase 14는 도움말·대시보드를 Edge 스크린샷으로 확인했으나 **마켓현황·부가기능 3종은 미확인**. (콜드 워밍 ~1분, 동기 워밍이라 기동 후 즉시). 참고: Windows cp949 콘솔은 `PYTHONIOENCODING=utf-8` + `uvicorn` 직접 실행. 백엔드 CORS는 `:5173`만 허용 → 스크린샷도 `:5173`에서.
-2. ✅ **(완료 Phase 15, 2026-05-29) UI 업비트 톤 개선 + 구분색 팔레트 통일** — 액센트 블루화·로고·Pretendard·배경 회색·라운드 완화·`theme.js` 팔레트·공용 컴포넌트·PageHeader까지 완료. **잔여**: ⑴마켓 트리맵 상단 이동(취향이라 보류) ⑵CoinDetail 지표 토글 색(차트 오버레이까지 함께 봐야 함) ⑶`Card`/`StatCard` 실제 적용(현재 생성만, 기존 KpiCard/MetricCard 유지).
-3. **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·`Compare.jsx`의 effect 내 `setLoading(true)`(사전 존재 이슈, 작업 다 마친 뒤·2026-05-26 지시).
-4. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context.
-5. **에러/로딩 상태 UI 개선**.
-6. **카테고리 분류 고도화(선택)** — level2/level3 활용, 누적 변동성 드래그 표현 개선, 분류 스냅샷 갱신 자동화.
+1. **P1-2 Markowitz 효율적 경계선** — Compare에 포트폴리오 최적화 시각화. 백엔드 `/analysis/portfolio?markets=A,B,C&count=90` 신규(일봉 수익률 공분산 → 무작위 가중 1000개 → 산점도 + 효율적 경계선 + Sharpe 최대 ★).
+2. **P2-1 탐색 흐름 통합** — Market + Sectors + Screener를 단일 "탐색 페이지"로 (좌 필터/섹터/조건, 우 결과 리스트 + 공통 액션). 큰 리팩터.
+3. **P2-2 Coin 상세 강화** — 거래량 통계·시장 점유·추가 지표 등 헤더 정보 보강.
+4. **P2-3 Backtest 포트폴리오 지원** — 여러 종목 가중 동시 백테스트(현재는 단일).
+5. **P3-1 상관관계 Network Graph** — force-directed (거래대금 상위 50종 + |r|>0.7 엣지, 섹터별 색).
+6. **P3-2 K-means 종목 클러스터링** — 변동성·수익률·거래대금 군집 + 산점도 색.
+7. **실제 화면 검증(브라우저 육안)** — Phase 12·13·14(일부)·15·16·17·18 누적 미검증. `npm run dev`로 확인.
+8. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context. 가격 깜빡임 펄스(허세).
+9. **에러/로딩 상태 UI 개선**.
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
 
@@ -228,3 +233,22 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
   - **히어로 차트 추가**(사용자 "그래도 너무 없어보인다·작은 박스만 몇 개"): 균일한 작은 카드만 10개라 **focal point 부재**가 진짜 원인 → KPI 아래에 **전폭 비트코인 추세 AreaChart**(`HeroChart`, BTC/KRW 시장 대표 지표, 3·6·12개월 토글, 자체 로딩) 추가. BTC 일봉 단일 1콜(팬아웃 아님). 랜딩이므로 **부팅 프리페치에 `get_candles(KRW-BTC, days, 90)` 추가**(`main.py`) → 첫 방문도 콜드 0. 6개월/1년 토글만 on-demand.
   - **도움말**: 대시보드 항목에서 옮긴 3기능 제거(+급등급락 4→5종목 문구 정정), `/sectors` 가이드 신설.
 - 검증: `vite build` 통과(660+ 모듈). ESLint 신규 0(Sectors/Dashboard/Header/App). 백엔드 `py_compile` 통과. **브라우저 육안 미검증** — 특히 히어로 차트(BTC 추세)·섹터분석 신설·헤더 7탭 2그룹·대시보드 하이라이트.
+
+### Phase 17 — 빌드 복구 + IA 잡정리 + 마켓·코인목록 개편 (2026-05-30 전반)
+사용자 지시 "README 진행 중 체크리스트 0번부터 최우선". Phase 16 끝물에 사용자가 부분 수정만 한 채 토큰 한도로 끊겼던 깨진 상태를 복구·완결. 이번 세션은 메모리 새 규칙 두 개 정착: `feedback-no-confirmation`(코드 컨펌 X, task 경계 O), `feedback-docs-on-request`(문서 갱신은 시킬 때만).
+- **0. Sectors.jsx 빌드 깨짐 복구** — Phase 16에서 산점도를 마켓으로 옮기려고 헬퍼/import만 삭제했는데 `Sectors()` 본문은 그대로 참조해 빌드 실패. ⑴`useNavigate`/`useCoinStats`/`statsLoading` 제거(로딩 가드 `monthlyLoading`만) ⑵scatter 계산 블록·산점도/극단값 표 JSX 섹션 삭제 ⑶최상단에 **섹터 안내 카드** 신설(`monthly.categories` × `CAT_DESC`, 2-col 그리드 — 죽은 페이지 살리기).
+- **ESLint `react-hooks/set-state-in-effect` 5건 일괄 해결** — `loading`을 상태로 들지 않고 `loadedKey !== currentKey` **파생값**으로 바꿔 effect 안 `setLoading(true)` 호출 제거(cascade render 회피). 적용: `useTicker(market)`·`useCandles(market|interval|count)`·`useCategoryCumulative(period)`·`useCorrelation(market)`·`Compare(loadingChart = selected.some(m => !candlesByMarket[m]))`. 부수로 모든 effect에 `cancelled` cleanup 추가(빠른 dep 변경 시 stale fetch가 새 데이터 덮어쓰는 race 차단 — 파생 loading 정확성에 필수). 의도 변화: dep 바뀌면 새 데이터 올 때까지 옛 데이터 stale 표시+`loading=true`(원래도 거의 동일).
+- **PostCSS `@import must precede` 경고** — 사용자 dev 로그에서 발견. Tailwind v4가 `@import "tailwindcss"`를 펼치며 후속 규칙을 위에 박아 Pretendard `@import`가 결과 CSS ~1319행으로 밀려나 **표준상 무시됨 → Pretendard가 실제로 로드 안 되고 시스템 폰트 폴백 중이던 진짜 버그**도 함께 수정. Pretendard를 `index.html` `<link rel="stylesheet">`+`preconnect`로 이동. CSS에는 사유 주석만.
+- **Phase 17-1 마켓 RANK_LIMIT 20→10**: 상승률/하락률/거래대금 표를 한 화면 부담 없는 분량으로 축소. Help.jsx 안내도 갱신.
+- **Phase 17-2 리스크-수익 산점도를 섭터→마켓현황으로 이식**: 헬퍼(`quantile`·`bulkRange`·`padDomain`·`lerp`·`returnColor`·`ScatterDot`) + 상수 `SCATTER_LIMIT=100`(원래 정의 없이 참조만 있던 버그도 함께 해결, 거래대금 상위 100종 — 메이저+준메이저). Market.jsx 트리맵 뒤에 분포 본체(IQR 펜스) 산점도 + 극단값 표(행 클릭 상세). `useCoinStats()` 추가. Sectors는 더 깔끔하게 섹터-only.
+- **Phase 17-3 코인목록 업비트식 master-detail**: CoinDetail.jsx 본문을 `CoinDetailView({market})` named export로 분리(default export는 `useParams` wrapper). CoinList.jsx를 좌 col-9 메인(CoinDetailView) + 우 col-3 슬림 사이드바(검색/필터탭/정렬 헤더 한글명·현재가·전일대비·거래대금/★ 즐겨찾기/선택 강조 `bg-brand-50`)로 재작성. App.jsx 라우트 `/coins`+`/coins/:market` 둘 다 CoinList로(market 없으면 KRW-BTC 디폴트). 사이드바 sticky `top-[68px]`+내부 스크롤. 옛 CoinList의 1일 스파크라인·52주 위치 바는 슬림화 비용으로 제거.
+- 검증: 단계마다 `vite build`+`npm run lint`+백엔드 `py_compile` 통과(660+ 모듈). ESLint 신규 0(사전 5건도 함께 해결돼 0). **브라우저 육안 미검증**.
+
+### Phase 18 — IA·인사이트 + 허세용 지표 (2026-05-30 후반)
+페이지 구성 분석(`pages.md` 신설) → 사용자 + 다른 LLM 제안 교차 검토 → 통합 우선순위(P0~P3 9개)로 큰 로드맵 확립. P0~P1까지 완료, P1-2 이후는 다음 세션. **체크리스트 단위로 진행 여부 확인 규칙 정착**(memory `feedback-no-confirmation` 보강 — 토큰 한계 고려, 자동 연속 진행 금지).
+- **백테스트 Sharpe/Sortino/Calmar** (가벼운 인상 보강 1) — `backend/app/services/backtest_service.py:_compute_risk_adjusted()` 신규. 일별 equity 수익률(`equity[i]/equity[i-1] - 1`) → Sharpe = `(avg/std) × √365`, Sortino = `(avg/하방std) × √365`(하방 = 음수 수익률만), Calmar = `연율화수익률 / (MDD/100)`. BacktestMetrics 스키마 3필드 추가, MA·RSI 둘 다 호출. 프론트 `Backtest.jsx`에 3-카드 행 추가(MetricCard에 `sub` 옵션 추가, `raColor` 헬퍼로 양수 빨강/음수 파랑/0 부근 회색). 검증: BTC MA 200일 → Sharpe -0.05/Sortino -0.06/Calmar -0.24(음수=손해, 합리적).
+- **P0-1 분석 카트** (Screener→Compare→Backtest 흐름 연결) — `contexts/AnalysisCart.jsx`(Provider + Context, localStorage 영속, 배열 + has·add·remove·toggle·clear) + `contexts/useAnalysisCart.js`(hook 분리, react-refresh/only-export-components 규칙 대응). 공용 `components/CartButton.jsx`(원형 +/✓ 토글, stopPropagation 필수). 헤더 우측에 `CartIndicator` — 아이콘+카운트 배지(red-500)+클릭 드롭다운(담긴 종목 ×해제·비교/백테스트 진입 버튼·비우기·바깥클릭/ESC). 종목 행/카드 5곳에 + 버튼: Dashboard 시세표·Market 3종 표(상승/하락/거래대금 + 산점도 극단값)·CoinList 사이드바·Screener 결과·Sectors 드릴다운 모달. Screener에 "결과 전체 카트 담기" 추가 액션. Compare/Backtest 진입 시 카트 종목으로 초기 selected 자동 채움(Compare 상위 5, Backtest 첫 종목).
+- **P0-2 Sectors 섹터 드릴다운** — `SectorDrilldownModal`(섹터명 클릭 → 모달로 소속 종목 표). useCoinStats(category) + useTickers(현재가) 결합, 거래대금 desc 정렬, 헤더에 종목 수·1개월 평균 수익률·24h 총 거래대금 통계, 카트 버튼·행 클릭 상세 이동, ESC/바깥/×로 닫힘. 백엔드 변경 없음(기존 데이터 재활용). 섹터 안내 카드를 `<button>`으로 전환, hover 시 brand 컬러 + → 아이콘.
+- **P1-1 Opportunity Feed** (Dashboard "오늘의 시그널" 액션 트리거) — Dashboard 최상단에 4-카드 신규. ⑴52주 신고/신저 경신(상위 30 한정, 빨강/파랑 분리) ⑵급등(전일 >+2%) ⑶안정 상승 모멘텀(1개월 +5% 이상·변동성 5% 이하·`return_1m/volatility` 비율 상위 — Sharpe 풍 단순화) ⑷섹터 로테이션(이번 달 vs 지난 달 ▲▼ 변화 큰 섹터). 신규 헬퍼 `StockChip`(클릭 상세 + 카트 통합 디자인), `SignalCard`(액센트 바·카운트·우상단 페이지 링크). 백엔드 신규 없이 기존 데이터(tickers·coinStats·monthly) 합성.
+- **공통**: 단계마다 `vite build`+`npm run lint`+`py_compile` 통과. 신규 ESLint 0. `pages.md`(로컬 메모) 신설로 페이지 구성·중복·개선 항목 트리 정리 + 큰 그림.
+- **다음 세션 시작 시점**: P1-2 Markowitz부터. 진행 흐름은 본 문서 "다음 작업" 참조.

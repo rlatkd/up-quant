@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react'
 import { getCandles } from '../api/candles'
 
 export function useCandles(market, interval = 'days', count = 60) {
-  const [candles, setCandles] = useState([])
-  const [loading, setLoading] = useState(true)
+  // loading은 (loadedKey !== currentKey)로 파생 — effect 안 setLoading(true) 제거하여
+  // cascading render(react-hooks/set-state-in-effect) 회피.
+  const currentKey = `${market}|${interval}|${count}`
+  const [state, setState] = useState({ data: [], loadedKey: null })
   useEffect(() => {
     if (!market) return
-    setLoading(true)
-    getCandles(market, interval, count).then(setCandles).finally(() => setLoading(false))
+    let cancelled = false
+    getCandles(market, interval, count).then(data => {
+      if (!cancelled) setState({ data, loadedKey: `${market}|${interval}|${count}` })
+    })
+    return () => { cancelled = true }
   }, [market, interval, count])
-  return { candles, loading }
+  return { candles: state.data, loading: state.loadedKey !== currentKey }
 }

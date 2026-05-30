@@ -34,15 +34,16 @@
 
 | 경로 | 페이지 | 설명 | 참고 스타일 |
 |------|--------|------|------------|
-| `/` | **Dashboard** (대시보드) | "지금 시장" 요약 + 하이라이트 진입점 — KPI 카드 · **히어로: 비트코인 추세 차트(전폭, 3·6·12개월)** · 공포·탐욕 게이지 · 시장 지배력 도넛 · 급등/급락 피드 · 하이라이트 3카드(이번 달 섹터 성과 · 거래대금 상위 Top5 · 52주 신고/신저 요약, 각각 깊은 페이지로 드릴다운) | Finviz |
-| `/market` | **Market** (마켓 현황) | 미니 차트 카드 · 52주 신고가/신저가 배지 · 상승률/하락률 테이블 · 거래대금 TOP5 · 거래대금 트리맵 | — |
-| `/sectors` | **Sectors** (섹터 분석) | 카테고리 누적수익률(월/분기/년, 세로 확대·곡선) · 월별 수익률 히트맵 · 상관관계 히트맵 · 리스크-수익 산점도 | — |
-| `/coins` | **CoinList** (코인 목록) | 검색 · 필터 탭 · 3단계 정렬 · 즐겨찾기(localStorage) · 52주 위치 바 · 스파크라인 | CoinGecko |
-| `/coins/:market` | **CoinDetail** (코인 상세) | 캔들차트(분/일/주/월 + MA·볼린저·RSI 토글) · 호가창 · 체결 내역 · 타 종목 상관관계 | Upbit |
-| `/compare` | **Compare** (비교 분석) | 최대 5종목 90일 누적 등락률 겹쳐 비교 (헤더 탭, 진입 시 BTC·ETH·XRP 기본 선택) | — |
-| `/backtest` | **Backtest** (백테스트) | MA크로스/RSI 전략·자산곡선·MDD·승률 (헤더 탭, 진입 시 BTC·MA크로스 자동 실행) | — |
-| `/screener` | **Screener** (스크리너) | 다중조건·프리셋 스크리닝 (헤더 탭, 진입 시 '급등주' 프리셋 자동 실행) | — |
+| `/` | **Dashboard** (대시보드) | **Opportunity Feed**(오늘의 시그널 4카드 — 52주 새 경신·급등·안정 상승 모멘텀·섹터 로테이션) · KPI 카드 · 이번 달 섹터 성과(→/sectors)·52주 신고/신저(→/market) · 시세 표(거래대금 상위 13, 카트 담기) + 급등·급락 피드 · 공포·탐욕 게이지·시장 지배력 도넛 | Finviz |
+| `/market` | **Market** (마켓 현황) | 미니 차트 카드 · 52주 신고/신저가 배지(상위 30) · 상승률/하락률/거래대금 표(각 10위, 카트 담기) · 거래대금 트리맵(상위 30) · **리스크-수익 산점도**(상위 100 + 극단값 표) | — |
+| `/sectors` | **Sectors** (섹터 분석) | 섹터 안내(클릭 → **소속 종목 드릴다운 모달**) · 카테고리 누적수익률(월/분기/년, 세로 확대) · 월별 수익률 히트맵 · 상관관계 히트맵 | — |
+| `/coins`·`/coins/:market` | **CoinList** (코인 목록, **master-detail**) | 좌 col-9 메인: 캔들+호가+체결+상관관계 (CoinDetailView, 인터벌 10종·MA/Bollinger/RSI 토글) / 우 col-3 슬림 사이드바: 검색·필터·정렬·★ 즐겨찾기·카트 담기·선택 강조 | Upbit |
+| `/compare` | **Compare** (비교 분석) | 최대 5종목 90일 누적 등락률 겹쳐 비교 (헤더 탭, 진입 시 **분석 카트 종목 우선** / 없으면 BTC·ETH·XRP) | — |
+| `/backtest` | **Backtest** (백테스트) | MA크로스/RSI 전략·자산곡선·MDD·승률 + **Sharpe/Sortino/Calmar 리스크 조정 지표** (헤더 탭, 진입 시 **카트 첫 종목** / 없으면 BTC·MA크로스 자동 실행) | — |
+| `/screener` | **Screener** (스크리너) | 다중조건·프리셋 스크리닝, 결과 행에 카트 담기 + "결과 전체 카트 담기" 액션 (헤더 탭, 진입 시 '급등주' 프리셋 자동 실행) | — |
 | `/help` | **Help** (도움말) | 페이지별 기능·동작·이동 경로 안내. 헤더 **? 도움말** 클릭 시 `window.open` 별도 창으로 표시 | — |
+
+> 전역 **분석 카트**(헤더 우측 인디케이터, localStorage 영속): 모든 종목 행/카드의 + 버튼으로 담아 Compare·Backtest 진입 시 자동 채움.
 
 ---
 
@@ -175,7 +176,8 @@ up-quant/
 │   ├── vite.config.js
 │   ├── eslint.config.js
 │   └── package.json
-└── references/                    # 기획서 · API 명세 · 엔지니어링 노트 · 레퍼런스 이미지
+├── references/                    # 기획서 · API 명세 · 엔지니어링 노트 · 레퍼런스 이미지
+└── pages.md                       # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 · P0~P3 로드맵 (보조 작업 문서)
 ```
 
 ---
@@ -330,7 +332,11 @@ CorrelationItem { market, korean_name, correlation(-1.0~1.0) }
 BacktestResult  { equity: EquityPoint[], trades: TradeRecord[], metrics: BacktestMetrics }
 EquityPoint     { time(s), value }              # 초기 100 기준 포트폴리오 가치
 TradeRecord     { time(s), side(BUY|SELL), price, pnl(%) }
-BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
+BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count, sharpe, sortino, calmar }
+# 리스크 조정 수익률(일별 equity 수익률 √365 연율화):
+#   sharpe  = (avg/std) × √365         — 변동성 단위당 수익
+#   sortino = (avg/하방std) × √365     — 손실 변동성만 패널티
+#   calmar  = 연율화 수익률 / (MDD/100) — 낙폭 대비 수익
 ```
 
 </details>
@@ -433,32 +439,34 @@ BacktestMetrics { total_return(%), mdd(%), win_rate(%), trade_count }
 - [x] **대시보드 상관관계 좌측 카테고리 열 폭**을 월별 수익률 표와 통일(`w-40`)
 
 **사용자 요청 (2026-05-29) — UI 업비트 톤 대개편 + 콘텐츠 재배치 — 완료 (빌드 검증, 브라우저 육안 미검증)**
-- [x] **액센트 업비트 블루화** — 전 페이지 `indigo`(보라빛) → `brand`(업비트 블루 `#1763b6`, 네이비 `#093687`). 색 토큰을 `index.css` `@theme`로 정의
-- [x] **전반 톤** — 페이지 배경 옅은 회색(`bg-gray-50`)·카드 라운드 완화(`rounded-md`)·본문 폰트 Pretendard
-- [x] **로고/아이콘** — 헤더는 흰색 기울임꼴 워드마크 `UPquant`(원형 아이콘 제거), favicon은 파란 원+흰 기울임 "UP", 헤더 탭 글씨 볼드
-- [x] **구분용 색 팔레트 통일** — `src/theme.js`(`SERIES`·`DOM_COLORS`)로 모아 Dashboard·Compare가 import (튀던 indigo/emerald/violet 정리)
-- [x] **공용 컴포넌트 토대** — `components/ui/`(PageHeader·Spinner·Card·StatCard), PageHeader를 전 페이지 상단에 적용
-- [x] **콘텐츠 재배치** — 대시보드 `누적→월별→상관`(원천→파생) · 마켓 "시장 현황"→"거래대금 비중 지도"·주요종목 "거래대금 상위" 라벨
+- [x] 액센트 업비트 블루화 · 페이지 배경 회색 · Pretendard · 로고 워드마크 · `theme.js` 팔레트 통일 · 공용 컴포넌트 토대 · 대시보드/마켓 콘텐츠 재배치
 
-**다음 작업 (기존)**
-- [x] **실제 화면 검증(정적)** — 2026-05-25 Edge headless 스크린샷으로 확인: 거래대금 정렬(코인목록 ↓·쑨→온도→BTC순) · 마켓 상단4개=거래대금 상위 · 코인상세 차트/호가 높이 균형(autoSize) · 스파크라인 변동성 · 트리맵 색상 범례 · 부가기능 허브(`/tools`) 탭.
-- [x] **UI 업비트 톤으로 개선** (색상·헤더마크·아이콘) — Phase 15 완료 (위 2026-05-29 블록)
-  - [x] **구분용 색 팔레트 통일** — `src/theme.js`(`SERIES`·`DOM_COLORS`)로 통일, Dashboard·Compare import
-- [ ] **ESLint `react-hooks/set-state-in-effect` 5건 해결** — 데이터 페칭 훅·Compare.jsx의 effect 내 `setLoading(true)` 패턴(사전 존재 이슈)
-- [ ] WebSocket 실시간 시세 중계 (FastAPI WS → 프론트 Context)
-- [x] **카테고리 데이터 실데이터화 + 분류 적용** (2026-05-26) — 업비트 데이터랩 '코인 분류' 스크랩으로 분류 소스 확정(수동 매핑·외부 API 대신), 월봉 동일가중 평균으로 월별/누적 실데이터화, 상관관계 히트맵 자동 실데이터화, "예시" 배지 제거
-  - [ ] (잔여) 리스크-수익 산점도 색상을 섹터별로 반영(현재는 1개월 수익률 색상) · 누적 변동성 드래그 표현 개선 · 분류 스냅샷 갱신 자동화
-- [ ] 에러/로딩 상태 UI 개선
+**Phase 17 — 빌드 복구 + 마켓·코인목록 개편 (2026-05-30 전반) — 완료**
+- [x] **Sectors.jsx 빌드 깨짐 복구** + 섹터 안내 카드 신설 (Phase 16의 부분 수정 잔재)
+- [x] **ESLint `set-state-in-effect` 5건** — `loading`을 `loadedKey !== currentKey` 파생값으로 (useTicker·useCandles·useCategoryCumulative·useCorrelation·Compare). effect에 cancelled cleanup 추가
+- [x] **PostCSS `@import must precede` 경고 + 실제 Pretendard 로드 실패** — Pretendard를 `index.html` `<link>`+`preconnect`로 이동
+- [x] **마켓 RANK_LIMIT 20→10** + 리스크-수익 산점도를 섹터→마켓 이식(`SCATTER_LIMIT=100` 신규)
+- [x] **코인목록 master-detail** — `CoinDetailView({market})` named export 분리 + `CoinList` 좌 상세 + 우 슬림 사이드바, `/coins`·`/coins/:market` 단일 컴포넌트
+
+**Phase 18 — IA·인사이트 + 허세용 지표 (2026-05-30 후반) — 완료**
+- [x] **백테스트 Sharpe/Sortino/Calmar** — 일별 equity 수익률 √365 연율화, BacktestMetrics 3필드 + 프론트 3-카드 행
+- [x] **P0-1 분석 카트** — `AnalysisCartContext`(localStorage) + 헤더 인디케이터/드롭다운 + 종목 행 5곳에 + 버튼 + Compare/Backtest 진입 시 자동 채움 + Screener "결과 전체 카트 담기"
+- [x] **P0-2 Sectors 섹터 드릴다운 모달** — 섹터 클릭 시 소속 종목 표(평균 수익률·총 거래대금 헤더 · 카트 버튼 · ESC 닫힘)
+- [x] **P1-1 Opportunity Feed** — Dashboard 최상단 4-카드 시그널(52주 새 경신·급등·안정 상승 모멘텀·섹터 로테이션) + `StockChip`/`SignalCard` 헬퍼
+
+**다음 작업 (다음 세션부터, P1-2~P3-2)**
+1. [ ] **P1-2 Markowitz 효율적 경계선** — Compare에 포트폴리오 최적화 시각화 (백엔드 `/analysis/portfolio` 신규, 무작위 가중 1000개 시뮬 + Sharpe 최대 ★)
+2. [ ] **P2-1 탐색 흐름 통합** — Market + Sectors + Screener를 단일 "탐색 페이지"로 (큰 리팩터)
+3. [ ] **P2-2 Coin 상세 강화** — 거래량 통계·시장 점유·추가 지표
+4. [ ] **P2-3 Backtest 포트폴리오 지원** — 여러 종목 가중 동시 백테스트
+5. [ ] **P3-1 상관관계 Network Graph** — force-directed (거래대금 상위 50 + |r|>0.7 엣지, 섹터별 색)
+6. [ ] **P3-2 K-means 종목 클러스터링** — 변동성·수익률·거래대금 군집
+7. [ ] **실제 화면 검증(브라우저 육안)** — Phase 12·13·14·15·16·17·18 누적 미검증
+8. [ ] **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context (+ 가격 깜빡임 펄스 허세)
+9. [ ] **에러/로딩 상태 UI 개선**
+10. [ ] **카테고리 잔여** — 산점도 섹터별 색 · 누적 변동성 드래그 · 분류 스냅샷 자동 갱신
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정
-
----
-
-## 진행 중 체크리스트 (2026-05-29 세션, 토큰 한도로 중단)
-
-다음 세션에서 이어서 진행. **⚠️ 0번을 먼저 해야 빌드 복구됨.**
-
-- [ ] **0. ⚠️(최우선) `Sectors.jsx` 빌드 깨짐 복구** — 리스크-수익 산점도를 마켓으로 옮기려고 import(`useNavigate`·`ScatterChart`·`Scatter`·`ZAxis`·`Tooltip`·`useCoinStats`)와 헬퍼(`returnColor`·`ScatterDot`·`quantile`·`bulkRange`·`padDomain`·`lerp`·`SCATTER_LIMIT`)를 **이미 삭제**했으나, `Sectors()` 컴포넌트가 아직 이들을 참조(`navigate`·`coinStats`·`statsLoading`·scatter 계산 블록·`{/* Risk-Return scatter */}` 섹션)함 → 컴포넌트에서 ⑴`navigate`/`useCoinStats`/`statsLoading` 제거(로딩 가드 `monthlyLoading`만) ⑵scatter 계산 블록·산점도 JSX 섹션 삭제 ⑶`return` 최상단에 **카테고리 설명 카드** 추가(헬퍼 `CAT_DESC`·`catColor`는 이미 추가됨, `monthly.categories` 순회).
 - [ ] **1. 마켓 현황**: 상승률/하락률/거래대금 순위 개수 축소(`RANK_LIMIT` 20→10) + **리스크-수익 분포(산점도)를 마켓으로 이동**(Sectors에서 들어낸 산점도 + 헬퍼 `quantile`/`bulkRange`/`padDomain`/`returnColor`/`ScatterDot`/`SCATTER_LIMIT` + `useCoinStats` + scatter 계산 + JSX를 `Market.jsx`로 이식).
 - [ ] **2. 섹터 분석**: 리스크-수익 분포 제거(위 0번) + 상단 카테고리 설명 추가(위 0번).
 - [ ] **3. 코인 목록 개편**: 업비트식 master-detail — 우측 코인 리스트 사이드바 + 메인에 선택 코인 상세(차트·호가·체결), 기존 인사이트(지표 토글·타종목 상관관계) 결합. `CoinDetail` 본문을 `CoinDetailView({market})`로 추출해 재사용 권장.

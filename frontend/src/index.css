@@ -1,6 +1,7 @@
 @import "tailwindcss";
-/* 업비트 톤 본문 글씨체 (한국 금융 UI 표준 산세리프) */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css");
+/* 본문 글씨체 Pretendard(업비트 톤, 한국 금융 UI 표준 산세리프)는 index.html의 <link>로 로드.
+   여기 CSS @import는 Tailwind v4가 @import "tailwindcss"를 인라인 전개하면서 다른 규칙들을
+   먼저 박아버려 "다른 규칙 뒤"가 되고, 표준상 무시되어 폰트가 실제로 안 불러와짐 → HTML <link>가 정답. */
 
 /* ── 디자인 토큰 ──────────────────────────────────────────
    액센트 = 업비트 블루 계열. 헤더 네이비(#093687)를 brand-700로 두고

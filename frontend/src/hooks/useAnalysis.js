@@ -13,13 +13,17 @@ export function useCategoryMonthly() {
 }
 
 export function useCategoryCumulative(period = '월') {
-  const [data, setData] = useState(EMPTY_RETURNS)
-  const [loading, setLoading] = useState(true)
+  // loading은 (loadedKey !== period)로 파생 — effect 안 setLoading(true) 제거하여
+  // cascading render(react-hooks/set-state-in-effect) 회피.
+  const [state, setState] = useState({ data: EMPTY_RETURNS, loadedKey: null })
   useEffect(() => {
-    setLoading(true)
-    getCategoryCumulative(period).then(setData).finally(() => setLoading(false))
+    let cancelled = false
+    getCategoryCumulative(period).then(data => {
+      if (!cancelled) setState({ data, loadedKey: period })
+    })
+    return () => { cancelled = true }
   }, [period])
-  return { data, loading }
+  return { data: state.data, loading: state.loadedKey !== period }
 }
 
 export function useCoinStats() {
@@ -32,12 +36,16 @@ export function useCoinStats() {
 }
 
 export function useCorrelation(market) {
-  const [data, setData] = useState([])
-  const [loading, setLoading] = useState(true)
+  // loading은 (loadedKey !== market)로 파생 — effect 안 setLoading(true) 제거하여
+  // cascading render(react-hooks/set-state-in-effect) 회피.
+  const [state, setState] = useState({ data: [], loadedKey: null })
   useEffect(() => {
     if (!market) return
-    setLoading(true)
-    getCorrelation(market).then(setData).finally(() => setLoading(false))
+    let cancelled = false
+    getCorrelation(market).then(data => {
+      if (!cancelled) setState({ data, loadedKey: market })
+    })
+    return () => { cancelled = true }
   }, [market])
-  return { data, loading }
+  return { data: state.data, loading: state.loadedKey !== market }
 }

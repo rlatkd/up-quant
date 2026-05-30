@@ -25,6 +25,7 @@ Thumbs.db
 *.md
 !README.md
 !CLAUDE.md
+!pages.md
 !references/*.md
 !docs/*.md
 

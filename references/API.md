@@ -235,7 +235,14 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 **TradeRecord**: `{ time: int(s), side: "BUY"|"SELL", price: float, pnl: float }` — `pnl`은 손익률(%), `SELL`일 때만 의미 있음
 
-**BacktestMetrics**: `{ total_return: float(%), mdd: float(%), win_rate: float(%), trade_count: int }`
+**BacktestMetrics**: `{ total_return: float(%), mdd: float(%), win_rate: float(%), trade_count: int, sharpe: float, sortino: float, calmar: float }`
+
+리스크 조정 수익률(일별 equity 수익률 기반, 암호화폐 365일 거래 → √365 연율화):
+- `sharpe`  = (평균 수익률 / 표준편차) × √365 — 변동성 단위당 수익. > 1 우수.
+- `sortino` = (평균 수익률 / 하방 표준편차) × √365 — 손실 변동성만 패널티.
+- `calmar`  = 연율화 수익률 / (MDD/100) — 낙폭 대비 수익.
+
+데이터 부족(샘플 < 2)·표준편차 0·MDD 0인 경우 0.0 반환.
 
 ---
 

@@ -6,6 +6,7 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import api from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAnalysisCart } from '../contexts/useAnalysisCart'
 
 import { SERIES as COLORS } from '../theme'
 
@@ -22,13 +23,19 @@ function Spinner() {
 }
 
 export default function Compare() {
+  const cart = useAnalysisCart()
   const { tickers, loading: tLoading } = useTickers()
-  // 진입 즉시 결과가 보이도록 메이저 3종을 기본 선택 (BTC·ETH·XRP)
-  const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
+  // 진입 즉시 결과가 보이도록 — 카트에 담긴 게 있으면 카트 상위 5종, 없으면 메이저 3종(BTC·ETH·XRP).
+  // 마운트 시 1회만 초기화 (이후 사용자가 토글한 selected를 카트가 덮지 않게).
+  const [selected, setSelected] = useState(() =>
+    cart.items.length > 0 ? cart.items.slice(0, 5) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
+  )
   const [query, setQuery] = useState('')
   // 종목별 캔들을 캐시해 두고, 선택이 바뀌어도 이미 받은 종목은 재요청하지 않는다.
   const [candlesByMarket, setCandlesByMarket] = useState({})
-  const [loadingChart, setLoadingChart] = useState(false)
+  // 로딩 상태는 별도 state 없이 (선택된 종목 중 아직 캐시에 없는 게 있는지)로 파생
+  // — effect 안 setLoadingChart(true) 제거하여 cascading render 회피.
+  const loadingChart = selected.some(m => !candlesByMarket[m])
 
   function toggleMarket(market) {
     setSelected(prev =>
@@ -46,20 +53,23 @@ export default function Compare() {
   }, [tickers, query])
 
   // 새로 선택된(아직 캐시에 없는) 종목만 가져와 캐시에 누적한다.
+  // loadingChart는 위에서 파생되므로 여기선 데이터만 받아 setState 한 번만.
   useEffect(() => {
     const missing = selected.filter(m => !candlesByMarket[m])
     if (missing.length === 0) return
-    setLoadingChart(true)
+    let cancelled = false
 
     Promise.all(
       missing.map(m => api.get(`/api/candles/${m}`, { params: { interval: 'days', count: 90 } }).then(r => ({ market: m, candles: r.data })))
     ).then(results => {
+      if (cancelled) return
       setCandlesByMarket(prev => {
         const next = { ...prev }
         results.forEach(({ market, candles }) => { next[market] = candles })
         return next
       })
-    }).finally(() => setLoadingChart(false))
+    })
+    return () => { cancelled = true }
   }, [selected, candlesByMarket])
 
   // 캐시된 캔들로부터 현재 선택된 종목들의 누적 등락률을 구성한다.

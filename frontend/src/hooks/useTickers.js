@@ -20,14 +20,18 @@ export function useMarketSummary() {
 }
 
 export function useTicker(market) {
-  const [ticker, setTicker] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // loading을 상태로 들지 않고 (loadedKey !== market)로 파생 — effect 안에서 setLoading(true)
+  // 호출이 사라져 cascading render(react-hooks/set-state-in-effect)를 회피.
+  const [state, setState] = useState({ data: null, loadedKey: null })
   useEffect(() => {
     if (!market) return
-    setLoading(true)
-    getTicker(market).then(setTicker).finally(() => setLoading(false))
+    let cancelled = false
+    getTicker(market).then(data => {
+      if (!cancelled) setState({ data, loadedKey: market })
+    })
+    return () => { cancelled = true }
   }, [market])
-  return { ticker, loading }
+  return { ticker: state.data, loading: state.loadedKey !== market }
 }
 
 export function useOrderbook(market) {

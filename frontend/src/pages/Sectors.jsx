@@ -1,10 +1,13 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
-import { useCategoryMonthly, useCategoryCumulative } from '../hooks/useAnalysis'
+import { useCategoryMonthly, useCategoryCumulative, useCoinStats } from '../hooks/useAnalysis'
+import { useTickers } from '../hooks/useTickers'
 import { SERIES } from '../theme'
+import CartButton from '../components/CartButton'
 
 // 카테고리(섹터)는 업비트 데이터랩 '코인 분류'에서 받아온 가변 목록(한글)이라,
 // 색상은 응답 categories 순서대로 팔레트를 매핑한다. 라벨은 섹터명(한글) 그대로 사용.
@@ -110,6 +113,117 @@ function HeatmapCell({ value }) {
 }
 
 const PERIOD_OPTIONS = ['월', '분기', '년']
+
+// 섹터 클릭 시 띄우는 모달 — 소속 종목 리스트(거래대금 desc) + 행 클릭 상세 + 카트 담기.
+// ESC·바깥 클릭으로 닫힘. 종목은 useCoinStats(category 포함) + useTickers(현재가) 결합.
+function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
+  const navigate = useNavigate()
+
+  // ESC로 닫기
+  useEffect(() => {
+    if (!sector) return
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [sector, onClose])
+
+  const rows = useMemo(() => {
+    if (!sector) return []
+    const tickerByMarket = Object.fromEntries(tickers.map(t => [t.market, t]))
+    return stats
+      .filter(s => s.category === sector)
+      .map(s => ({ ...s, ticker: tickerByMarket[s.market] }))
+      .filter(s => s.ticker)
+      .sort((a, b) => b.ticker.acc_trade_price_24h - a.ticker.acc_trade_price_24h)
+  }, [sector, stats, tickers])
+
+  if (!sector) return null
+
+  const avgReturn = rows.length
+    ? rows.reduce((s, r) => s + r.return_1m, 0) / rows.length
+    : 0
+  const totalVolume = rows.reduce((s, r) => s + r.ticker.acc_trade_price_24h, 0)
+
+  const goCoin = (m) => { onClose(); navigate(`/coins/${m}`) }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/40" />
+      <div
+        className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 헤더 */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold text-gray-800">{sector}</div>
+            <div className="text-xs text-gray-400 mt-0.5">
+              {rows.length}종 · 1개월 평균 수익률
+              <span className={`ml-1 font-medium ${avgReturn > 0 ? 'text-red-500' : avgReturn < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
+                {avgReturn > 0 ? '+' : ''}{avgReturn.toFixed(2)}%
+              </span>
+              <span className="text-gray-300 mx-1.5">·</span>
+              24h 총 거래대금 {Math.round(totalVolume / 1e8).toLocaleString()}억 KRW
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-300 hover:text-gray-600 text-2xl leading-none cursor-pointer">×</button>
+        </div>
+
+        {/* 종목 표 */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {rows.length === 0 ? (
+            <div className="py-16 text-center text-sm text-gray-400">소속 종목 없음</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 text-xs text-gray-400 z-10">
+                <tr>
+                  <th className="w-6"></th>
+                  <th className="px-3 py-2 text-left font-medium">종목</th>
+                  <th className="px-3 py-2 text-right font-medium">현재가</th>
+                  <th className="px-3 py-2 text-right font-medium">전일대비</th>
+                  <th className="px-3 py-2 text-right font-medium">1개월</th>
+                  <th className="px-3 py-2 text-right font-medium">거래대금(24h)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => {
+                  const t = r.ticker
+                  const cChange = t.change === 'RISE' ? 'text-red-500' : t.change === 'FALL' ? 'text-blue-500' : 'text-gray-600'
+                  const c1m = r.return_1m > 0 ? 'text-red-500' : r.return_1m < 0 ? 'text-blue-500' : 'text-gray-500'
+                  return (
+                    <tr
+                      key={r.market}
+                      onClick={() => goCoin(r.market)}
+                      className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="pl-2 pr-1 py-2 text-center"><CartButton market={r.market} /></td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-gray-800">{r.market.replace('KRW-', '')}</div>
+                        <div className="text-[11px] text-gray-400">{r.korean_name}</div>
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-medium ${cChange}`}>
+                        {t.trade_price.toLocaleString()}
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums ${cChange}`}>
+                        {(t.change_rate > 0 ? '+' : '') + (t.change_rate * 100).toFixed(2)}%
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums ${c1m}`}>
+                        {(r.return_1m > 0 ? '+' : '') + r.return_1m.toFixed(2)}%
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-600 tabular-nums">
+                        {Math.round(t.acc_trade_price_24h / 1e8).toLocaleString()}억
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // 카테고리별 누적 수익률 라인 차트.
 // recharts 기본 툴팁은 가장 가까운 데이터 점에 "스냅"(중점에서 값이 툭 바뀜)하지만,
@@ -244,13 +358,15 @@ function CumulativeChart({ rows, categories }) {
 }
 
 export default function Sectors() {
-  const navigate = useNavigate()
   const [cumPeriod, setCumPeriod] = useState('월')
+  const [activeSector, setActiveSector] = useState(null)  // 모달용 — 클릭된 섹터명
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
   const { data: cumulative, loading: cumLoading } = useCategoryCumulative(cumPeriod)
-  const { data: coinStats, loading: statsLoading } = useCoinStats()
+  // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가)
+  const { data: coinStats } = useCoinStats()
+  const { tickers } = useTickers()
 
-  if (monthlyLoading || statsLoading) {
+  if (monthlyLoading) {
     return (
       <div className="py-24 flex justify-center">
         <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
@@ -258,28 +374,35 @@ export default function Sectors() {
     )
   }
 
-  // Scatter: 거래대금 상위 N종만 대상으로, 분포 본체(IQR 펜스 안)만 산점도에 그리고
-  // 스케일 밖 종목은 아래 표로 분리한다. (전체 유니버스는 점이 너무 많아 분포가 산만)
-  const scatterUniverse = [...coinStats]
-    .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
-    .slice(0, SCATTER_LIMIT)
-  const xR = bulkRange(scatterUniverse.map(s => s.volatility))
-  const yR = bulkRange(scatterUniverse.map(s => s.return_1m))
-  const isOutlier = s => s.volatility < xR.lo || s.volatility > xR.hi || s.return_1m < yR.lo || s.return_1m > yR.hi
-  const inliers = scatterUniverse.filter(s => !isOutlier(s))
-  const outliers = [...scatterUniverse.filter(isOutlier)].sort((a, b) => b.return_1m - a.return_1m)
-  const scatterPoints = inliers.map(s => ({
-    x: s.volatility, y: s.return_1m,
-    color: returnColor(s.return_1m),
-    name: s.market.replace('KRW-', ''), category: s.category,
-  }))
-  const xs = inliers.map(s => s.volatility)
-  const ys = inliers.map(s => s.return_1m)
-  const xDomain = xs.length ? padDomain(Math.min(...xs), Math.max(...xs)) : [0, 5]
-  const yDomain = ys.length ? padDomain(Math.min(...ys), Math.max(...ys)) : [-10, 10]
-
   return (
     <div className="space-y-4">
+
+      {/* Category descriptions — 클릭 시 소속 종목 드릴다운 모달 */}
+      <div className="bg-white border border-gray-200 rounded-md p-5">
+        <div className="text-sm font-semibold text-gray-700 mb-1">섹터 안내</div>
+        <div className="text-xs text-gray-400 mb-4">
+          업비트 데이터랩 '코인 분류' 대분류 기준 · <span className="text-brand-500">섹터를 클릭</span>하면 소속 종목 리스트를 봅니다
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2">
+          {monthly.categories.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setActiveSector(cat)}
+              className="flex items-start gap-2 text-left p-2 -m-2 rounded-md hover:bg-gray-50 cursor-pointer transition-colors group"
+            >
+              <div className="w-2 h-2 mt-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(monthly.categories, cat) }} />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-gray-700 group-hover:text-brand-600 transition-colors">
+                  {cat}
+                  <span className="ml-1.5 text-[11px] text-gray-300 group-hover:text-brand-400">→</span>
+                </div>
+                <div className="text-xs text-gray-500">{CAT_DESC[cat] ?? '—'}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Cumulative returns */}
       <div className="bg-white border border-gray-200 rounded-md p-5">
@@ -353,98 +476,13 @@ export default function Sectors() {
         <CorrHeatmap rows={monthly.rows} categories={monthly.categories} />
       </div>
 
-      {/* Risk-Return scatter */}
-      <div className="bg-white border border-gray-200 rounded-md p-5">
-          <div className="text-sm font-semibold text-gray-700 mb-1">리스크-수익 분포</div>
-          <div className="text-xs text-gray-400 mb-3">거래대금 상위 {SCATTER_LIMIT}종 · X: 변동성(30일 표준편차) · Y: 1개월 수익률 · 색상: 1개월 수익률(상승 빨강/하락 파랑) · 극단값 종목은 아래 표 (호버로 종목·값)</div>
-          <ResponsiveContainer width="100%" height={360}>
-            <ScatterChart margin={{ top: 4, right: 24, bottom: 16, left: -4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-              <XAxis
-                dataKey="x"
-                type="number"
-                name="변동성"
-                domain={xDomain}
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickFormatter={v => Math.round(v * 10) / 10 + '%'}
-                label={{ value: '변동성 (%)', position: 'insideBottom', offset: -8, fontSize: 11, fill: '#9ca3af' }}
-              />
-              <YAxis
-                dataKey="y"
-                type="number"
-                name="수익률"
-                domain={yDomain}
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickFormatter={v => Math.round(v) + '%'}
-              />
-              <ZAxis range={[40, 40]} />
-              <Tooltip
-                cursor={{ strokeDasharray: '3 3' }}
-                content={({ payload }) => {
-                  if (!payload?.length) return null
-                  const d = payload[0].payload
-                  return (
-                    <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs shadow-sm">
-                      <div className="font-semibold text-gray-700 mb-1">{d.name}</div>
-                      {d.category && <div className="text-gray-500">{d.category}</div>}
-                      <div className="text-gray-600 mt-1">변동성 {d.x}% / 수익률 {d.y > 0 ? '+' : ''}{d.y}%</div>
-                    </div>
-                  )
-                }}
-              />
-              <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-              <Scatter data={scatterPoints} shape={<ScatterDot />} isAnimationActive={false} />
-            </ScatterChart>
-          </ResponsiveContainer>
-          <div className="flex flex-col items-center gap-1 mt-2 text-xs text-gray-400">
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-blue-500">하락</span>
-              <span className="h-2 w-32 rounded-full" style={{ background: 'linear-gradient(to right, #3b82f6, #94a3b8, #ef4444)' }} />
-              <span className="text-red-500">상승</span>
-            </div>
-            <span>1개월 수익률</span>
-          </div>
-
-          {/* 스케일 밖(극단값) 종목 — 분포에서 제외하고 표로 정리 */}
-          {outliers.length > 0 && (
-            <div className="mt-4 border-t border-gray-100 pt-3">
-              <div className="text-xs font-semibold text-gray-500 mb-2">
-                스케일 밖 종목 <span className="text-gray-400 font-normal">({outliers.length}) · 변동성·수익률이 극단적이라 위 분포에서 제외</span>
-              </div>
-              <div className="max-h-40 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-gray-400">
-                      <th className="text-left font-medium py-1 pr-3">종목</th>
-                      <th className="text-right font-medium py-1 px-3">변동성</th>
-                      <th className="text-right font-medium py-1 pl-3">1개월 수익률</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {outliers.map(s => (
-                      <tr
-                        key={s.market}
-                        onClick={() => navigate(`/coins/${s.market}`)}
-                        className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
-                      >
-                        <td className="py-1.5 pr-3 text-gray-700">
-                          <span className="font-medium">{s.market.replace('KRW-', '')}</span>
-                          <span className="text-gray-400 ml-1.5">{s.korean_name}</span>
-                        </td>
-                        <td className="py-1.5 px-3 text-right text-gray-600">{s.volatility.toFixed(2)}%</td>
-                        <td className={`py-1.5 pl-3 text-right font-medium ${
-                          s.return_1m > 0 ? 'text-red-500' : s.return_1m < 0 ? 'text-blue-500' : 'text-gray-400'
-                        }`}>
-                          {s.return_1m > 0 ? '+' : ''}{s.return_1m.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* 섹터 드릴다운 모달 — activeSector 있을 때만 렌더 */}
+      <SectorDrilldownModal
+        sector={activeSector}
+        onClose={() => setActiveSector(null)}
+        stats={coinStats}
+        tickers={tickers}
+      />
     </div>
   )
 }

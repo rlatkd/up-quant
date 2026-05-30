@@ -7,20 +7,25 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import { runMaCross, runRsi } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAnalysisCart } from '../contexts/useAnalysisCart'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
   { key: 'rsi', label: 'RSI 역추세' },
 ]
 
-function MetricCard({ label, value, color = 'text-gray-800' }) {
+function MetricCard({ label, value, color = 'text-gray-800', sub }) {
   return (
     <div className="bg-white border border-gray-200 rounded-md px-5 py-4 text-center">
       <div className="text-xs text-gray-400 mb-1.5">{label}</div>
       <div className={`text-xl font-bold ${color}`}>{value}</div>
+      {sub && <div className="text-[10px] text-gray-400 mt-1">{sub}</div>}
     </div>
   )
 }
+
+// 리스크 조정 지표 색상: 양수=빨강(좋음), 음수=파랑(나쁨), 0 부근=회색
+const raColor = v => (v > 0.1 ? 'text-red-500' : v < -0.1 ? 'text-blue-500' : 'text-gray-600')
 
 function Spinner() {
   return (
@@ -31,9 +36,11 @@ function Spinner() {
 }
 
 export default function Backtest() {
+  const cart = useAnalysisCart()
   const { tickers, loading: tLoading } = useTickers()
   const [strategy, setStrategy] = useState('ma')
-  const [market,   setMarket]   = useState('KRW-BTC')
+  // 진입 시 카트에 담긴 게 있으면 첫 종목, 없으면 BTC (마운트 1회만 — 이후 사용자 select 보존)
+  const [market,   setMarket]   = useState(() => cart.items[0] || 'KRW-BTC')
   const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200 })
   const [result,   setResult]   = useState(null)
   const [loading,  setLoading]  = useState(false)
@@ -193,6 +200,28 @@ export default function Backtest() {
             <MetricCard label="최대 낙폭(MDD)" value={'-' + result.metrics.mdd.toFixed(2) + '%'} color="text-blue-500" />
             <MetricCard label="승률" value={result.metrics.win_rate.toFixed(1) + '%'} />
             <MetricCard label="총 거래 횟수" value={result.metrics.trade_count + '회'} />
+          </div>
+
+          {/* 리스크 조정 수익률 (√365 연율화) */}
+          <div className="grid grid-cols-3 gap-4">
+            <MetricCard
+              label="샤프 비율 (Sharpe)"
+              value={result.metrics.sharpe.toFixed(2)}
+              color={raColor(result.metrics.sharpe)}
+              sub="평균 수익 ÷ 변동성 (높을수록 좋음, > 1 우수)"
+            />
+            <MetricCard
+              label="소르티노 (Sortino)"
+              value={result.metrics.sortino.toFixed(2)}
+              color={raColor(result.metrics.sortino)}
+              sub="평균 수익 ÷ 하방 변동성 (손실만 패널티)"
+            />
+            <MetricCard
+              label="칼마 (Calmar)"
+              value={result.metrics.calmar.toFixed(2)}
+              color={raColor(result.metrics.calmar)}
+              sub="연율화 수익률 ÷ MDD (낙폭 대비 효율)"
+            />
           </div>
 
           {/* 자산 곡선 */}

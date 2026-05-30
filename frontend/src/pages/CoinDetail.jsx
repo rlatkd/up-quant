@@ -183,9 +183,10 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-// ── 메인 컴포넌트 ─────────────────────────────────────────
-export default function CoinDetail() {
-  const { market } = useParams()
+// ── 본문 (재사용 가능 컴포넌트) ────────────────────────────
+// CoinList(master-detail)에서도 이 컴포넌트를 그대로 우측 메인에 끼워 쓴다.
+// market을 prop으로 받아 라우터 의존을 없앴고, 단독 라우트는 default export wrapper가 useParams로 넘긴다.
+export function CoinDetailView({ market }) {
   const [intervalIdx, setIntervalIdx] = useState(7)
   const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false })
 
@@ -374,4 +375,10 @@ export default function CoinDetail() {
       </div>
     </div>
   )
+}
+
+// 단독 라우트(`/coins/:market`)용 wrapper — URL의 market을 본문 컴포넌트에 그대로 넘긴다.
+export default function CoinDetail() {
+  const { market } = useParams()
+  return <CoinDetailView market={market} />
 }
