@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.logging import request_id, setup_logging
-from app.routers import markets, candles, analysis, backtest
+from app.routers import markets, candles, analysis, backtest, quant
 
 setup_logging()
 logger = logging.getLogger("upquant")
@@ -22,16 +22,29 @@ def _prefetch() -> None:
     - get_tickers(): 현재가 + 종목별 스파크라인(시간봉)
     - get_coin_stats(): 종목별 변동성·1개월수익률(일봉 팬아웃)
     - get_category_monthly()/cumulative(): 섹터 월봉 집계(261종 월봉 팬아웃, 콜드 ~1분).
-      monthly가 월봉 series를 캐시하면 cumulative 3종은 그 series를 재사용하므로 fetch는 1회."""
+      monthly가 월봉 series를 캐시하면 cumulative 3종은 그 series를 재사용하므로 fetch는 1회.
+    - 퀀트/ML 전역 분석(네트워크·PCA·클러스터·덴드로그램·모멘텀·페어·국면 + 기본 포트폴리오/GARCH):
+      일봉은 위에서 캐시돼 추가 fetch 없이 계산만 든다(수초). 첫 방문자도 콜드 없이 즉시 응답."""
     try:
-        from app.services import market_service, analysis_service
+        from app.services import market_service, analysis_service, quant_service
         n = len(market_service.get_tickers())
         m = len(analysis_service.get_coin_stats())
         c = len(analysis_service.get_category_monthly().rows)
         for period in ("월", "분기", "년"):
             analysis_service.get_category_cumulative(period)
+        # 퀀트 전역(파라미터 없는/기본) 분석 워밍.
+        quant_service.get_network()
+        quant_service.get_pca()
+        quant_service.get_clusters()
+        quant_service.get_dendrogram()
+        quant_service.get_momentum()
+        quant_service.get_pairs()
+        quant_service.get_regime()
+        quant_service.get_portfolio(["KRW-BTC", "KRW-ETH", "KRW-XRP"])
+        quant_service.get_garch("KRW-BTC")
         logger.info(
-            "prefetch 완료: tickers %d종 + coin_stats %d종 + 카테고리 월봉(%d개월·누적3종) 캐시 워밍",
+            "prefetch 완료: tickers %d종 + coin_stats %d종 + 카테고리 월봉(%d개월·누적3종) "
+            "+ 퀀트 9종(네트워크·PCA·클러스터·덴드로·모멘텀·페어·국면·포트폴리오·GARCH) 캐시 워밍",
             n, m, c,
         )
     except Exception as e:  # noqa: BLE001
@@ -81,6 +94,7 @@ app.include_router(markets.router)
 app.include_router(candles.router)
 app.include_router(analysis.router)
 app.include_router(backtest.router)
+app.include_router(quant.router)
 
 
 @app.get("/health")

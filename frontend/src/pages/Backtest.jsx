@@ -5,13 +5,15 @@ import {
   BarChart, Bar, Cell,
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import { runMaCross, runRsi } from '../api/backtest'
+import { runMaCross, runRsi, runPortfolio } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
 import { useAnalysisCart } from '../contexts/useAnalysisCart'
+import { SERIES } from '../theme'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
   { key: 'rsi', label: 'RSI 역추세' },
+  { key: 'portfolio', label: '포트폴리오 보유' },
 ]
 
 function MetricCard({ label, value, color = 'text-gray-800', sub }) {
@@ -80,33 +82,49 @@ export default function Backtest() {
   return (
     <div className="space-y-4">
 
-      {/* 설정 패널 */}
+      {/* 전략 선택 (공통) */}
       <div className="bg-white border border-gray-200 rounded-md p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-4">
-          백테스트 설정
+        <div className="text-sm font-semibold text-gray-700 mb-3">
+          전략 선택
           <InfoTooltip>
-            과거 일봉으로 매매 전략을 시뮬레이션합니다. 전략(MA 크로스 / RSI 역추세)·종목·파라미터를 정하고 [백테스트 실행]을 누르면 자산 곡선·총수익률·MDD(최대 낙폭)·승률·거래 내역이 나옵니다. 기본값(KRW-BTC·MA 크로스)으로 결과가 미리 실행돼 있습니다.
+            과거 일봉으로 전략을 시뮬레이션합니다. MA 크로스·RSI는 단일 종목 매매 전략이고, 포트폴리오 보유는 여러 종목을 비중대로 들고 있었을 때의 성과(매수보유/리밸런스)를 봅니다. 분석 카트에 담은 종목이 포트폴리오로 들어옵니다.
           </InfoTooltip>
         </div>
-        <div className="grid grid-cols-4 gap-4">
-          {/* 전략 */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1.5 block">전략</label>
-            <div className="flex gap-1">
-              {STRATEGIES.map(s => (
-                <button
-                  key={s.key}
-                  onClick={() => setStrategy(s.key)}
-                  className={`flex-1 py-1.5 text-xs rounded font-medium cursor-pointer transition-colors ${
-                    strategy === s.key ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="flex gap-1.5">
+          {STRATEGIES.map(s => (
+            <button
+              key={s.key}
+              onClick={() => setStrategy(s.key)}
+              className={`px-4 py-1.5 text-sm rounded font-medium cursor-pointer transition-colors ${
+                strategy === s.key ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
+      {strategy === 'portfolio' ? (
+        <PortfolioBacktest tickers={tickers} cart={cart} />
+      ) : (
+        <SingleStrategyBody
+          strategy={strategy} market={market} setMarket={setMarket} tickers={tickers}
+          params={params} setParam={setParam} loading={loading} handleRun={handleRun}
+          result={result} equityData={equityData} tradeData={tradeData}
+        />
+      )}
+    </div>
+  )
+}
+
+// 단일 종목 전략(MA/RSI) 설정 + 결과 — 기존 본문을 그대로 분리.
+function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setParam, loading, handleRun, result, equityData, tradeData }) {
+  return (
+    <div className="space-y-4">
+      {/* 설정 패널 */}
+      <div className="bg-white border border-gray-200 rounded-md p-5">
+        <div className="grid grid-cols-3 gap-4">
           {/* 종목 */}
           <div>
             <label className="text-xs text-gray-500 mb-1.5 block">종목</label>
@@ -298,6 +316,147 @@ export default function Backtest() {
         <div className="bg-white border border-gray-200 rounded-md py-16 text-center text-sm text-gray-400">
           설정을 입력하고 백테스트를 실행하세요
         </div>
+      )}
+    </div>
+  )
+}
+
+const REBAL_OPTIONS = [
+  { v: 0,  label: '매수보유' },
+  { v: 7,  label: '7일 리밸런스' },
+  { v: 30, label: '30일 리밸런스' },
+]
+
+// 포트폴리오 보유 백테스트 — 분석 카트의 종목을 비중대로 들었을 때의 자산 곡선.
+// (TODO: 비중 프리셋을 퀀트랩 Markowitz 최적해/비교분석과 통합 — 사용자 메모, 엔지니어링노트 §28)
+function PortfolioBacktest({ tickers, cart }) {
+  const init = cart.items.length >= 2 ? cart.items.slice(0, 10) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
+  const [markets, setMarkets] = useState(init)
+  // 비중(%) — 종목별. 기본 균등. 균등이면 동일가중 벤치마크와 곡선이 겹친다(정상).
+  const [wmap, setWmap] = useState(() => Object.fromEntries(init.map(m => [m, +(100 / init.length).toFixed(1)])))
+  const [rebalance, setRebalance] = useState(0)
+  const [count, setCount] = useState(180)
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const nmap = Object.fromEntries(tickers.map(t => [t.market, t.korean_name]))
+
+  function equalize(ms) {
+    const w = +(100 / ms.length).toFixed(1)
+    setWmap(Object.fromEntries(ms.map(m => [m, w])))
+  }
+  function addMarket(m) {
+    if (!m || markets.includes(m) || markets.length >= 10) return
+    const next = [...markets, m]; setMarkets(next); equalize(next)
+  }
+  function removeMarket(m) {
+    const next = markets.filter(x => x !== m); setMarkets(next); equalize(next)
+  }
+
+  async function run() {
+    if (markets.length < 1) return
+    setLoading(true)
+    try {
+      const weights = markets.map(m => wmap[m] ?? 0)
+      const data = await runPortfolio({ markets, weights, count, rebalance_days: rebalance })
+      setResult(data)
+    } finally { setLoading(false) }
+  }
+  useEffect(() => {
+    Promise.resolve().then(run)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const equityData = result?.equity.map(e => ({
+    time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
+    value: e.value, benchmark: e.benchmark,
+  })) ?? []
+
+  return (
+    <div className="space-y-4">
+      {/* 구성 */}
+      <div className="bg-white border border-gray-200 rounded-md p-5">
+        <div className="text-sm font-semibold text-gray-700 mb-3">포트폴리오 구성</div>
+        <div className="space-y-1.5 mb-3">
+          {markets.map((m, i) => (
+            <div key={m} className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SERIES[i % SERIES.length] }} />
+              <span className="w-28 text-sm text-gray-700">{m.replace('KRW-', '')} <span className="text-gray-400 text-xs">{nmap[m]}</span></span>
+              <input type="number" min={0} max={100} value={wmap[m] ?? 0}
+                onChange={e => setWmap(prev => ({ ...prev, [m]: Number(e.target.value) }))}
+                className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-brand-400" />
+              <span className="text-xs text-gray-400">%</span>
+              <button onClick={() => removeMarket(m)} className="text-gray-300 hover:text-red-500 text-lg leading-none cursor-pointer ml-1">×</button>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value="" onChange={e => addMarket(e.target.value)}
+            className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-500 cursor-pointer focus:outline-none focus:border-brand-400">
+            <option value="">+ 종목 추가</option>
+            {tickers.filter(t => !markets.includes(t.market)).slice(0, 80).map(t => (
+              <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} · {t.korean_name}</option>
+            ))}
+          </select>
+          <button onClick={() => equalize(markets)} className="px-2.5 py-1.5 text-xs rounded bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer">균등 비중</button>
+          <select value={rebalance} onChange={e => setRebalance(Number(e.target.value))}
+            className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:border-brand-400">
+            {REBAL_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+          <input type="number" value={count} min={30} max={500} onChange={e => setCount(Number(e.target.value))}
+            title="일봉 기간" className="w-24 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400" />
+          <button onClick={run} disabled={loading || markets.length < 1}
+            className="px-5 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {loading ? '실행 중...' : '백테스트 실행'}
+          </button>
+        </div>
+        <div className="text-[11px] text-gray-400 mt-2">※ 비중 합은 자동 정규화됩니다. 균등 비중이면 동일가중 벤치마크와 곡선이 겹칩니다.</div>
+      </div>
+
+      {loading && <Spinner />}
+
+      {result && !loading && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <MetricCard label="총 수익률" value={(result.total_return >= 0 ? '+' : '') + result.total_return.toFixed(2) + '%'} color={result.total_return >= 0 ? 'text-red-500' : 'text-blue-500'} />
+            <MetricCard label="동일가중 벤치마크" value={(result.benchmark_return >= 0 ? '+' : '') + result.benchmark_return.toFixed(2) + '%'} color={result.benchmark_return >= 0 ? 'text-red-500' : 'text-blue-500'} />
+            <MetricCard label="최대 낙폭(MDD)" value={'-' + result.mdd.toFixed(2) + '%'} color="text-blue-500" />
+            <MetricCard label="샤프" value={result.sharpe.toFixed(2)} color={raColor(result.sharpe)} />
+            <MetricCard label="연율 변동성" value={result.volatility.toFixed(1) + '%'} />
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-md p-5">
+            <div className="text-sm font-semibold text-gray-700 mb-0.5">자산 곡선</div>
+            <div className="text-xs text-gray-400 mb-4">초기 100 기준 · 포트폴리오 vs 동일가중 벤치마크</div>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={equityData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(equityData.length / 8)} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'value' ? '포트폴리오' : '벤치마크']} contentStyle={{ fontSize: 12 }} />
+                <ReferenceLine y={100} stroke="#e5e7eb" />
+                <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-md p-5">
+            <div className="text-sm font-semibold text-gray-700 mb-3">종목별 기여</div>
+            <div className="space-y-2">
+              {result.contributions.map((c, i) => (
+                <div key={c.market} className="flex items-center gap-3 text-sm">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SERIES[i % SERIES.length] }} />
+                  <span className="w-32 text-gray-700">{c.market.replace('KRW-', '')} <span className="text-gray-400 text-xs">{c.korean_name}</span></span>
+                  <span className="w-20 text-xs text-gray-500">비중 {(c.weight * 100).toFixed(1)}%</span>
+                  <span className={`w-24 text-right font-medium tabular-nums ${c.asset_return >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {(c.asset_return >= 0 ? '+' : '') + c.asset_return.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

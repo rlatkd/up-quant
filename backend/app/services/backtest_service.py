@@ -1,8 +1,18 @@
 import math
 from statistics import mean, pstdev
 
-from app.schemas.backtest import BacktestResult, EquityPoint, TradeRecord, BacktestMetrics
-from app.services import candle_service
+import numpy as np
+
+from app.schemas.backtest import (
+    AssetContribution,
+    BacktestMetrics,
+    BacktestResult,
+    EquityPoint,
+    PortfolioBacktestPoint,
+    PortfolioBacktestResult,
+    TradeRecord,
+)
+from app.services import candle_service, market_service
 
 # 암호화폐는 365일 거래 → 일별 수익률을 √365로 연율화 (전통 주식은 √252)
 _ANNUALIZE_SQRT = math.sqrt(365)
@@ -208,4 +218,77 @@ def run_rsi_strategy(
             sortino=sortino,
             calmar=calmar,
         ),
+    )
+
+
+# ── 포트폴리오 백테스트 (여러 종목 가중 보유) ──────────────────
+def _empty_portfolio(rebalance_days: int) -> PortfolioBacktestResult:
+    return PortfolioBacktestResult(
+        equity=[], total_return=0.0, benchmark_return=0.0, mdd=0.0, sharpe=0.0,
+        volatility=0.0, contributions=[], rebalance_days=rebalance_days, n_obs=0,
+    )
+
+
+def run_portfolio(markets: list[str], weights: list[float] | None = None,
+                  count: int = 180, rebalance_days: int = 0) -> PortfolioBacktestResult:
+    """여러 종목을 목표 비중으로 보유했을 때의 자산 곡선. rebalance_days=0이면 매수보유(비중 드리프트),
+    >0이면 그 주기로 목표 비중 리밸런스. 동일가중 매수보유를 벤치마크로 함께 반환."""
+    series: dict[str, tuple[list[float], list[int]]] = {}
+    for m in markets:
+        candles = candle_service.get_candles(m, "days", count=count)
+        closes = [c.close for c in candles]
+        if len(closes) >= 5 and all(c > 0 for c in closes):
+            series[m] = (closes, [int(c.timestamp / 1000) for c in candles])
+    kept = [m for m in markets if m in series]
+    if not kept:
+        return _empty_portfolio(rebalance_days)
+
+    t_len = min(len(series[m][0]) for m in kept)
+    closes = np.array([series[m][0][-t_len:] for m in kept], dtype=float).T  # (T, n)
+    times = series[kept[0]][1][-t_len:]
+    n = len(kept)
+
+    if weights and len(weights) == n and sum(weights) > 0:
+        w = np.array(weights, dtype=float)
+        w = w / w.sum()
+    else:
+        w = np.ones(n) / n
+
+    def _sim(weight_vec: np.ndarray) -> np.ndarray:
+        units = weight_vec / closes[0]   # t0 총가치 1
+        vals = np.empty(t_len)
+        for t in range(t_len):
+            v = float((units * closes[t]).sum())
+            vals[t] = v
+            if rebalance_days > 0 and t > 0 and t % rebalance_days == 0:
+                units = weight_vec * v / closes[t]  # 목표 비중 복원
+        return vals
+
+    port = _sim(w) * 100
+    bench = _sim(np.ones(n) / n) * 100
+
+    rets = port[1:] / port[:-1] - 1
+    vol = float(rets.std(ddof=1) * math.sqrt(_ANNUALIZE_DAYS) * 100) if rets.size > 1 else 0.0
+    sharpe = float(rets.mean() / rets.std() * math.sqrt(_ANNUALIZE_DAYS)) if rets.size > 1 and rets.std() > 0 else 0.0
+    mdd = _compute_mdd([float(v) for v in port])
+
+    nmap = {t.market: t.korean_name for t in market_service.get_tickers()}
+    contributions = [
+        AssetContribution(
+            market=kept[i], korean_name=nmap.get(kept[i], kept[i]),
+            weight=round(float(w[i]), 4),
+            asset_return=round(float(closes[-1, i] / closes[0, i] - 1) * 100, 2),
+        )
+        for i in range(n)
+    ]
+    equity = [
+        PortfolioBacktestPoint(time=times[t], value=round(float(port[t]), 2), benchmark=round(float(bench[t]), 2))
+        for t in range(t_len)
+    ]
+    return PortfolioBacktestResult(
+        equity=equity,
+        total_return=round(float(port[-1] - 100), 2),
+        benchmark_return=round(float(bench[-1] - 100), 2),
+        mdd=mdd, sharpe=round(sharpe, 2), volatility=round(vol, 2),
+        contributions=contributions, rebalance_days=rebalance_days, n_obs=int(t_len),
     )

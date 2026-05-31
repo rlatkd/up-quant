@@ -2,20 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAnalysisCart } from '../../contexts/useAnalysisCart'
 
-// 상단 메인 탭 = "시장을 본다"
+// 상단 메인 탭 = "시장을 본다". 탐색=마켓현황·섹터·스크리너 통합(P2-1).
+// match: 현재 경로가 이 탭에 속하는지 — 탐색은 /explore 외 기존 딥링크(/market·/sectors·/screener)도 포함.
 const mainTabs = [
-  { to: '/',        label: '대시보드',  end: true },
-  { to: '/market',  label: '마켓 현황', end: false },
-  { to: '/sectors', label: '섹터 분석', end: false },
-  { to: '/coins',   label: '코인 목록', end: false },
+  { to: '/',        label: '대시보드',  match: (p) => p === '/' },
+  { to: '/explore', label: '탐색',      match: (p) => ['/explore', '/market', '/sectors', '/screener'].some(x => p.startsWith(x)) },
+  { to: '/coins',   label: '코인 목록', match: (p) => p.startsWith('/coins') },
 ]
 
-// "서비스 더보기" 드롭다운 = "내가 분석한다" 도구 (아이콘 + 설명)
+// "서비스 더보기" 드롭다운 = "내가 분석한다" 도구 (아이콘 + 설명). 스크리너는 탐색으로 이동.
 const moreItems = [
-  {
-    to: '/screener', label: '스크리너', desc: '조건에 맞는 종목만 필터링',
-    icon: <path d="M3 5h18M6 12h12M10 19h4" />,
-  },
   {
     to: '/compare', label: '비교 분석', desc: '여러 종목 수익률을 겹쳐 비교',
     icon: <path d="M5 20V9M12 20V4M19 20v-8" />,
@@ -152,22 +148,20 @@ function Header() {
           <img src="/logo.png" alt="UPquant" className="h-13 w-auto" />
         </Link>
         <nav className="flex h-full items-stretch">
-          {mainTabs.map((t) => (
-            <NavLink
-              key={t.to}
-              to={t.to}
-              end={t.end}
-              className={({ isActive }) =>
-                `flex items-center px-4 text-[14px] border-b-2 transition-colors ${
-                  isActive
-                    ? 'text-white border-transparent font-bold'
-                    : 'text-white/70 border-transparent hover:text-white/80 font-semibold'
-                }`
-              }
-            >
-              {t.label}
-            </NavLink>
-          ))}
+          {mainTabs.map((t) => {
+            const isActive = t.match(pathname)
+            return (
+              <Link
+                key={t.to}
+                to={t.to}
+                className={`flex items-center px-4 text-[14px] border-b-2 border-transparent transition-colors ${
+                  isActive ? 'text-white font-bold' : 'text-white/70 hover:text-white/80 font-semibold'
+                }`}
+              >
+                {t.label}
+              </Link>
+            )
+          })}
 
           {/* 서비스 더보기 — 드롭다운 (스크리너·비교분석·백테스트) */}
           <div
@@ -213,6 +207,21 @@ function Header() {
               </div>
             )}
           </div>
+
+          {/* 퀀트 랩 — 별도 강조 탭 (정량 분석 플래그십) */}
+          <NavLink
+            to="/quant"
+            className={({ isActive }) =>
+              `flex items-center gap-1.5 px-4 text-[14px] border-b-2 border-transparent transition-colors ${
+                isActive ? 'text-white font-bold' : 'text-amber-200/90 hover:text-white font-semibold'
+              }`
+            }
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 3v16a2 2 0 0 0 2 2h14" /><path d="M18 8l-5 5-3-3-4 4" />
+            </svg>
+            퀀트 랩
+          </NavLink>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <CartIndicator />

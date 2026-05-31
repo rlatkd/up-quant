@@ -6,7 +6,8 @@ import { DOM_COLORS } from '../theme'
 import CartButton from '../components/CartButton'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
-const PRICE_TABLE_N = 13    // 시세 표(거래대금 상위) 행 수 — 우측 위젯 스택 높이에 맞춤(2-컬럼 정렬)
+const PRICE_TABLE_N = 10    // 시세 표(거래대금 상위) 행 수
+const MOVERS_N = 23         // 급등·급락 각 목록 개수 — 시세 표 10행 높이를 채우도록(행 높이 차이 보정)
 const W52_SCAN = 30         // 52주 경신 집계 대상 = 거래대금 상위 N (마켓 현황과 동일 기준)
 
 const fmtRate = r => (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
@@ -572,7 +573,7 @@ export default function Dashboard() {
         </div>
         <div className="bg-white border border-gray-200 rounded-md p-5 flex flex-col">
           <div className="text-sm font-semibold text-gray-700 mb-3">급등 · 급락</div>
-          <MoversFeed tickers={tickers} count={13} />
+          <MoversFeed tickers={tickers} count={MOVERS_N} />
         </div>
       </div>
 

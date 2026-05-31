@@ -28,3 +28,29 @@ class BacktestResult(BaseModel):
     equity: list[EquityPoint]
     trades: list[TradeRecord]
     metrics: BacktestMetrics
+
+
+# ── 포트폴리오 백테스트 (여러 종목 가중 보유) ──────────────────
+class PortfolioBacktestPoint(BaseModel):
+    time: int          # unix seconds
+    value: float       # 가중 포트폴리오 가치 (100 시작)
+    benchmark: float   # 동일가중 매수보유 벤치마크 (100 시작)
+
+
+class AssetContribution(BaseModel):
+    market: str
+    korean_name: str
+    weight: float          # 목표 비중 0~1
+    asset_return: float    # 해당 종목 기간 수익률 (%)
+
+
+class PortfolioBacktestResult(BaseModel):
+    equity: list[PortfolioBacktestPoint]
+    total_return: float        # 포트폴리오 총수익률 (%)
+    benchmark_return: float    # 동일가중 벤치마크 총수익률 (%)
+    mdd: float                 # 최대 낙폭 (%)
+    sharpe: float              # 연율화 샤프
+    volatility: float          # 연율화 변동성 (%)
+    contributions: list[AssetContribution]
+    rebalance_days: int        # 리밸런스 주기(일), 0=매수보유(드리프트)
+    n_obs: int

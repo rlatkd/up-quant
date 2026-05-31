@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts'
-import { useTicker, useOrderbook, useTrades } from '../hooks/useTickers'
+import { useTicker, useTickers, useOrderbook, useTrades } from '../hooks/useTickers'
 import { useCandles } from '../hooks/useCandles'
-import { useCorrelation } from '../hooks/useAnalysis'
+import { useCorrelation, useCoinStats } from '../hooks/useAnalysis'
+import { useGarch } from '../hooks/useQuant'
 
 // ── 기술적 지표 계산 ──────────────────────────────────────
 function calcMA(closes, period) {
@@ -183,6 +184,19 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+const pctSigned = (v) => (v > 0 ? '+' : '') + (v ?? 0).toFixed(2) + '%'
+
+// 주요 지표 한 칸
+function Metric({ label, value, color = 'text-gray-800', hint }) {
+  return (
+    <div>
+      <div className="text-[11px] text-gray-400 mb-0.5">{label}</div>
+      <div className={`text-base font-bold tabular-nums ${color}`}>{value}</div>
+      {hint && <div className="text-[10px] text-gray-400 mt-0.5">{hint}</div>}
+    </div>
+  )
+}
+
 // ── 본문 (재사용 가능 컴포넌트) ────────────────────────────
 // CoinList(master-detail)에서도 이 컴포넌트를 그대로 우측 메인에 끼워 쓴다.
 // market을 prop으로 받아 라우터 의존을 없앴고, 단독 라우트는 default export wrapper가 useParams로 넘긴다.
@@ -195,6 +209,10 @@ export function CoinDetailView({ market }) {
   const { trades }            = useTrades(market)
   const { candles }           = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
   const { data: corrData }    = useCorrelation(market)
+  // 추가 지표용 — 전체 티커(시장 점유율), 코인 통계(변동성·수익률), GARCH(리스크)
+  const { tickers }           = useTickers()
+  const { data: coinStats }   = useCoinStats()
+  const { data: garch }       = useGarch(market)
 
   if (loading || !ticker) return (
     <div className="py-24 flex justify-center">
@@ -205,6 +223,13 @@ export function CoinDetailView({ market }) {
   const isRise = ticker.change === 'RISE'
   const isFall = ticker.change === 'FALL'
   const priceColor = isRise ? 'text-red-500' : isFall ? 'text-blue-500' : 'text-gray-700'
+
+  // 추가 지표
+  const stat = coinStats.find(s => s.market === market)
+  const totalVol = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
+  const share = totalVol ? (ticker.acc_trade_price_24h / totalVol) * 100 : 0
+  const w52span = ticker.w52_high - ticker.w52_low
+  const w52pos = w52span > 0 ? Math.max(0, Math.min(100, (ticker.trade_price - ticker.w52_low) / w52span * 100)) : 0
 
   function toggleIndicator(key) {
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }))
@@ -241,6 +266,39 @@ export function CoinDetailView({ market }) {
                 <div className={`font-medium ${color}`}>{value}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 주요 지표 + 52주 위치 — 변동성·수익률·시장점유 + GARCH 리스크(퀀트 통합) */}
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-md p-4">
+          <div className="text-sm font-semibold text-gray-700 mb-3">주요 지표</div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Metric label="30일 변동성" value={stat ? stat.volatility.toFixed(2) + '%' : '—'} hint="일간 표준편차" />
+            <Metric label="1개월 수익률" value={stat ? pctSigned(stat.return_1m) : '—'}
+              color={stat ? (stat.return_1m >= 0 ? 'text-red-500' : 'text-blue-500') : 'text-gray-800'} />
+            <Metric label="시장 점유율" value={share.toFixed(2) + '%'} hint="24h 거래대금 비중" />
+            <Metric label="GARCH 연변동성" value={garch.current_vol_annual ? garch.current_vol_annual.toFixed(1) + '%' : '—'}
+              hint={garch.persistence ? `지속성 ${garch.persistence.toFixed(2)}` : '예측 중'} />
+            <Metric label="1일 95% VaR" value={garch.var_95 ? '-' + garch.var_95.toFixed(2) + '%' : '—'}
+              color="text-blue-500" hint="예상 최대손실" />
+          </div>
+        </div>
+        <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 rounded-md p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-semibold text-gray-700">52주 위치</div>
+            {ticker.is_52w_high && <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium">오늘 신고가</span>}
+            {ticker.is_52w_low && <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">오늘 신저가</span>}
+          </div>
+          <div className="relative h-2 rounded-full" style={{ background: 'linear-gradient(to right, #bfdbfe, #f3f4f6, #fecaca)' }}>
+            <div className="absolute top-1/2 w-3 h-3 rounded-full bg-brand-500 border-2 border-white shadow"
+              style={{ left: `${w52pos}%`, transform: 'translate(-50%, -50%)' }} />
+          </div>
+          <div className="flex justify-between text-[11px] mt-2">
+            <span className="text-blue-500">{ticker.w52_low.toLocaleString()}</span>
+            <span className="text-gray-400">현재 {w52pos.toFixed(0)}%</span>
+            <span className="text-red-500">{ticker.w52_high.toLocaleString()}</span>
           </div>
         </div>
       </div>

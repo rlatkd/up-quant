@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from app.schemas.backtest import BacktestResult
+from app.schemas.backtest import BacktestResult, PortfolioBacktestResult
 from app.services import backtest_service
 
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
@@ -25,3 +25,20 @@ def rsi_strategy(
     count: int      = Query(200,  ge=60, le=500),
 ):
     return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count)
+
+
+@router.get("/portfolio", response_model=PortfolioBacktestResult)
+def portfolio(
+    markets: str = Query(..., description="쉼표 구분 마켓 코드 (예: KRW-BTC,KRW-ETH)"),
+    weights: str | None = Query(None, description="쉼표 구분 비중 (markets와 같은 개수, 생략 시 동일가중)"),
+    count: int = Query(180, ge=30, le=500, description="일봉 기간"),
+    rebalance_days: int = Query(0, ge=0, le=90, description="리밸런스 주기(일), 0=매수보유"),
+):
+    codes = [m.strip().upper() for m in markets.split(",") if m.strip()][:10]
+    w = None
+    if weights:
+        try:
+            w = [float(x) for x in weights.split(",") if x.strip()]
+        except ValueError:
+            w = None
+    return backtest_service.run_portfolio(codes, w, count, rebalance_days)
