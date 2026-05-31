@@ -1,10 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Treemap,
-  ScatterChart, Scatter, ZAxis, CartesianGrid, ReferenceLine,
+  AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap,
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import { useCoinStats } from '../hooks/useAnalysis'
 import CartButton from '../components/CartButton'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
@@ -12,46 +10,9 @@ const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 const RANK_LIMIT = 10      // 상승률·하락률·거래대금 표기 순위 (한 화면에 부담 없는 분량으로 축소)
 const TREEMAP_LIMIT = 30   // 시장 현황 트리맵에 표시할 메이저 종목 수 (거래대금 상위)
 const W52_LIMIT = 30       // 52주 신고/신저 배지 대상 = 거래대금 상위 N종 (유동성 낮은 잡코인 신저가 노이즈 제외)
-const SCATTER_LIMIT = 100  // 리스크-수익 산점도 대상 = 거래대금 상위 N종 (261종 전부는 너무 빽빽해 메이저+준메이저로 좁힘)
 
 function fmtRate(r) {
   return (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
-}
-
-// 리스크-수익 산점도 유틸 — 대부분 종목이 한곳에 모이고 일부만 극단값이라,
-// 축은 분포 본체(IQR 펜스)까지만 그리고 스케일 밖 종목은 아래 표로 분리한다.
-function quantile(sorted, p) {
-  const i = (sorted.length - 1) * p
-  const lo = Math.floor(i), hi = Math.ceil(i)
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)
-}
-function bulkRange(vals, k = 2) {
-  if (!vals.length) return { lo: 0, hi: 1 }
-  const s = [...vals].sort((a, b) => a - b)
-  const q1 = quantile(s, 0.25), q3 = quantile(s, 0.75), iqr = q3 - q1
-  return {
-    lo: Math.max(s[0], q1 - k * iqr),
-    hi: Math.min(s[s.length - 1], q3 + k * iqr),
-  }
-}
-const padDomain = (lo, hi) => { const p = (hi - lo) * 0.05 || 0.5; return [lo - p, hi + p] }
-
-// 색상 = 1개월 수익률(상승 빨강·하락 파랑·보합 회색, 절대값 클수록 진하게).
-const lerp = (a, b, t) => Math.round(a + (b - a) * t)
-function returnColor(r) {
-  const t = Math.min(1, Math.abs(r) / 30)
-  const base = [148, 163, 184]
-  const tgt = r >= 0 ? [239, 68, 68] : [59, 130, 246]
-  return `rgb(${lerp(base[0], tgt[0], t)}, ${lerp(base[1], tgt[1], t)}, ${lerp(base[2], tgt[2], t)})`
-}
-
-function ScatterDot({ cx, cy, payload }) {
-  return (
-    <g>
-      <circle cx={cx} cy={cy} r={9} fill="transparent" />
-      <circle cx={cx} cy={cy} r={3.5} fill={payload.color} fillOpacity={0.8} stroke="#fff" strokeWidth={0.5} />
-    </g>
-  )
 }
 
 function changeColor(change) {
@@ -264,7 +225,6 @@ function TreemapCell({ x, y, width, height, name, change_rate }) {
 export default function Market() {
   const { tickers, loading } = useTickers()
   const navigate = useNavigate()
-  const { data: coinStats, loading: statsLoading } = useCoinStats()
 
   if (loading) return (
     <div className="py-24 flex justify-center">
@@ -283,25 +243,6 @@ export default function Market() {
   }))
   const goCoin = m => navigate(`/coins/${m}`)
 
-  // Scatter: 거래대금 상위 N종만 대상으로, 분포 본체(IQR 펜스)만 산점도에 그리고
-  // 스케일 밖 종목은 아래 표로 분리한다. (전체 유니버스는 점이 너무 많아 분포가 산만)
-  const scatterUniverse = [...coinStats]
-    .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
-    .slice(0, SCATTER_LIMIT)
-  const xR = bulkRange(scatterUniverse.map(s => s.volatility))
-  const yR = bulkRange(scatterUniverse.map(s => s.return_1m))
-  const isOutlier = s => s.volatility < xR.lo || s.volatility > xR.hi || s.return_1m < yR.lo || s.return_1m > yR.hi
-  const inliers = scatterUniverse.filter(s => !isOutlier(s))
-  const outliers = [...scatterUniverse.filter(isOutlier)].sort((a, b) => b.return_1m - a.return_1m)
-  const scatterPoints = inliers.map(s => ({
-    x: s.volatility, y: s.return_1m,
-    color: returnColor(s.return_1m),
-    name: s.market.replace('KRW-', ''), category: s.category,
-  }))
-  const xs = inliers.map(s => s.volatility)
-  const ys = inliers.map(s => s.return_1m)
-  const xDomain = xs.length ? padDomain(Math.min(...xs), Math.max(...xs)) : [0, 5]
-  const yDomain = ys.length ? padDomain(Math.min(...ys), Math.max(...ys)) : [-10, 10]
 
   return (
     <div className="space-y-4">
@@ -358,108 +299,16 @@ export default function Market() {
         </div>
       </div>
 
-      {/* 리스크-수익 분포 (구 섹터분석에서 이식) */}
-      <div className="bg-white border border-gray-200 rounded-md p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-1">리스크-수익 분포</div>
-        <div className="text-xs text-gray-400 mb-3">거래대금 상위 {SCATTER_LIMIT}종 · X: 변동성(30일 표준편차) · Y: 1개월 수익률 · 색상: 1개월 수익률(상승 빨강/하락 파랑) · 극단값 종목은 아래 표 (호버로 종목·값)</div>
-        {statsLoading ? (
-          <div className="h-[360px] flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
+      {/* 리스크-수익 분포·군집은 분석>클러스터링으로 일원화(중복 제거) */}
+      <Link to="/analysis#cluster" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-gray-700">리스크-수익 분포 · 종목 군집</div>
+            <div className="text-xs text-gray-400 mt-0.5">변동성 × 수익률 산점도와 K-means 군집은 <span className="text-brand-600 font-medium">분석 → 클러스터링</span>에서 봅니다</div>
           </div>
-        ) : (
-          <>
-            <ResponsiveContainer width="100%" height={360}>
-              <ScatterChart margin={{ top: 4, right: 24, bottom: 16, left: -4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis
-                  dataKey="x"
-                  type="number"
-                  name="변동성"
-                  domain={xDomain}
-                  tick={{ fontSize: 11, fill: '#9ca3af' }}
-                  tickFormatter={v => Math.round(v * 10) / 10 + '%'}
-                  label={{ value: '변동성 (%)', position: 'insideBottom', offset: -8, fontSize: 11, fill: '#9ca3af' }}
-                />
-                <YAxis
-                  dataKey="y"
-                  type="number"
-                  name="수익률"
-                  domain={yDomain}
-                  tick={{ fontSize: 11, fill: '#9ca3af' }}
-                  tickFormatter={v => Math.round(v) + '%'}
-                />
-                <ZAxis range={[40, 40]} />
-                <Tooltip
-                  cursor={{ strokeDasharray: '3 3' }}
-                  content={({ payload }) => {
-                    if (!payload?.length) return null
-                    const d = payload[0].payload
-                    return (
-                      <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs shadow-sm">
-                        <div className="font-semibold text-gray-700 mb-1">{d.name}</div>
-                        {d.category && <div className="text-gray-500">{d.category}</div>}
-                        <div className="text-gray-600 mt-1">변동성 {d.x}% / 수익률 {d.y > 0 ? '+' : ''}{d.y}%</div>
-                      </div>
-                    )
-                  }}
-                />
-                <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-                <Scatter data={scatterPoints} shape={<ScatterDot />} isAnimationActive={false} />
-              </ScatterChart>
-            </ResponsiveContainer>
-            <div className="flex flex-col items-center gap-1 mt-2 text-xs text-gray-400">
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-blue-500">하락</span>
-                <span className="h-2 w-32 rounded-full" style={{ background: 'linear-gradient(to right, #3b82f6, #94a3b8, #ef4444)' }} />
-                <span className="text-red-500">상승</span>
-              </div>
-              <span>1개월 수익률</span>
-            </div>
-
-            {/* 스케일 밖(극단값) 종목 — 분포에서 제외하고 표로 정리 */}
-            {outliers.length > 0 && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <div className="text-xs font-semibold text-gray-500 mb-2">
-                  스케일 밖 종목 <span className="text-gray-400 font-normal">({outliers.length}) · 변동성·수익률이 극단적이라 위 분포에서 제외</span>
-                </div>
-                <div className="max-h-40 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-gray-400">
-                        <th className="w-6"></th>
-                        <th className="text-left font-medium py-1 pr-3">종목</th>
-                        <th className="text-right font-medium py-1 px-3">변동성</th>
-                        <th className="text-right font-medium py-1 pl-3">1개월 수익률</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {outliers.map(s => (
-                        <tr
-                          key={s.market}
-                          onClick={() => goCoin(s.market)}
-                          className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
-                        >
-                          <td className="pl-1 pr-1 py-1.5 text-center"><CartButton market={s.market} /></td>
-                          <td className="py-1.5 pr-3 text-gray-700">
-                            <span className="font-medium">{s.market.replace('KRW-', '')}</span>
-                            <span className="text-gray-400 ml-1.5">{s.korean_name}</span>
-                          </td>
-                          <td className="py-1.5 px-3 text-right text-gray-600">{s.volatility.toFixed(2)}%</td>
-                          <td className={`py-1.5 pl-3 text-right font-medium ${
-                            s.return_1m > 0 ? 'text-red-500' : s.return_1m < 0 ? 'text-blue-500' : 'text-gray-400'
-                          }`}>
-                            {s.return_1m > 0 ? '+' : ''}{s.return_1m.toFixed(2)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          <span className="text-brand-600 text-sm font-medium whitespace-nowrap">분석으로 →</span>
+        </div>
+      </Link>
     </div>
   )
 }

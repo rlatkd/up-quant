@@ -91,8 +91,8 @@ const GUIDE = [
     ],
   },
   {
-    route: '/compare',
-    title: '비교 분석',
+    route: '/tools?tab=compare',
+    title: '비교 분석 (도구 → 비교)',
     summary: '여러 코인의 수익률을 같은 출발선에서 겹쳐 비교합니다.',
     features: [
       { tone: 'action', name: '종목 선택 (Pill 버튼)', desc: '코인 버튼을 클릭해 최대 5개까지 선택/해제합니다. 선택하면 고유 색이 배정됩니다.' },
@@ -101,8 +101,8 @@ const GUIDE = [
     ],
   },
   {
-    route: '/backtest',
-    title: '전략 백테스트',
+    route: '/tools?tab=backtest',
+    title: '전략 백테스트 (도구 → 백테스트)',
     summary: '과거 데이터로 매매 전략의 성과를 시뮬레이션합니다.',
     features: [
       { tone: 'action', name: '전략 선택', desc: '[MA 크로스] 또는 [RSI 역추세] 중 선택합니다. 선택에 따라 아래 입력 항목이 바뀝니다.' },

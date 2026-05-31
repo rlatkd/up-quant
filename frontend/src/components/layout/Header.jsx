@@ -1,24 +1,44 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAnalysisCart } from '../../contexts/useAnalysisCart'
 
-// 상단 메인 탭 = "시장을 본다". 탐색=마켓현황·섹터·스크리너 통합(P2-1).
-// match: 현재 경로가 이 탭에 속하는지 — 탐색은 /explore 외 기존 딥링크(/market·/sectors·/screener)도 포함.
+// 상단 메인 탭: 대시보드 · 탐색(마켓·섹터·스크리너) · 코인 목록.
+// 분석(관찰형)은 "분석" 드롭다운(시장 구조 / 팩터·전략 2페이지), 설정형은 "서비스 더보기" 드롭다운.
 const mainTabs = [
   { to: '/',        label: '대시보드',  match: (p) => p === '/' },
   { to: '/explore', label: '탐색',      match: (p) => ['/explore', '/market', '/sectors', '/screener'].some(x => p.startsWith(x)) },
   { to: '/coins',   label: '코인 목록', match: (p) => p.startsWith('/coins') },
 ]
 
-// "서비스 더보기" 드롭다운 = "내가 분석한다" 도구 (아이콘 + 설명). 스크리너는 탐색으로 이동.
-const moreItems = [
+// "분석" 드롭다운 = 관찰형(시장 전체 자동 분석). 두 페이지로 분리.
+const analysisItems = [
   {
-    to: '/compare', label: '비교 분석', desc: '여러 종목 수익률을 겹쳐 비교',
+    to: '/analysis/structure', label: '시장 구조', desc: '상관 네트워크·PCA 요인·클러스터링·시장 국면',
+    icon: <g><circle cx="6" cy="7" r="2.2" /><circle cx="18" cy="6" r="2.2" /><circle cx="12" cy="18" r="2.2" /><path d="M7.7 8.4 11 16M16.4 7.7 13 16M8 6.6h8" /></g>,
+  },
+  {
+    to: '/analysis/factor', label: '팩터·전략', desc: '모멘텀 팩터·페어트레이딩',
+    icon: <path d="M4 18l5-5 4 3 7-8M14 8h6v6" />,
+  },
+]
+
+// "서비스 더보기" 드롭다운 = 설정형(내가 종목/전략을 골라 돌리는) 정량 분석. 빨간 점 + 호버 패널.
+const toolItems = [
+  {
+    to: '/tools?tab=portfolio', label: '포트폴리오 최적화', desc: 'Markowitz 효율적 경계선 — 종목 비중 최적화',
+    icon: <g><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 1 9 9h-9z" /></g>,
+  },
+  {
+    to: '/tools?tab=backtest', label: '백테스트', desc: '전략·포트폴리오 과거 성과 시뮬레이션',
+    icon: <g><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 1.5M12 2.5h0" /></g>,
+  },
+  {
+    to: '/tools?tab=compare', label: '비교 분석', desc: '여러 종목 수익률을 겹쳐 비교',
     icon: <path d="M5 20V9M12 20V4M19 20v-8" />,
   },
   {
-    to: '/backtest', label: '백테스트', desc: '매매 전략의 과거 성과 시뮬레이션',
-    icon: <g><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 1.5M12 2.5h0" /></g>,
+    to: '/tools?tab=garch', label: '변동성 (GARCH)', desc: '종목 변동성 예측 · VaR',
+    icon: <path d="M3 17l5-6 4 3 5-7M3 21h18" />,
   },
 ]
 
@@ -105,7 +125,7 @@ function CartIndicator() {
               <div className="border-t border-gray-100 p-2 grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
-                  onClick={() => go('/compare')}
+                  onClick={() => go('/tools?tab=compare')}
                   className="px-2 py-1.5 text-xs font-medium bg-brand-500 text-white rounded hover:bg-brand-600 cursor-pointer transition-colors"
                   title={cart.count > 5 ? '상위 5종만 자동 선택됩니다' : ''}
                 >
@@ -113,7 +133,7 @@ function CartIndicator() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => go('/backtest')}
+                  onClick={() => go('/tools?tab=backtest')}
                   className="px-2 py-1.5 text-xs font-medium bg-brand-500 text-white rounded hover:bg-brand-600 cursor-pointer transition-colors"
                 >
                   백테스트 →
@@ -130,16 +150,58 @@ function CartIndicator() {
   )
 }
 
-function Header() {
-  const [moreOpen, setMoreOpen] = useState(false)
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const moreActive = moreItems.some(m => pathname.startsWith(m.to))
+// 헤더 호버 드롭다운 (아이콘+설명 패널). 분석·서비스 더보기 둘 다 이걸로.
+function NavDropdown({ label, redDot = false, active, items, go }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div
+      className="relative flex items-stretch"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className={`flex items-center ${redDot ? 'gap-4' : 'gap-1.5'} px-4 text-[14px] border-b-2 border-transparent transition-colors cursor-pointer ${
+          active ? 'text-white font-bold' : 'text-white/70 hover:text-white/80 font-semibold'
+        }`}
+      >
+        <span className="relative">
+          {label}
+          {redDot && <span className="absolute -top-0.5 -right-2.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
+        </span>
+        <svg width="10" height="6" viewBox="0 0 10 6" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 z-50 w-[320px] rounded-lg border border-gray-100 bg-white p-2 shadow-lg">
+          {items.map(m => (
+            <button
+              key={m.to}
+              type="button"
+              onClick={() => { setOpen(false); go(m.to) }}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-gray-50 cursor-pointer"
+            >
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
+                <Icon>{m.icon}</Icon>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-gray-800">{m.label}</span>
+                <span className="block text-xs text-gray-400">{m.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-  function go(to) {
-    setMoreOpen(false)
-    navigate(to)
-  }
+function Header() {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const anlActive = ['/analysis', '/quant'].some(x => pathname.startsWith(x))
+  const toolsActive = ['/tools', '/compare', '/backtest'].some(x => pathname.startsWith(x))
 
   return (
     <header className="bg-[#093687] text-white sticky top-0 z-50">
@@ -163,65 +225,10 @@ function Header() {
             )
           })}
 
-          {/* 서비스 더보기 — 드롭다운 (스크리너·비교분석·백테스트) */}
-          <div
-            className="relative flex items-stretch"
-            onMouseEnter={() => setMoreOpen(true)}
-            onMouseLeave={() => setMoreOpen(false)}
-          >
-            <button
-              type="button"
-              className={`flex items-center gap-1.5 px-4 text-[14px] border-b-2 border-transparent transition-colors cursor-pointer ${
-                moreActive
-                  ? 'text-white font-bold'
-                  : 'text-white/70 hover:text-white/80 font-semibold'
-              }`}
-            >
-              <span className="relative">
-                서비스 더보기
-                <span className="absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-red-500" />
-              </span>
-              <svg width="10" height="6" viewBox="0 0 10 6" className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`}>
-                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
-            {moreOpen && (
-              <div className="absolute top-full left-0 z-50 w-[320px] rounded-lg border border-gray-100 bg-white p-2 shadow-lg">
-                {moreItems.map(m => (
-                  <button
-                    key={m.to}
-                    type="button"
-                    onClick={() => go(m.to)}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-gray-50 cursor-pointer"
-                  >
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
-                      <Icon>{m.icon}</Icon>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-gray-800">{m.label}</span>
-                      <span className="block text-xs text-gray-400">{m.desc}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 퀀트 랩 — 별도 강조 탭 (정량 분석 플래그십) */}
-          <NavLink
-            to="/quant"
-            className={({ isActive }) =>
-              `flex items-center gap-1.5 px-4 text-[14px] border-b-2 border-transparent transition-colors ${
-                isActive ? 'text-white font-bold' : 'text-amber-200/90 hover:text-white font-semibold'
-              }`
-            }
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 3v16a2 2 0 0 0 2 2h14" /><path d="M18 8l-5 5-3-3-4 4" />
-            </svg>
-            퀀트 랩
-          </NavLink>
+          {/* 분석(관찰형) — 시장 구조 / 팩터·전략 두 페이지 드롭다운 */}
+          <NavDropdown label="분석" active={anlActive} items={analysisItems} go={navigate} />
+          {/* 서비스 더보기(설정형) — 종목/전략 선택 도구 (빨간 점) */}
+          <NavDropdown label="서비스 더보기" redDot active={toolsActive} items={toolItems} go={navigate} />
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <CartIndicator />

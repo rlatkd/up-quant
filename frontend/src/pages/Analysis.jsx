@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   ScatterChart, Scatter, BarChart, Bar, LineChart, Line, ComposedChart, Area,
   XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea,
@@ -87,7 +88,7 @@ function CoinPicker({ selected, setSelected, max = 6 }) {
   )
 }
 
-function PortfolioSection() {
+export function PortfolioSection() {
   const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const { data, loading } = usePortfolio(selected)
 
@@ -370,7 +371,7 @@ function Dendrogram({ dn }) {
 }
 
 // ── 5) GARCH 변동성 예측 ──────────────────────────────────────
-function GarchSection() {
+export function GarchSection() {
   const [market, setMarket] = useState('KRW-BTC')
   const { tickers } = useTickers()
   const { data, loading } = useGarch(market)
@@ -604,38 +605,51 @@ function RegimeSection() {
   )
 }
 
-// ── 페이지 (서브탭) ───────────────────────────────────────────
-const TABS = [
-  { id: 'portfolio', label: '포트폴리오', Comp: PortfolioSection },
-  { id: 'network', label: '상관 네트워크', Comp: NetworkSection },
-  { id: 'pca', label: 'PCA 요인', Comp: PcaSection },
-  { id: 'cluster', label: '클러스터링', Comp: ClusterSection },
-  { id: 'garch', label: '변동성(GARCH)', Comp: GarchSection },
-  { id: 'momentum', label: '모멘텀 팩터', Comp: MomentumSection },
-  { id: 'pairs', label: '페어트레이딩', Comp: PairsSection },
-  { id: 'regime', label: '시장 국면', Comp: RegimeSection },
+// ── 분석 허브 (관찰형 — 유니버스에서 자동 계산해 "보여주는" 분석) ──
+// 인풋(종목/전략 선택)이 필요한 설정형 도구(포트폴리오·GARCH·백테스트·비교)는 헤더 "도구"
+// 드롭다운 → Tools.jsx로 분리. 여기는 시장 전체를 자동 분석해 보여주는 것만.
+// 탭 상태는 URL 쿼리(?tab=)가 단일 출처.
+const GROUPS = [
+  {
+    label: '시장 구조', tabs: [
+      { id: 'network', label: '상관 네트워크', Comp: NetworkSection },
+      { id: 'pca', label: 'PCA 요인', Comp: PcaSection },
+      { id: 'cluster', label: '클러스터링', Comp: ClusterSection },
+      { id: 'regime', label: '시장 국면', Comp: RegimeSection },
+    ],
+  },
+  {
+    label: '팩터·전략', tabs: [
+      { id: 'momentum', label: '모멘텀 팩터', Comp: MomentumSection },
+      { id: 'pairs', label: '페어트레이딩', Comp: PairsSection },
+    ],
+  },
 ]
+export default function Analysis() {
+  const { hash } = useLocation()
+  // 크로스링크(/analysis#cluster 등)로 진입 시 해당 섹션으로 스크롤.
+  useEffect(() => {
+    if (!hash) return
+    const el = document.getElementById(hash.slice(1))
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [hash])
 
-export default function QuantLab() {
-  const [tab, setTab] = useState('portfolio')
-  const Active = TABS.find(t => t.id === tab).Comp
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
-        title="퀀트 랩"
-        description="포트폴리오 최적화·요인분석·클러스터링·변동성예측·팩터·페어·국면 — numpy/scipy/sklearn/statsmodels/arch/hmmlearn 기반 정량 분석"
+        title="분석"
+        description="시장 전체를 자동 분석해 보여주는 인사이트 — 상관 네트워크·PCA 요인·클러스터링·시장 국면·모멘텀 팩터·페어트레이딩 (종목을 직접 고르는 도구는 헤더 '도구'에서)"
       />
-      <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-px">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-3 py-1.5 text-sm rounded-t font-medium cursor-pointer transition-colors ${
-              tab === t.id ? 'bg-white border border-gray-200 border-b-white text-brand-600 -mb-px' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <Active />
+      {GROUPS.map(g => (
+        <section key={g.label} className="space-y-4">
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 pb-1.5">{g.label}</h2>
+          {g.tabs.map(t => (
+            <div key={t.id} id={t.id} className="scroll-mt-20">
+              <t.Comp />
+            </div>
+          ))}
+        </section>
+      ))}
     </div>
   )
 }

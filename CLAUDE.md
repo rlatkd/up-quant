@@ -60,7 +60,7 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **로고/헤더**: 로고는 **흰색 기울임꼴 워드마크 `UPquant`**(별도 아이콘 마크 없음 — 사용자가 "업비트엔 그런 거 없다"고 명시). `font-black italic tracking-wide`(사용자 "더 굵게" 요청, Phase 16). 동그란 "UP" 아이콘은 **favicon/앱 아이콘에만**(파란 원 + 흰 기울임 UP, 파일은 `public/favicon.png` — Phase 16에 `favicon.svg`→PNG 교체, `index.html`이 PNG 참조). 헤더 탭 글씨 볼드(비활성 `font-semibold`·활성 `font-bold`).
 - **공용 UI 컴포넌트**(`src/components/ui/`): `PageHeader`(페이지 상단 제목+설명, **전 페이지 적용**)·`Spinner`·`Card`/`CardHeader`·`StatCard`. 카드 스타일·간격·제목을 한 곳에서 통일하려는 토대. (Card/StatCard는 생성만 해뒀고 기존 KpiCard/MetricCard는 이미 톤이 맞아 미적용 — 필요 시 교체.)
 - **커서**: 클릭 가능 요소(`button`/`select`/onClick 행)에만 `cursor-pointer`, disabled엔 `disabled:cursor-not-allowed`. **일반 텍스트엔 `cursor-default`를 넣지 말 것**(브라우저 기본값에 위임, I-beam 신호 보존). 앵커는 기본 pointer라 생략.
-- 라우트: `/`(대시보드) `/market` `/sectors`(섹터 분석) `/coins` `/coins/:market` **+ `/compare`·`/backtest`·`/screener`(분석 도구)** 는 Layout(헤더) 안. `/help`(도움말)만 헤더 **? 버튼**에서 `window.open`으로 띄우는 **별도 창**이라 Layout 밖 단독 라우트. **헤더 구성(Phase 16)**: 메인 탭 4개(대시보드·마켓현황·섹터분석·코인목록) + **"서비스 더보기" 드롭다운**(스크리너·비교분석·백테스트 — 아이콘+설명 패널, 업비트 "서비스 더보기" 톤). 더보기 라벨 우측 상단에 **빨간 점**(`bg-red-500`), 클릭 시 chevron 회전+패널 열림, 바깥 클릭(투명 fixed 오버레이)·항목 선택 시 닫힘. 현재 경로가 도구 3종 중 하나면 더보기 탭이 활성 표시(`useLocation`). 헤더는 `sticky top-0 z-50`로 고정. (과거 7탭 2그룹 평면 노출 → 사용자 요청으로 도구 3종을 드롭다운에 수납. 엔지니어링노트 §22.) 도구 3종은 **진입 즉시 디폴트 결과**(비교=BTC·ETH·XRP 기본선택 / 백테스트=BTC·MA크로스 자동실행 / 스크리너='급등주' 자동실행) + 제목 옆 `?` 안내 툴팁(공용 `components/InfoTooltip.jsx`).
+- 라우트(**Phase 20 재편**): `/`(대시보드) `/explore`(탐색) `/coins` `/coins/:market` `/quant`(퀀트 랩) **+ `/compare`·`/backtest`(분석 도구)** 는 Layout(헤더) 안. `/help`(도움말)만 헤더 **? 버튼**에서 `window.open`으로 띄우는 **별도 창**이라 Layout 밖 단독 라우트. **탐색 통합**: 과거 별도였던 `/market`·`/sectors`·`/screener`는 모두 `Explore`(`/explore`) 단일 페이지의 **URL 기반 서브탭**(시장 현황·섹터·스크리너)으로 렌더 — 경로가 곧 초기 탭이라 기존 딥링크·대시보드 링크 호환. **헤더 구성**: 메인 탭 3개(대시보드·탐색·코인목록) + **"서비스 더보기" 드롭다운**(비교분석·백테스트 — 스크리너는 탐색으로 이동) + **별도 강조 "퀀트 랩" 탭**(앰버색·차트 아이콘, 정량 분석 플래그십). 헤더는 `sticky top-0 z-50` 고정. 더보기 도구·퀀트 랩은 **진입 즉시 디폴트 결과** + 제목 옆 `?` 안내 툴팁(공용 `components/InfoTooltip.jsx`). (헤더 진화: 과거 6탭 평면 → 4탭+더보기 드롭다운(Phase 16) → 탐색 통합·퀀트 랩 추가(Phase 20). 엔지니어링노트 §22.)
 - **페이지 역할 분담(Phase 16)**: **대시보드 = 시세 표(메인) + 인사이트 위젯 + 드릴다운 진입점**. 3블록 — ⑴KPI 4 ⑵**2-컬럼: 왼쪽(2/3) 시세 표**(거래대금 상위 16종 — 순위·코인·현재가·24h·1일 스파크라인, 행클릭→상세) + **오른쪽(1/3) 위젯 스택**(공포탐욕 게이지·시장 지배력 도넛·급등급락) ⑶**하단 2-컬럼**(이번 달 섹터 성과→`/sectors` / 52주 신고·신저 요약→`/market`). 깊은 분석(카테고리 3종·산점도)은 섹터분석으로 보내고, 메인은 **빽빽한 시세 표를 중심 데이터 덩어리로** 둬 세로를 채우고 시장 전체를 보여준다(진짜 크립토 대시보드 정석). 전부 프리페치된 tickers·월봉 기반이라 콜드 0. (한때 "비트코인 단독 추세 히어로"를 뒀으나 "한 코인만 대표하는 게 어색·여전히 휑함" 피드백으로 시세 표로 교체 — 엔지니어링노트 §22.) **섹터 분석(`/sectors`, 신설) = top-down 인사이트**(카테고리 누적·월별·상관 + 리스크-수익 분포) — 과거 대시보드에 다 몰려 무겁던 카테고리 3종+산점도를 이리로 이동. **마켓 현황 = 순위·트리맵·52주**. 급등급락(대시보드 요약) ↔ 상승/하락 상위(마켓 전체 순위)는 "한눈 요약 ↔ 자세히" 관계.
 
 ## 작업 규칙
@@ -95,16 +95,17 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **빌드 복구 + 잡정리(2026-05-30 전반)** — Phase 17. ⑴Phase 16 잔여 깨짐 복구(Sectors.jsx의 useNavigate/useCoinStats/scatter 헬퍼 미import 정리, 섹터 안내 카드 추가) ⑵ESLint `set-state-in-effect` 5건 해결(loading을 `loadedKey !== currentKey` 파생값으로 — useTicker/useCandles/useCategoryCumulative/useCorrelation/Compare. effect에 cancelled cleanup 추가) ⑶PostCSS `@import must precede all other statements` 경고 해결(Pretendard `@import`를 `index.html` `<link>`로 이동 — Tailwind v4가 펼치며 밀려서 무시되던 실제 폰트 로드 실패도 함께 수정) ⑷마켓 순위 표 RANK_LIMIT 20→10 ⑸리스크-수익 산점도를 섹터→마켓현황으로 이식(`SCATTER_LIMIT=100` 신규 정의, 기존 미정의 참조 버그도 함께 해결) ⑹코인목록 master-detail 개편(`CoinDetailView({market})` named export로 분리, `CoinList`를 좌 col-9 상세 + 우 col-3 슬림 사이드바로 재작성, `/coins`·`/coins/:market` 단일 컴포넌트로 통합).
 - **IA·인사이트 + 허세용 지표(2026-05-30 후반)** — Phase 18. ⑴백테스트에 **Sharpe·Sortino·Calmar** 리스크 조정 지표(일별 equity 수익률 √365 연율화, BacktestMetrics 스키마 확장) ⑵**분석 카트 도입** — `AnalysisCartContext`(localStorage) + 공용 `CartButton`(+/✓ 토글), 헤더 카운트 배지+드롭다운(담긴 종목·×해제·비교/백테스트 진입), 종목 행/카드 5곳(Dashboard 시세표·Market 순위3종·CoinList 사이드바·Screener 결과·Sectors 모달)에 + 버튼, Compare/Backtest 진입 시 카트 종목으로 초기값 자동 채움, Screener에 "결과 전체 카트 담기" ⑶Sectors **섹터 드릴다운 모달**(섹터 안내 카드를 button으로 → 모달에 소속 종목 표 + 평균 수익률·총 거래대금 헤더 + 카트 버튼·행 클릭 상세 이동·ESC/바깥 클릭 닫힘) ⑷Dashboard에 **Opportunity Feed**(최상단, 4-카드 시그널 — 52주 새 경신·급등(>+2%)·안정 상승 모멘텀(`return_1m/volatility` 비율 상위, Sharpe 풍 단순화)·섹터 로테이션(이번 달 vs 지난 달 ▲▼). 종목 칩에 카트 + 클릭 상세 통합 `StockChip` 헬퍼).
 
-**다음 작업 (우선순위 순)**
-1. **P1-2 Markowitz 효율적 경계선** — Compare에 포트폴리오 최적화 시각화. 백엔드 `/analysis/portfolio?markets=A,B,C&count=90` 신규(일봉 수익률 공분산 → 무작위 가중 1000개 → 산점도 + 효율적 경계선 + Sharpe 최대 ★).
-2. **P2-1 탐색 흐름 통합** — Market + Sectors + Screener를 단일 "탐색 페이지"로 (좌 필터/섹터/조건, 우 결과 리스트 + 공통 액션). 큰 리팩터.
-3. **P2-2 Coin 상세 강화** — 거래량 통계·시장 점유·추가 지표 등 헤더 정보 보강.
-4. **P2-3 Backtest 포트폴리오 지원** — 여러 종목 가중 동시 백테스트(현재는 단일).
-5. **P3-1 상관관계 Network Graph** — force-directed (거래대금 상위 50종 + |r|>0.7 엣지, 섹터별 색).
-6. **P3-2 K-means 종목 클러스터링** — 변동성·수익률·거래대금 군집 + 산점도 색.
-7. **실제 화면 검증(브라우저 육안)** — Phase 12·13·14(일부)·15·16·17·18 누적 미검증. `npm run dev`로 확인.
-8. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context. 가격 깜빡임 펄스(허세).
-9. **에러/로딩 상태 UI 개선**.
+- **퀀트/ML 분석 묶음 + 퀀트 랩(2026-05-31)** — Phase 19. 외부 라이브러리(numpy/scipy/scikit-learn/statsmodels/arch/hmmlearn/networkx) 도입해 정량 분석 8종 신설: **Markowitz 효율적 경계선**(P1-2 흡수)·**상관 네트워크 MST**(P3-1 흡수)·**PCA 시장요인**·**K-means+계층 덴드로그램**(P3-2 흡수)·**GARCH 변동성예측+VaR**·**횡단면 모멘텀 팩터 백테스트**·**공적분 페어트레이딩**·**HMM 시장국면**. 신규 `services/quant_service.py`(공용 `returns_matrix` 헬퍼 + 8기능)·`schemas/quant.py`·`routers/quant.py`(`/api/quant/*` 9개). 부팅 프리페치에 9종 워밍 추가(콜드0). 프론트 `pages/QuantLab.jsx`(8 서브탭, d3-force 네트워크·SVG 덴드로그램)·`api/quant.js`·`hooks/useQuant.js`, 헤더에 **별도 "퀀트 랩" 탭**(/quant). (빌드·ESLint·py_compile 통과, 실데이터 산출 확인. 브라우저는 네트워크 탭 1건만 수정 검증)
+- **P2 묶음: 탐색 통합 + 코인상세 강화 + 포트폴리오 백테스트(2026-05-31)** — Phase 20. ⑴**P2-1**: Market·Sectors·Screener를 `/explore` 단일 페이지의 URL기반 서브탭으로 통합(`pages/Explore.jsx`, 기존 본문 재사용), 헤더 `대시보드·탐색·코인목록`으로 단순화(스크리너→탐색). ⑵**P2-2**: 코인상세에 주요지표 카드(30일 변동성·1개월수익률·시장점유율·**GARCH 연변동성·1일 VaR**)+52주 위치 바. ⑶**P2-3**: 백테스트에 **포트폴리오 보유** 모드 — 백엔드 `/api/backtest/portfolio`(가중 보유+선택적 리밸런스+동일가중 벤치마크), 프론트 `PortfolioBacktest`(카트 종목·비중 입력·자산곡선 vs 벤치·기여도). (빌드·린트·py_compile 통과, 브라우저 육안 미검증)
+
+**다음 작업 (우선순위 순) — 이번 세션 미완/이월 포함**
+1. ⭐ **포트폴리오 동선 통합 (NEW, 사용자 요청)** — 지금 포트폴리오 관련 기능이 **3곳에 분절**돼 있음: 퀀트 랩 Markowitz(최적 비중 산출)·백테스트 포트폴리오(수동 비중 보유)·비교분석(수익률 겹침). **퀀트 랩에서 구한 최적 비중(★최대샤프/최소분산)을 백테스트 포트폴리오·비교분석으로 넘기는 동선**을 만들어 "최적화 → 검증 → 비교"를 한 흐름으로. (엔지니어링노트 §28)
+2. **실제 화면 검증(브라우저 육안)** — 누적 미검증(Phase 12~20) + **신규: 퀀트 랩 8탭·탐색 통합·코인상세 지표·포트폴리오 백테스트**. `npm run dev`로 확인.
+3. **WebSocket 실시간 시세** — `wss://api.upbit.com/websocket/v1` → FastAPI WS 중계 → 프론트 Context. 가격 깜빡임 펄스(허세).
+4. **에러/로딩 상태 UI 개선**.
+5. **카테고리 잔여** — 산점도 섹터별 색·누적 변동성 드래그 표현·분류 스냅샷 자동 갱신.
+
+**이번 세션에 손대지 않은(이월) 작업**: 위 1~5 전부. 특히 ⓐ포트폴리오 통합(미착수)·ⓑ브라우저 육안 검증(퀀트 랩·P2 신규분 전부 미검증, 네트워크 탭만 수정 확인)·ⓒWebSocket·ⓓ에러/로딩 UI·ⓔ카테고리 고도화.
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
 
@@ -251,4 +252,19 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **P0-2 Sectors 섹터 드릴다운** — `SectorDrilldownModal`(섹터명 클릭 → 모달로 소속 종목 표). useCoinStats(category) + useTickers(현재가) 결합, 거래대금 desc 정렬, 헤더에 종목 수·1개월 평균 수익률·24h 총 거래대금 통계, 카트 버튼·행 클릭 상세 이동, ESC/바깥/×로 닫힘. 백엔드 변경 없음(기존 데이터 재활용). 섹터 안내 카드를 `<button>`으로 전환, hover 시 brand 컬러 + → 아이콘.
 - **P1-1 Opportunity Feed** (Dashboard "오늘의 시그널" 액션 트리거) — Dashboard 최상단에 4-카드 신규. ⑴52주 신고/신저 경신(상위 30 한정, 빨강/파랑 분리) ⑵급등(전일 >+2%) ⑶안정 상승 모멘텀(1개월 +5% 이상·변동성 5% 이하·`return_1m/volatility` 비율 상위 — Sharpe 풍 단순화) ⑷섹터 로테이션(이번 달 vs 지난 달 ▲▼ 변화 큰 섹터). 신규 헬퍼 `StockChip`(클릭 상세 + 카트 통합 디자인), `SignalCard`(액센트 바·카운트·우상단 페이지 링크). 백엔드 신규 없이 기존 데이터(tickers·coinStats·monthly) 합성.
 - **공통**: 단계마다 `vite build`+`npm run lint`+`py_compile` 통과. 신규 ESLint 0. `pages.md`(로컬 메모) 신설로 페이지 구성·중복·개선 항목 트리 정리 + 큰 그림.
-- **다음 세션 시작 시점**: P1-2 Markowitz부터. 진행 흐름은 본 문서 "다음 작업" 참조.
+
+### Phase 19 — 퀀트/ML 분석 묶음 + 퀀트 랩 (2026-05-31)
+사용자 요청으로 P1-2(Markowitz)에서 출발 → "정량 분석을 최대한 많이"로 확장. 방침: **있는 모델은 라이브러리, 없는 건 numpy**(직접구현 정체성은 캐시·로깅·API 계층에 이미 있으므로 통계/ML은 검증된 라이브러리 사용). 예측형보다 **구조·리스크 분석** 중심(엔지니어링노트 §28).
+- **의존성 도입**: numpy·scipy·scikit-learn·statsmodels·arch·hmmlearn·networkx (+pandas 자동). `requirements.txt` 갱신.
+- **공용 기반** `services/quant_service.py`: `returns_matrix(markets, count, kind, min_len)` — 종목별 일봉 close를 공통 길이 numpy 행렬로. **기존 공용 일봉 캐시 재사용 → 추가 팬아웃 0, 계산만**. `min_len` 필터로 신규 상장 코인이 상관 윈도우 갉아먹는 것 방지(네트워크 n_obs 34→94로 개선).
+- **8기능**(각 `/api/quant/*` + `schemas/quant.py`): ⑴**Markowitz** 효율적 경계선(무작위 1000 Dirichlet 시뮬 + scipy SLSQP 최대샤프★/최소분산, long-only) ⑵**상관 네트워크 MST**(Mantegna 거리 √(2(1−ρ)) + networkx 최소신장트리, 허브 degree·섹터색) ⑶**PCA**(sklearn, 표준화 수익률 → PC1=시장요인, 종목 로딩 ≈ 베타; USDT 음수 로딩으로 검증) ⑷**클러스터링**(K-means 변동성·수익률·거래대금 + scipy 계층 덴드로그램) ⑸**GARCH(1,1)**(arch, 조건부 변동성·향후 10일 예측·1일 95% VaR·지속성 α+β) ⑹**횡단면 모멘텀 팩터 백테스트**(과거 lookback 수익률 상·하위 분위 롱숏 달러중립, 동일가중 벤치) ⑺**공적분 페어트레이딩**(statsmodels Engle-Granger coint, 상관 게이트 + OLS 헤지비율 + 스프레드 z; VTHO-VET 등 동일생태계 페어 검출) ⑻**HMM 국면**(hmmlearn 가우시안, [수익률, 롤링변동성] 2피처로 평온/격동 2국면 — 수익률만 쓰면 195/199 과전환 → 변동성 피처+k2로 9회 안정).
+- **부팅 프리페치**(`main.py`): 퀀트 9종(네트워크·PCA·클러스터·덴드로·모멘텀·페어·국면·기본 포트폴리오/GARCH) 워밍 추가. 콜드 총 ~150s(섹터 월봉이 대부분, 퀀트는 소수).
+- **프론트**: `pages/QuantLab.jsx`(8 서브탭 lazy 마운트, **d3-force** 네트워크 SVG·scipy 좌표 SVG 덴드로그램·recharts 나머지)·`api/quant.js`·`hooks/useQuant.js`(loadedKey 파생 로딩). 헤더에 **별도 "퀀트 랩" 탭**(앰버 강조, /quant). 각 섹션 제목에 `InfoTooltip` 방법론 설명.
+- 검증: 8기능 전부 실데이터 산출 확인, `py_compile`·`vite build`·ESLint 통과. **브라우저는 네트워크 탭 1건만**(d3-force가 link.source/target을 노드객체로 치환하는 것 미반영 → 좌표 명시 해석으로 수정). 나머지 7탭 런타임 미검증.
+
+### Phase 20 — 탐색 통합 + 코인상세 강화 + 포트폴리오 백테스트 (2026-05-31)
+P2-1~P2-3 묶음.
+- **P2-1 탐색 통합**: `pages/Explore.jsx` 신설 — Market·Sectors·Screener를 `/explore` 단일 페이지의 **URL 기반 서브탭**으로(경로 `/market`·`/sectors`·`/screener`가 곧 초기 탭, 딥링크 호환). 기존 페이지 본문을 그대로 재사용(자체 로딩, lazy 마운트). 헤더 `tabFromPath` 매처로 어느 경로든 "탐색" 활성. 메인 탭 `대시보드·탐색·코인목록`(마켓·섹터 흡수), 더보기는 비교·백테스트만(스크리너→탐색). ⚠️ 처음 `useState` 초기탭으로 했다가, /market↔/sectors가 같은 컴포넌트라 리마운트 안 돼 탭 안 바뀌는 버그 → URL 단일출처로 수정.
+- **P2-2 코인상세 강화**(`CoinDetail.jsx`): 가격 헤더 아래 **주요 지표 카드**(30일 변동성·1개월수익률 from coinStats / 시장 점유율 = 24h 거래대금÷전체 / **GARCH 연변동성·1일 95% VaR** from `useGarch` — 퀀트 통합) + **52주 위치 바**(현재가 위치 % + 신고/신저 배지).
+- **P2-3 포트폴리오 백테스트**: 백엔드 `backtest_service.run_portfolio()`(numpy, 가중 보유 자산곡선 + `rebalance_days`로 주기 리밸런스 + 동일가중 매수보유 벤치마크 + 종목 기여·MDD·샤프·변동성), `/api/backtest/portfolio`. 스키마 `PortfolioBacktestResult` 등 신규. 프론트 `Backtest.jsx` 재구성 — 전략 선택을 공통 카드로 분리, MA/RSI는 `SingleStrategyBody`로, 신규 `PortfolioBacktest`(카트 종목 + 비중 입력 + 리밸런스/기간 + 자산곡선 포트vs벤치 + 기여도). ⚠️ 균등 비중이면 벤치마크와 곡선이 겹침(정상) — 비중 프리셋(Markowitz 최적해) 연결은 이월(다음 작업 1, §28).
+- 검증: `vite build`·ESLint·`py_compile`·app import(22 API 라우트) 통과. 포트폴리오 백테스트 실데이터 확인(50/30/20 BTC·ETH·XRP → −29.6% vs 동일가중 −32.5%). **브라우저 육안 미검증**.

@@ -137,9 +137,31 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 - **응답**: `BacktestResult`
 
+### `GET /api/backtest/portfolio`
+여러 종목을 목표 비중으로 보유했을 때의 자산 곡선(가중 매수보유 + 선택적 주기 리밸런스).
+- **쿼리**: `markets`(쉼표 구분, 2~10), `weights`(쉼표 구분, markets와 같은 개수·생략 시 동일가중·자동정규화), `count`(int 30~500, 기본 180), `rebalance_days`(int 0~90, 0=매수보유)
+- **응답**: `PortfolioBacktestResult` — `equity[{time, value, benchmark}]`(100 시작, value=포트폴리오·benchmark=동일가중) + `total_return`·`benchmark_return`·`mdd`·`sharpe`·`volatility`(연율%) + `contributions[{market, korean_name, weight, asset_return}]` + `rebalance_days`·`n_obs`
+
 ---
 
-## 5. 기타
+## 5. Quant — `/api/quant`
+정량/ML 분석. 일봉은 공용 캐시(부팅 프리페치)를 재사용하므로 추가 팬아웃 없이 계산만 든다. 모든 응답에 분석에 쓴 일간 관측 수 `n_obs` 포함. 좌표계는 `(vol=변동성 x, ret=수익률 y)` %.
+
+| 엔드포인트 | 쿼리 | 응답 요지 |
+|---|---|---|
+| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]` + `max_sharpe`/`min_vol`(`PortfolioSpot`: 좌표 + `weights[]`) + `assets[]`(개별 종목점) (Markowitz, scipy SLSQP) |
+| `GET /network` | `top`(5~100, 50) | `NetworkResult` — `nodes[{market, category, value, degree}]` + `edges[{source,target,corr}]`(MST, networkx) |
+| `GET /pca` | `top`(5~100, 50) | `PCAResult` — `components[{index,explained}]` + `loadings[{market,category,pc1,pc2}]` + `pc1_explained`(시장요인 설명비율%) |
+| `GET /clusters` | `top`(10~150, 80), `k`(2~8, 4) | `ClusterResult` — `points[{market,category,cluster,volatility,return_1m,log_value}]` (K-means) |
+| `GET /dendrogram` | `top`(5~60, 40) | `DendrogramResult` — scipy 플롯 좌표 `icoord/dcoord` + `labels/markets/categories`(잎 순서) |
+| `GET /garch/{market}` | — | `GarchResult` — `cond_vol[{time,vol}]` + `forecast_vol[]` + `current_vol_annual`·`var_95`·`persistence`(arch GARCH(1,1)) |
+| `GET /momentum` | `top`(10~100,40), `lookback`(5~60,20), `holding`(1~20,5) | `MomentumResult` — `equity[{time,factor,benchmark}]` + `total_return`·`benchmark_return`·`sharpe`·`mdd` + `long[]`/`short[]` (횡단면 롱숏) |
+| `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal}]` + `tested`·`found` (statsmodels 공적분) |
+| `GET /regime` | `n_states`(2~4, 2) | `RegimeResult` — `points[{time,regime,index}]` + `stats[{regime,label,mean_return,volatility,days,share}]` + `current_regime`·`current_label` (hmmlearn HMM) |
+
+---
+
+## 6. 기타
 
 ### `GET /health`
 서버 상태 확인.
@@ -253,7 +275,8 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 | 대시보드 | `/api/markets/tickers`, `/api/analysis/category/monthly`, `/api/analysis/category/cumulative`, `/api/analysis/coins` |
 | 마켓 현황 | `/api/markets/tickers` |
 | 코인 목록 | `/api/markets/tickers`, `/api/markets/summary` |
-| 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}` |
+| 탐색(마켓·섹터·스크리너 통합 `/explore`) | `/api/markets/tickers`, `/api/analysis/coins`, `/api/analysis/category/*` |
+| 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}`, `/api/analysis/coins`, `/api/quant/garch/{market}` |
 | 비교 분석 | `/api/candles/{market}` (선택 종목별) |
-| 백테스트 | `/api/backtest/ma-cross`, `/api/backtest/rsi` |
-| 스크리너 | `/api/markets/tickers`, `/api/analysis/coins` |
+| 백테스트 | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/portfolio` |
+| 퀀트 랩 (`/quant`) | `/api/quant/*` (portfolio·network·pca·clusters·dendrogram·garch·momentum·pairs·regime) |

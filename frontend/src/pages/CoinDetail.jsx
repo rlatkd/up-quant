@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts'
 import { useTicker, useTickers, useOrderbook, useTrades } from '../hooks/useTickers'
 import { useCandles } from '../hooks/useCandles'
@@ -419,7 +419,10 @@ export function CoinDetailView({ market }) {
 
       {/* 상관관계 분석 */}
       <div className="bg-white border border-gray-200 rounded-md p-5">
-        <div className="text-sm font-semibold text-gray-700 mb-0.5">타 종목 상관관계</div>
+        <div className="flex items-center justify-between mb-0.5">
+          <div className="text-sm font-semibold text-gray-700">타 종목 상관관계</div>
+          <Link to="/analysis#network" className="text-xs text-brand-600 hover:underline">전체 상관 네트워크 →</Link>
+        </div>
         <div className="text-xs text-gray-400 mb-4">60일 일봉 종가 기준 피어슨 상관계수</div>
         <div className="grid grid-cols-7 gap-2">
           {corrData.slice(0, 14).map(item => (
