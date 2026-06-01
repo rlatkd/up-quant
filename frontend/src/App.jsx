@@ -7,6 +7,7 @@ import CoinList from './pages/CoinList'
 import Analysis from './pages/Analysis'
 import Tools from './pages/Tools'
 import Help from './pages/Help'
+import Guide from './pages/Guide'
 
 function App() {
   return (
@@ -14,25 +15,33 @@ function App() {
       <AnalysisCartProvider>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          {/* 탐색 = 마켓현황·섹터·스크리너 통합(P2-1). 경로가 초기 서브탭을 결정(딥링크 호환) */}
+          {/* 코인 목록이 메인('/'·로고 클릭 시 진입). master-detail — market 없으면 디폴트 KRW-BTC */}
+          <Route path="/" element={<CoinList />} />
+          <Route path="/coins" element={<CoinList />} />
+          <Route path="/coins/:market" element={<CoinList />} />
+          {/* 대시보드는 별도 경로로 이동 */}
+          <Route path="/dashboard" element={<Dashboard />} />
+          {/* 탐색 = 마켓현황·섹터·스크리너. 경로가 곧 화면(딥링크 호환) */}
           <Route path="/explore" element={<Explore />} />
           <Route path="/market" element={<Explore />} />
           <Route path="/sectors" element={<Explore />} />
           <Route path="/screener" element={<Explore />} />
-          {/* /coins와 /coins/:market 모두 master-detail CoinList로 — market 없으면 디폴트 KRW-BTC */}
-          <Route path="/coins" element={<CoinList />} />
-          <Route path="/coins/:market" element={<CoinList />} />
-          {/* 분석 = 관찰형(자동 분석) 허브 · 도구 = 설정형(종목/전략 선택). ?tab= 쿼리가 서브탭 */}
-          <Route path="/analysis" element={<Analysis />} />
+          {/* 시장 분석(관찰형) — 시장 구조 / 팩터 분석 (top-level 경로로 정리) */}
+          <Route path="/structure" element={<Analysis />} />
+          <Route path="/factor" element={<Analysis />} />
+          {/* 전략 도구 = 설정형(?tab=) */}
           <Route path="/tools" element={<Tools />} />
           {/* 기존 경로 호환 리다이렉트 */}
-          <Route path="/quant" element={<Navigate to="/analysis" replace />} />
+          <Route path="/analysis/structure" element={<Navigate to="/structure" replace />} />
+          <Route path="/analysis/factor" element={<Navigate to="/factor" replace />} />
+          <Route path="/analysis" element={<Navigate to="/structure" replace />} />
+          <Route path="/quant" element={<Navigate to="/structure" replace />} />
           <Route path="/compare" element={<Navigate to="/tools?tab=compare" replace />} />
           <Route path="/backtest" element={<Navigate to="/tools?tab=backtest" replace />} />
         </Route>
-        {/* 도움말만 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더 */}
+        {/* 도움말·분석 가이드는 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더 */}
         <Route path="/help" element={<Help />} />
+        <Route path="/guide" element={<Guide />} />
       </Routes>
       </AnalysisCartProvider>
     </BrowserRouter>

@@ -17,9 +17,10 @@ def _korean_names() -> dict[str, str]:
     )
 
 
-def _valid_markets() -> list[str]:
+def valid_markets() -> list[str]:
     """분석 대상 마켓 목록 (실제 상장된 것만).
-    USE_ALL_KRW_MARKETS면 업비트 KRW 마켓 전체, 아니면 설정한 15종목."""
+    USE_ALL_KRW_MARKETS면 업비트 KRW 마켓 전체, 아니면 설정한 15종목.
+    /market/all(장시간 캐시)과 교집합이라 상폐 코드(예: KRW-DRIFT)는 자동 제외된다."""
     names = _korean_names()
     if config.USE_ALL_KRW_MARKETS:
         return [m for m in names if m.startswith("KRW-")]
@@ -38,7 +39,7 @@ def _sparkline(market: str) -> list[float]:
 
 
 def get_tickers() -> list[Ticker]:
-    markets = _valid_markets()
+    markets = valid_markets()
     if not markets:
         return []
     names = _korean_names()

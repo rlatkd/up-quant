@@ -14,7 +14,7 @@ import InfoTooltip from '../components/InfoTooltip'
 import { useTickers } from '../hooks/useTickers'
 import {
   usePortfolio, useNetwork, usePCA, useClusters, useDendrogram,
-  useGarch, useMomentum, usePairs, useRegime,
+  useMomentum, usePairs, useRegime,
 } from '../hooks/useQuant'
 import { SERIES } from '../theme'
 
@@ -88,7 +88,7 @@ function CoinPicker({ selected, setSelected, max = 6 }) {
   )
 }
 
-export function PortfolioSection() {
+export function PortfolioSection({ onSend }) {
   const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const { data, loading } = usePortfolio(selected)
 
@@ -140,8 +140,8 @@ export function PortfolioSection() {
             </div>
           </div>
           <div className="space-y-3">
-            <WeightCard title="★ 최대 샤프 포트폴리오" spot={data.max_sharpe} />
-            <WeightCard title="◆ 최소 변동성 포트폴리오" spot={data.min_vol} />
+            <WeightCard title="★ 최대 샤프 포트폴리오" spot={data.max_sharpe} onSend={onSend} />
+            <WeightCard title="◆ 최소 변동성 포트폴리오" spot={data.min_vol} onSend={onSend} />
           </div>
         </div>
       )}
@@ -149,7 +149,12 @@ export function PortfolioSection() {
   )
 }
 
-function WeightCard({ title, spot }) {
+function WeightCard({ title, spot, onSend }) {
+  // 최적 비중을 백테스트로 넘길 payload (비중은 %로 — 백테스트가 % 입력을 받음)
+  const send = () => onSend({
+    markets: spot.weights.map(w => w.market),
+    weights: spot.weights.map(w => +(w.weight * 100).toFixed(1)),
+  })
   return (
     <div className="border border-gray-100 rounded-md p-3">
       <div className="text-xs font-semibold text-gray-700 mb-2">{title}</div>
@@ -169,6 +174,12 @@ function WeightCard({ title, spot }) {
           </div>
         ))}
       </div>
+      {onSend && spot.weights.length > 0 && (
+        <button onClick={send}
+          className="w-full mt-3 px-2 py-1.5 text-[11px] font-medium bg-brand-500 text-white rounded hover:bg-brand-600 cursor-pointer transition-colors">
+          이 비중으로 백테스트 →
+        </button>
+      )}
     </div>
   )
 }
@@ -370,62 +381,7 @@ function Dendrogram({ dn }) {
   )
 }
 
-// ── 5) GARCH 변동성 예측 ──────────────────────────────────────
-export function GarchSection() {
-  const [market, setMarket] = useState('KRW-BTC')
-  const { tickers } = useTickers()
-  const { data, loading } = useGarch(market)
-
-  const chartData = useMemo(() => {
-    const hist = data.cond_vol.map(p => ({ t: p.time, vol: p.vol }))
-    const lastT = hist.length ? hist[hist.length - 1].t : 0
-    const fc = data.forecast_vol.map((v, i) => ({ t: lastT + (i + 1) * 86400, fc: v }))
-    return [...hist.slice(-90), ...fc]
-  }, [data])
-
-  return (
-    <Card>
-      <CardHeader
-        title={<>GARCH 변동성 예측 + VaR<InfoTooltip width="w-80">가격이 아니라 <b>변동성</b>을 예측합니다(큰 변동 뒤 큰 변동 = 변동성 군집성). arch 라이브러리로 GARCH(1,1)를 적합해 조건부 변동성과 향후 10일 예측, 1일 95% VaR(예상 최대손실)을 계산합니다.</InfoTooltip></>}
-        subtitle="arch GARCH(1,1) · 일간 조건부 변동성"
-        action={(
-          <select value={market} onChange={e => setMarket(e.target.value)}
-            className="border border-gray-200 rounded px-2 py-1 text-xs text-gray-600 cursor-pointer focus:outline-none focus:border-brand-400">
-            {tickers.slice(0, 60).map(t => <option key={t.market} value={t.market}>{sym(t.market)}</option>)}
-          </select>
-        )}
-      />
-      {loading ? <Spinner /> : (
-        <>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <StatCard label="현재 연율 변동성" value={data.current_vol_annual + '%'} color="text-brand-600" valueClass="text-xl" />
-            <StatCard label="1일 95% VaR (예상 최대손실)" value={'-' + data.var_95 + '%'} color="text-blue-500" valueClass="text-xl" />
-            <StatCard label="변동성 지속성 (α+β)" value={data.persistence?.toFixed(3)} sub={data.persistence >= 0.98 ? '충격이 오래 지속' : '평균회귀'} valueClass="text-xl" />
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 0, left: -8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-              <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} scale="time"
-                tickFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
-                tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} unit="%" />
-              <Tooltip contentStyle={{ fontSize: 12 }} labelFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR')}
-                formatter={(v, n) => [v?.toFixed(2) + '%', n === 'fc' ? '예측' : '조건부 변동성']} />
-              <Line dataKey="vol" stroke="#1763b6" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line dataKey="fc" stroke="#e0913c" strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 justify-center text-[11px] text-gray-500 mt-1">
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-brand-500 inline-block" />조건부 변동성</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ background: '#e0913c' }} />향후 10일 예측</span>
-          </div>
-        </>
-      )}
-    </Card>
-  )
-}
-
-// ── 6) 모멘텀 팩터 백테스트 ───────────────────────────────────
+// ── 5) 모멘텀 팩터 백테스트 ───────────────────────────────────
 function MomentumSection() {
   const { data, loading } = useMomentum(40, 20, 5)
   return (
@@ -483,7 +439,7 @@ function HoldingList({ title, rows, color }) {
   )
 }
 
-// ── 7) 공적분 페어트레이딩 ────────────────────────────────────
+// ── 6) 공적분 페어트레이딩 ────────────────────────────────────
 function SignalBadge({ signal }) {
   const map = {
     LONG_SPREAD: ['롱 스프레드', 'bg-red-50 text-red-600'],
@@ -540,7 +496,7 @@ function PairsSection() {
   )
 }
 
-// ── 8) HMM 시장 국면 ──────────────────────────────────────────
+// ── 7) HMM 시장 국면 ──────────────────────────────────────────
 const REGIME_COLORS = ['#3b82f6', '#94a3b8', '#fca5a5', '#ef4444'] // 약세→강세 (파랑→빨강)
 
 function RegimeSection() {
@@ -619,37 +575,79 @@ const GROUPS = [
     ],
   },
   {
-    label: '팩터·전략', tabs: [
+    label: '팩터 분석', tabs: [
       { id: 'momentum', label: '모멘텀 팩터', Comp: MomentumSection },
       { id: 'pairs', label: '페어트레이딩', Comp: PairsSection },
     ],
   },
 ]
+// 경로(/structure · /factor)가 어떤 그룹을 보여줄지 결정. 헤더 탭 2개와 1:1.
+const PAGE_META = {
+  structure: {
+    group: '시장 구조',
+    title: '시장 구조',
+    description: '시장 전체를 자동 분석해 보여주는 인사이트 — 상관 네트워크·PCA 요인·클러스터링·시장 국면',
+  },
+  factor: {
+    group: '팩터 분석',
+    title: '팩터 분석',
+    description: '시장 전체에서 팩터가 실재하는지 관찰 — 횡단면 모멘텀·공적분 페어 (고정 파라미터의 관찰형. 종목을 골라 돌리는 것은 \'전략 도구\'에서)',
+  },
+}
+
+// 페이지 맨 위 "한눈 요약" 스트립 — 아래 상세 차트들의 핵심 결론만 먼저 보여준다(요약→상세).
+// 데이터는 아래 섹션과 같은 훅(캐시 공유)이라 추가 팬아웃 없음.
+function StructureSummary() {
+  const { data: pca } = usePCA(50)
+  const { data: net } = useNetwork(50)
+  const { data: reg } = useRegime(2)
+  const hub = net.nodes.length ? net.nodes.reduce((a, b) => (b.degree > a.degree ? b : a)) : null
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatCard label="시장 동조도 · PC1 설명비율" value={(pca.pc1_explained || 0) + '%'} color="text-brand-600" valueClass="text-2xl" />
+      <StatCard label="네트워크 허브 (최다 연결)" value={hub ? sym(hub.market) : '—'}
+        sub={hub ? `${hub.korean_name} · 연결 ${hub.degree}개` : ''} valueClass="text-2xl" />
+      <StatCard label="현재 시장 국면 (HMM)" value={reg.current_label || '—'} valueClass="text-2xl" />
+    </div>
+  )
+}
+
+function FactorSummary() {
+  const { data: mom } = useMomentum(40, 20, 5)
+  const { data: pairs } = usePairs(30)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatCard label="모멘텀 팩터 총수익률" value={pct(mom.total_return)} color={up(mom.total_return)} valueClass="text-2xl" />
+      <StatCard label="동일가중 벤치마크" value={pct(mom.benchmark_return)} color={up(mom.benchmark_return)} valueClass="text-2xl" />
+      <StatCard label="공적분 페어 발견" value={pairs.found + '쌍'} sub={`${pairs.tested}쌍 검정 중`} valueClass="text-2xl" />
+    </div>
+  )
+}
+
 export default function Analysis() {
-  const { hash } = useLocation()
-  // 크로스링크(/analysis#cluster 등)로 진입 시 해당 섹션으로 스크롤.
+  const { pathname, hash } = useLocation()
+  const seg = pathname.startsWith('/factor') ? 'factor' : 'structure'
+  const meta = PAGE_META[seg]
+  const group = GROUPS.find(g => g.label === meta.group) ?? GROUPS[0]
+
+  // 크로스링크(/structure#cluster 등)로 진입 시 해당 섹션으로 스크롤.
   useEffect(() => {
     if (!hash) return
     const el = document.getElementById(hash.slice(1))
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [hash])
+  }, [hash, seg])
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="분석"
-        description="시장 전체를 자동 분석해 보여주는 인사이트 — 상관 네트워크·PCA 요인·클러스터링·시장 국면·모멘텀 팩터·페어트레이딩 (종목을 직접 고르는 도구는 헤더 '도구'에서)"
-      />
-      {GROUPS.map(g => (
-        <section key={g.label} className="space-y-4">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 pb-1.5">{g.label}</h2>
-          {g.tabs.map(t => (
-            <div key={t.id} id={t.id} className="scroll-mt-20">
-              <t.Comp />
-            </div>
-          ))}
-        </section>
-      ))}
+      <PageHeader title={meta.title} description={meta.description} />
+      {seg === 'structure' ? <StructureSummary /> : <FactorSummary />}
+      <section className="space-y-4">
+        {group.tabs.map(t => (
+          <div key={t.id} id={t.id} className="scroll-mt-20">
+            <t.Comp />
+          </div>
+        ))}
+      </section>
     </div>
   )
 }

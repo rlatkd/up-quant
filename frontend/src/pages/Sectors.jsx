@@ -473,7 +473,7 @@ export default function Sectors() {
       <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="flex items-center justify-between mb-0.5">
           <div className="text-sm font-semibold text-gray-700">카테고리 상관관계</div>
-          <Link to="/analysis#network" className="text-xs text-brand-600 hover:underline">종목 단위 상관 네트워크 →</Link>
+          <Link to="/structure#network" className="text-xs text-brand-600 hover:underline">종목 단위 상관 네트워크 →</Link>
         </div>
         <div className="text-xs text-gray-400 mb-4">최근 6개월 섹터 수익률 기반 피어슨 상관계수 (-1 ~ +1) · 색은 표 안에서의 상대 강도 · 종목 단위는 분석 → 상관 네트워크</div>
         <CorrHeatmap rows={monthly.rows} categories={monthly.categories} />

@@ -6,9 +6,7 @@ import { DOM_COLORS } from '../theme'
 import CartButton from '../components/CartButton'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
-const PRICE_TABLE_N = 10    // 시세 표(거래대금 상위) 행 수
-const MOVERS_N = 23         // 급등·급락 각 목록 개수 — 시세 표 10행 높이를 채우도록(행 높이 차이 보정)
-const W52_SCAN = 30         // 52주 경신 집계 대상 = 거래대금 상위 N (마켓 현황과 동일 기준)
+const PRICE_TABLE_N = 12    // 시세 표(거래대금 상위) 행 수
 
 const fmtRate = r => (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
 const changeColor = c => (c === 'RISE' ? 'text-red-500' : c === 'FALL' ? 'text-blue-500' : 'text-gray-600')
@@ -387,44 +385,6 @@ function MarketDominance({ tickers }) {
   )
 }
 
-function MoversFeed({ tickers, count = 5 }) {
-  const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)
-  const gainers = sorted.slice(0, count)
-  const losers = sorted.slice(-count).reverse()
-
-  return (
-    <div className="flex gap-4 flex-1">
-      <div className="flex-1">
-        <div className="text-xs font-semibold text-red-500 mb-2.5">급등</div>
-        <div className="space-y-2">
-          {gainers.map(t => (
-            <div key={t.market} className="flex justify-between items-center">
-              <span className="text-xs text-gray-700 truncate">{t.korean_name}</span>
-              <span className="text-xs font-medium text-red-500 ml-2 flex-shrink-0">
-                +{(t.change_rate * 100).toFixed(2)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="w-px bg-gray-100" />
-      <div className="flex-1">
-        <div className="text-xs font-semibold text-blue-500 mb-2.5">급락</div>
-        <div className="space-y-2">
-          {losers.map(t => (
-            <div key={t.market} className="flex justify-between items-center">
-              <span className="text-xs text-gray-700 truncate">{t.korean_name}</span>
-              <span className="text-xs font-medium text-blue-500 ml-2 flex-shrink-0">
-                {(t.change_rate * 100).toFixed(2)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // 이번 달 섹터 성과 — 최신 월 섹터별 평균 등락률을 강(빨강)·약(파랑) 바로
 function SectorPerf({ monthly }) {
   const { rows, categories } = monthly
@@ -453,41 +413,6 @@ function SectorPerf({ monthly }) {
             </div>
           )
         })}
-      </div>
-    </>
-  )
-}
-
-// 52주 신고가/신저가 요약 — 거래대금 상위 N 안에서 오늘 경신 종목, 큰 카운트 + 대표 배지
-function W52Summary({ tickers }) {
-  const major = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, W52_SCAN)
-  const highs = major.filter(t => t.is_52w_high)
-  const lows = major.filter(t => t.is_52w_low)
-  return (
-    <>
-      <div className="text-xs text-gray-400 mb-3">거래대금 상위 {W52_SCAN}종 중 오늘 경신</div>
-      <div className="grid grid-cols-2 gap-3">
-        {[{ label: '신고가', list: highs, c: 'red' }, { label: '신저가', list: lows, c: 'blue' }].map(g => (
-          <div key={g.label} className={`rounded-md border p-3 ${g.c === 'red' ? 'border-red-100 bg-red-50/40' : 'border-blue-100 bg-blue-50/40'}`}>
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-2xl font-bold ${g.c === 'red' ? 'text-red-500' : 'text-blue-500'}`}>{g.list.length}</span>
-              <span className="text-xs text-gray-400">{g.label}</span>
-            </div>
-            <div className="flex flex-wrap gap-1 mt-2 min-h-[20px]">
-              {g.list.length === 0
-                ? <span className="text-[11px] text-gray-400">없음</span>
-                : g.list.slice(0, 4).map(t => (
-                  <Link key={t.market} to={`/coins/${t.market}`}>
-                    <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${g.c === 'red' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'} transition-colors`}>
-                      {t.market.replace('KRW-', '')}
-                    </span>
-                  </Link>
-                ))
-              }
-              {g.list.length > 4 && <span className="text-[11px] text-gray-400 self-center">+{g.list.length - 4}</span>}
-            </div>
-          </div>
-        ))}
       </div>
     </>
   )
@@ -548,37 +473,20 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* 시세 위: 이번 달 섹터 성과 | 52주 신고/신저 (각각 깊은 페이지로 드릴다운) */}
-      <div className="grid grid-cols-2 gap-5">
-        <div className="bg-white border border-gray-200 rounded-md p-5">
+      {/* 메인: 시세 표 (전폭) — 거래대금 상위 메인 데이터 덩어리. 행 클릭 → 상세 */}
+      <PriceTable tickers={tickers} />
+
+      {/* 하단: 이번 달 섹터 성과 | 공포·탐욕 | 시장 지배력
+          (52주·급등급락은 상단 '오늘의 시그널'과 탐색>마켓으로 일원화 — 대시보드 중복 제거) */}
+      <div className="grid grid-cols-3 gap-5">
+        {/* 드릴다운 진입 카드 — 카드 전체 클릭 → 섹터 분석(시연 점프대) */}
+        <Link to="/sectors" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
           <div className="flex items-center justify-between mb-0.5">
             <div className="text-sm font-semibold text-gray-700">이번 달 섹터 성과</div>
-            <Link to="/sectors" className="text-xs text-brand-600 hover:underline">섹터 분석 →</Link>
+            <span className="text-xs text-brand-600 font-medium">섹터 분석 →</span>
           </div>
           <SectorPerf monthly={monthly} />
-        </div>
-        <div className="bg-white border border-gray-200 rounded-md p-5">
-          <div className="flex items-center justify-between mb-0.5">
-            <div className="text-sm font-semibold text-gray-700">52주 신고가 · 신저가</div>
-            <Link to="/market" className="text-xs text-brand-600 hover:underline">마켓 현황 →</Link>
-          </div>
-          <W52Summary tickers={tickers} />
-        </div>
-      </div>
-
-      {/* 메인: 시세 표(2/3) + 급등·급락(1/3, 시세 높이만큼 늘림) */}
-      <div className="grid grid-cols-3 gap-5 items-stretch">
-        <div className="col-span-2">
-          <PriceTable tickers={tickers} />
-        </div>
-        <div className="bg-white border border-gray-200 rounded-md p-5 flex flex-col">
-          <div className="text-sm font-semibold text-gray-700 mb-3">급등 · 급락</div>
-          <MoversFeed tickers={tickers} count={MOVERS_N} />
-        </div>
-      </div>
-
-      {/* 시세 아래: 공포·탐욕 | 시장 지배력 */}
-      <div className="grid grid-cols-2 gap-5">
+        </Link>
         <div className="bg-white border border-gray-200 rounded-md p-5">
           <div className="text-sm font-semibold text-gray-700 mb-0.5">공포·탐욕 지수</div>
           <div className="text-xs text-gray-400 mb-3">상승비율 · 평균등락률 기반 시장 심리</div>

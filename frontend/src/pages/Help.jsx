@@ -131,6 +131,7 @@ const COLOR_RULES = [
   { color: 'bg-gray-400', label: '회색 = 보합 / 중립' },
 ]
 
+
 function Section({ item }) {
   return (
     <div className="bg-white border border-gray-200 rounded-md overflow-hidden">

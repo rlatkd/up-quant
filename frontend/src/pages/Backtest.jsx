@@ -37,10 +37,11 @@ function Spinner() {
   )
 }
 
-export default function Backtest() {
+export default function Backtest({ preset }) {
   const cart = useAnalysisCart()
   const { tickers, loading: tLoading } = useTickers()
-  const [strategy, setStrategy] = useState('ma')
+  // 포트폴리오 최적화에서 비중을 넘겨받았으면(preset) '포트폴리오 보유' 전략으로 진입.
+  const [strategy, setStrategy] = useState(preset?.weights?.length ? 'portfolio' : 'ma')
   // 진입 시 카트에 담긴 게 있으면 첫 종목, 없으면 BTC (마운트 1회만 — 이후 사용자 select 보존)
   const [market,   setMarket]   = useState(() => cart.items[0] || 'KRW-BTC')
   const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200 })
@@ -65,8 +66,9 @@ export default function Backtest() {
   }
 
   // 진입 즉시 기본 전략(KRW-BTC·MA 크로스) 결과를 보여준다 (마운트 후 마이크로태스크 — 동기 setState 회피)
+  // 단, 포트폴리오로 진입했으면 단일 전략 실행은 건너뛴다(PortfolioBacktest가 자체 실행).
   useEffect(() => {
-    Promise.resolve().then(handleRun)
+    if (strategy !== 'portfolio') Promise.resolve().then(handleRun)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -106,7 +108,7 @@ export default function Backtest() {
       </div>
 
       {strategy === 'portfolio' ? (
-        <PortfolioBacktest tickers={tickers} cart={cart} />
+        <PortfolioBacktest tickers={tickers} cart={cart} preset={preset} />
       ) : (
         <SingleStrategyBody
           strategy={strategy} market={market} setMarket={setMarket} tickers={tickers}
@@ -327,13 +329,20 @@ const REBAL_OPTIONS = [
   { v: 30, label: '30일 리밸런스' },
 ]
 
-// 포트폴리오 보유 백테스트 — 분석 카트의 종목을 비중대로 들었을 때의 자산 곡선.
-// (TODO: 비중 프리셋을 퀀트랩 Markowitz 최적해/비교분석과 통합 — 사용자 메모, 엔지니어링노트 §28)
-function PortfolioBacktest({ tickers, cart }) {
-  const init = cart.items.length >= 2 ? cart.items.slice(0, 10) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
+// 포트폴리오 보유 백테스트 — 종목을 비중대로 들었을 때의 자산 곡선.
+// 종목·비중 출처 우선순위: preset(포트폴리오 최적화에서 넘어온 ★/◆ 비중) > 분석 카트 > 기본 3종.
+// (동선 통합 — 엔지니어링노트 §28)
+function PortfolioBacktest({ tickers, cart, preset }) {
+  const init = preset?.markets?.length
+    ? preset.markets.slice(0, 10)
+    : cart.items.length >= 2 ? cart.items.slice(0, 10) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
   const [markets, setMarkets] = useState(init)
-  // 비중(%) — 종목별. 기본 균등. 균등이면 동일가중 벤치마크와 곡선이 겹친다(정상).
-  const [wmap, setWmap] = useState(() => Object.fromEntries(init.map(m => [m, +(100 / init.length).toFixed(1)])))
+  // 비중(%) — preset이 있으면 최적 비중, 없으면 균등(균등이면 동일가중 벤치마크와 곡선이 겹침·정상).
+  const [wmap, setWmap] = useState(() =>
+    preset?.markets?.length && preset?.weights?.length
+      ? Object.fromEntries(preset.markets.map((m, i) => [m, preset.weights[i] ?? 0]))
+      : Object.fromEntries(init.map(m => [m, +(100 / init.length).toFixed(1)]))
+  )
   const [rebalance, setRebalance] = useState(0)
   const [count, setCount] = useState(180)
   const [result, setResult] = useState(null)

@@ -105,43 +105,6 @@ function RankTable({ title, rows, color, onRowClick }) {
   )
 }
 
-function VolumeTable({ rows, onRowClick }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">거래대금 상위</div>
-      <table className="w-full">
-        <thead>
-          <tr className="bg-gray-50 text-xs text-gray-400">
-            <th className="w-6"></th>
-            <th className="px-3 py-2 text-left font-medium">종목</th>
-            <th className="px-3 py-2 text-right font-medium">거래대금(24h)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(t => (
-            <tr
-              key={t.market}
-              onClick={() => onRowClick(t.market)}
-              className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
-            >
-              <td className="pl-2 pr-1 py-2.5 text-center"><CartButton market={t.market} /></td>
-              <td className="px-3 py-2.5">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
-                  <span className="text-xs text-gray-400 mt-0.5">{t.market.replace('KRW-', '')}</span>
-                </div>
-              </td>
-              <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-700">
-                {Math.round(t.acc_trade_price_24h).toLocaleString()}<span className="text-xs font-normal text-gray-400 ml-0.5">KRW</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function W52Badges({ tickers }) {
   // 거래대금 상위 N종 안에서만 52주 경신을 추린다 (메이저 기준 — 유동성 낮은 잡코인 신저가 노이즈 제외)
   const major = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, W52_LIMIT)
@@ -258,8 +221,8 @@ export default function Market() {
       {/* 52주 신고가/신저가 배지 */}
       <W52Badges tickers={tickers} />
 
-      {/* 상승률 | 하락률 | 거래대금 (각 RANK_LIMIT위) */}
-      <div className="grid grid-cols-3 gap-4 items-start">
+      {/* 상승률 | 하락률 (각 RANK_LIMIT위). 거래대금 순위는 아래 트리맵이 더 풍부하게 보여줘 표는 제거. */}
+      <div className="grid grid-cols-2 gap-4 items-start">
         <RankTable
           title="상승률 상위"
           rows={sorted.slice(0, RANK_LIMIT)}
@@ -272,7 +235,6 @@ export default function Market() {
           color="text-blue-500"
           onRowClick={goCoin}
         />
-        <VolumeTable rows={byVolume.slice(0, RANK_LIMIT)} onRowClick={goCoin} />
       </div>
 
       {/* 시장 현황 트리맵 (거래대금 상위 메이저) */}
@@ -300,7 +262,7 @@ export default function Market() {
       </div>
 
       {/* 리스크-수익 분포·군집은 분석>클러스터링으로 일원화(중복 제거) */}
-      <Link to="/analysis#cluster" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
+      <Link to="/structure#cluster" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-gray-700">리스크-수익 분포 · 종목 군집</div>

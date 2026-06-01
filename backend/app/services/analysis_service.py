@@ -34,7 +34,12 @@ def _sector_monthly_avg_series(n_months: int = 61) -> dict[str, list[tuple[str, 
     """
     def build() -> dict[str, list[tuple[str, float]]]:
         acc: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        # 스냅샷 분류엔 상폐 코드(예: KRW-DRIFT)가 남아 있을 수 있다 → 라이브 마켓
+        # (/market/all, 장시간 캐시)과 교집합만 순회해 404를 원천 차단한다.
+        live = set(market_service.valid_markets())
         for market, cat in _CATEGORIES.items():
+            if market not in live:
+                continue
             candles = candle_service.get_candles(market, "months", count=n_months)
             closes = [(_month_label(c.timestamp), c.close) for c in candles]
             for i in range(1, len(closes)):
