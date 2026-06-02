@@ -7,21 +7,35 @@ import { useAnalysisCart } from '../../contexts/useAnalysisCart'
 // 과거 탐색에 묻혀 있던 마켓·섹터·스크리너 서브탭을 헤더 탭으로 승격(서로 다른 목적이라 분리).
 const tabGroups = [
   [
-    { to: '/dashboard', label: '대시보드', match: (p) => p.startsWith('/dashboard') },
+    { to: '/dashboard', label: 'Dashboard', match: (p) => p.startsWith('/dashboard') },
   ],
   [
     // 코인 목록은 로고(/)가 곧 진입점이라 별도 탭 없음.
-    { to: '/market',   label: '마켓',      match: (p) => p.startsWith('/market') || p === '/explore' },
-    { to: '/sectors',  label: '섹터',      match: (p) => p.startsWith('/sectors') },
-    { to: '/screener', label: '스크리너',  match: (p) => p.startsWith('/screener') },
+    { to: '/market',   label: 'Markets',  match: (p) => p.startsWith('/market') || p === '/explore' },
+    { to: '/sectors',  label: 'Sectors',  match: (p) => p.startsWith('/sectors') },
+    { to: '/screener', label: 'Screener', match: (p) => p.startsWith('/screener') },
   ],
   [
-    { to: '/structure', label: '시장 구조', match: (p) => p.startsWith('/structure') },
-    { to: '/factor',    label: '팩터 분석', match: (p) => p.startsWith('/factor') },
+    { to: '/structure', label: 'Market Structure', match: (p) => p.startsWith('/structure') },
+    { to: '/factor',    label: 'Factor Analysis',  match: (p) => p.startsWith('/factor') },
+    { to: '/risk',      label: 'Risk',             match: (p) => p.startsWith('/risk') },
   ],
-  [
-    { to: '/tools', label: '전략 도구', match: (p) => ['/tools', '/compare', '/backtest'].some(x => p.startsWith(x)) },
-  ],
+]
+
+// 전략 도구는 "서비스 더보기" 드롭다운(호버 시 목록) — 각 항목은 독립 페이지(/tools/<tab>).
+const TOOL_ITEMS = [
+  {
+    tab: 'portfolio', label: 'Portfolio Optimization', desc: '위험 대비 최적 비중 (효율적 경계선)',
+    icon: <path d="M21 12a9 9 0 1 1-9-9v9z" />,
+  },
+  {
+    tab: 'backtest', label: 'Backtest', desc: '과거 데이터로 전략 성과 검증',
+    icon: <><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></>,
+  },
+  {
+    tab: 'compare', label: 'Compare', desc: '여러 종목 수익률을 나란히 비교',
+    icon: <><rect x="4" y="10" width="4" height="10" /><rect x="10" y="5" width="4" height="15" /><rect x="16" y="13" width="4" height="7" /></>,
+  },
 ]
 
 function openHelpWindow() {
@@ -106,7 +120,7 @@ function CartIndicator() {
               <div className="border-t border-gray-100 p-2 grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
-                  onClick={() => go('/tools?tab=compare')}
+                  onClick={() => go('/tools/compare')}
                   className="px-2 py-1.5 text-xs font-medium bg-brand-500 text-white rounded hover:bg-brand-600 cursor-pointer transition-colors"
                   title={cart.count > 5 ? '상위 5종만 자동 선택됩니다' : ''}
                 >
@@ -114,7 +128,7 @@ function CartIndicator() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => go('/tools?tab=backtest')}
+                  onClick={() => go('/tools/backtest')}
                   className="px-2 py-1.5 text-xs font-medium bg-brand-500 text-white rounded hover:bg-brand-600 cursor-pointer transition-colors"
                 >
                   백테스트 →
@@ -125,6 +139,66 @@ function CartIndicator() {
               )}
             </>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// "서비스 더보기" 드롭다운 — 호버 시 펼침. 하위 도구 진입 시 라벨 활성(불) + 상시 빨간점.
+function ServiceMoreMenu() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  const active = pathname.startsWith('/tools')
+  const curTab = pathname.split('/')[2] || 'portfolio'   // /tools/backtest → 'backtest'
+
+  return (
+    <div
+      className="relative flex h-full items-stretch"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className={`flex items-center gap-1 px-3.5 text-[14px] border-b-2 border-transparent transition-colors cursor-pointer ${
+          active ? 'text-white font-bold' : 'text-white/70 hover:text-white/80 font-semibold'
+        }`}
+      >
+        <span className="relative">
+          More
+          <span className="absolute -top-1 -right-3 w-1.5 h-1.5 rounded-full bg-red-500" />
+        </span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+          className={`ml-2 transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 z-50 w-80 rounded-lg border border-gray-100 bg-white p-2 shadow-xl">
+          {TOOL_ITEMS.map(it => {
+            const itemActive = active && curTab === it.tab
+            return (
+              <Link
+                key={it.tab}
+                to={`/tools/${it.tab}`}
+                onClick={() => setOpen(false)}
+                className={`flex items-start gap-3 rounded-md px-3 py-2.5 transition-colors ${
+                  itemActive ? 'bg-brand-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                  stroke={itemActive ? '#1763b6' : '#64748b'} strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+                  {it.icon}
+                </svg>
+                <span>
+                  <span className={`block text-sm font-semibold ${itemActive ? 'text-brand-600' : 'text-gray-800'}`}>{it.label}</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">{it.desc}</span>
+                </span>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
@@ -160,6 +234,8 @@ function Header() {
               })}
             </div>
           ))}
+          <span className="self-center w-px h-5 bg-white/20 mx-1.5" />
+          <ServiceMoreMenu />
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <CartIndicator />

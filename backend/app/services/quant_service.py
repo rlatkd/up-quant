@@ -428,6 +428,7 @@ _MOM_MIN_LEN = 150
 _MOM_LOOKBACK = 20
 _MOM_HOLDING = 5
 _MOM_Q = 0.2            # 상·하위 20%
+_MOM_FEE_BPS = 5.0     # 편도 거래비용(bps) — 매 리밸런스 롱·숏 회전에 차감(업비트 ~0.05%)
 
 
 def _mdd(equity: np.ndarray) -> float:
@@ -451,6 +452,10 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
     times = [int(c.timestamp / 1000) for c in base_candles][-t_len:]
     nq = max(1, int(n * _MOM_Q))
 
+    # 매 리밸런스마다 롱·숏 분위를 새로 구성 → 롱 1.0 + 숏 1.0 = 총 2.0 명목을 회전시킨다고 보고
+    # 편도 거래비용을 2×fee로 근사 차감(전량 회전 가정). 거래비용 없이는 모멘텀이 과대평가됨.
+    fee = _MOM_FEE_BPS / 10000.0
+    rebal_cost = 2 * fee
     eq_f, eq_b, eq_t, rebal = [100.0], [100.0], [times[lookback]], []
     t = lookback
     while t + holding < t_len:
@@ -458,7 +463,7 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
         order = np.argsort(trail)
         longs, shorts = order[-nq:], order[:nq]
         fwd = closes[t + holding] / closes[t] - 1.0
-        ls_r = float(fwd[longs].mean() - fwd[shorts].mean())   # 달러중립 롱숏
+        ls_r = float(fwd[longs].mean() - fwd[shorts].mean()) - rebal_cost   # 달러중립 롱숏(거래비용 차감)
         bench_r = float(fwd.mean())
         eq_f.append(eq_f[-1] * (1 + ls_r))
         eq_b.append(eq_b[-1] * (1 + bench_r))
@@ -502,6 +507,7 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
         long=_hold(long_idx, "LONG"),
         short=_hold(short_idx, "SHORT"),
         lookback=lookback, holding=holding, n=n,
+        fee_bps=_MOM_FEE_BPS,
     )
 
 

@@ -269,3 +269,21 @@ P2-1~P2-3 묶음.
 - **P2-2 코인상세 강화**(`CoinDetail.jsx`): 가격 헤더 아래 **주요 지표 카드**(30일 변동성·1개월수익률 from coinStats / 시장 점유율 = 24h 거래대금÷전체 / **GARCH 연변동성·1일 95% VaR** from `useGarch` — 퀀트 통합) + **52주 위치 바**(현재가 위치 % + 신고/신저 배지).
 - **P2-3 포트폴리오 백테스트**: 백엔드 `backtest_service.run_portfolio()`(numpy, 가중 보유 자산곡선 + `rebalance_days`로 주기 리밸런스 + 동일가중 매수보유 벤치마크 + 종목 기여·MDD·샤프·변동성), `/api/backtest/portfolio`. 스키마 `PortfolioBacktestResult` 등 신규. 프론트 `Backtest.jsx` 재구성 — 전략 선택을 공통 카드로 분리, MA/RSI는 `SingleStrategyBody`로, 신규 `PortfolioBacktest`(카트 종목 + 비중 입력 + 리밸런스/기간 + 자산곡선 포트vs벤치 + 기여도). ⚠️ 균등 비중이면 벤치마크와 곡선이 겹침(정상) — 비중 프리셋(Markowitz 최적해) 연결은 이월(다음 작업 1, §28).
 - 검증: `vite build`·ESLint·`py_compile`·app import(22 API 라우트) 통과. 포트폴리오 백테스트 실데이터 확인(50/30/20 BTC·ETH·XRP → −29.6% vs 동일가중 −32.5%). **브라우저 육안 미검증**.
+
+### Phase 21 — IA 재편 + 라우트 정리 + 동선/가이드 (2026-06-01)
+- ⑴ 분석/도구 분리 마감: 헤더 드롭다운→평탄 탭, "팩터·전략"→"팩터 분석" 개명, 도구의 GARCH 탭 제거(코인상세로 일원화). ⑵ 탐색에 묻혀 있던 서브탭(마켓·섹터·스크리너)을 헤더 탭으로 승격 + 의도별 그룹 구분선. ⑶ **코인 목록을 메인(`/`)으로**(로고=코인목록), 대시보드는 `/dashboard`로. ⑷ 시장구조/팩터 라우트 `/analysis/*`→`/structure`·`/factor`(크로스링크 정정). ⑸ 포트폴리오 동선(축소안): 최적화 ★/◆ 비중 카드에 "이 비중으로 백테스트 →". ⑹ 중복정리: 마켓 거래대금 표·대시보드 W52Summary/MoversFeed 제거(오늘의 시그널로 일원화). ⑺ 시장구조/팩터 상단 "한눈 요약" 스트립. ⑻ 별도 가이드 창 `/guide`(방법론·기술스택). 빌드·ESLint 통과.
+
+### Phase 22 — 상폐 404 버그 + 리스크 탭 + 퀀트 신뢰성(거래비용·생존편향) + 대시보드 관제탑 재구성 + IA 영어화 (2026-06-02~03)
+다회 세션 묶음. 대시보드·헤더는 사용자와 여러 차례 핑퐁하며 수렴(의사결정 엔지니어링노트 §29·§30).
+- **상폐 종목 404 버그**: `analysis_service.get_correlation`이 섹터 스냅샷 키(`_CATEGORIES`)를 직접 순회해 상폐된 `KRW-DRIFT` 일봉을 fetch → 404가 500으로 전파. ⑴메인: `market_service.valid_markets()`(`/market/all` 교집합)와 교집합만 순회. ⑵안전망: `upbit_rest.get_candles`가 404면 `[]` 반환 → 미래에 다른 종목이 상폐돼도 전체 집계가 안 죽음. (검증: valid_markets 262종에 DRIFT 없음, 상폐 캔들 호출 `[]`)
+- **리스크 탭 `/risk` 신설**: `Analysis.jsx`에 risk seg/GROUP/요약 스트립 + 헤더 탭. 3섹션 — 리스크-수익 분포(변동성×1개월수익률 산점도, 거래대금 상위 120)·변동성 분포(일변동성 히스토그램)·VaR 랭킹(정규근사 1일 95% VaR=1.645×일변동성). 데이터=기존 `coinStats`(프리페치) 재사용 → **추가 호출 0**.
+- **잔버그 5건**: ⑴Compare 최고/최저 수익률 부호·색 하드코딩(`+-12%` 빨강 오표기) 수정 ⑵Compare Y축 `[-30,50]` 고정→기본 보장+극단 확장(주석 모순 해소) ⑶CoinDetail 지표토글 죽은 `bg-${color}-500` 동적 클래스→hex inline ⑷CoinDetail 호가 막대 `size*25` 임의 스케일→최대잔량 상대(`size/maxDepth`) ⑸Backtest 단일전략 자산곡선 색 `#6366f1`→브랜드블루 `#1763b6`.
+- **거래비용(`fee_bps`) 반영** — 퀀트 신뢰성: `backtest_service` 단일전략(진입+청산 ×(1−fee))·포트폴리오(t0 진입+리밸런스 회전 turnover×fee)·`quant_service` 모멘텀(매 리밸런스 롱숏 2×fee 차감). 기본 5bps(업비트 KRW ~0.05%). 라우터·`api/backtest.js`·프론트 입력칸 추가. 스키마: `BacktestMetrics.benchmark_return`·`fee_bps`, `EquityPoint.benchmark`, `MomentumResult.fee_bps`. (검증: MA fee 0→5bps 총수익 2.43%→2.13%)
+- **단일전략 buy&hold 벤치마크 + 알파**: 자산곡선에 매수보유 라인(회색 점선) + 5카드(총수익·매수보유·**초과수익 알파**=총수익−벤치·MDD·승률/거래). 단일전략이 "그냥 보유"보다 나은지 가시화.
+- **코인상세 음의상관(헤지)**: 상관 카드를 동조(상위7)+헤지 후보(하위7, 음의 상관) 2분할.
+- **퀀트 신뢰성 경고 배지**: 백테스트(단일·포트)·모멘텀 결과에 ⚠️ Caveat — "인샘플·생존편향(현재 상장 종목만)·슬리피지/세금 미반영, 미래 보장 아님". 정직성(메모리 `feedback_viz_honesty`).
+- **대시보드 관제탑 재구성**(§29): 시세표 제거→복원→위계 재설계의 핑퐁 끝에 — ①KPI 4(24h거래대금·평균등락·**52주 신고/신저**·**거래대금 집중도**; 도미넌스→지배력 도넛·상승비율→시장폭과 중복이라 교체) ②**시장 종합 추세 focal**(전폭·340px; `get_regime` 동일가중 시장지수+HMM 국면 밴드 재활용, 콜드 0) ③오늘의 시그널 ④보조 **균일 4카드**(공포탐욕·지배력·시장폭·섹터) ⑤**시세 요약 표 전폭**. 핵심 교훈: **대시보드의 중복은 "요약본"이라 정당**(상세는 각 페이지), 산만함의 원인은 중복이 아니라 **위계 부재** → focal/시세표를 기둥으로, 보조는 작고 균일하게.
+- **IA: 전략도구 → "More" 드롭다운 + 독립 라우트**(§30): 헤더 "서비스 더보기"(영어 **More**) 드롭다운 부활(호버 펼침·빨간점·chevron·아이콘+설명, 업비트 패턴) — 단 과거 `/tools` 단일 페이지 `?tab=` 내부 탭 구조를 **독립 라우트**(`/tools/portfolio`·`/tools/backtest`·`/tools/compare`)로 분리(드롭다운 구분=실제 페이지 구분, 이중 탭바 제거). `Tools.jsx`→3 Page 컴포넌트(`PortfolioPage`·`BacktestPage`·`ComparePage`). 최적비중→백테스트 전달(preset)은 `navigate` state로. `/compare`·`/backtest` 리다이렉트 갱신.
+- **헤더 라벨 영어화(A·퀀트 전문 톤)**: `Dashboard`·`Markets`·`Sectors`·`Screener`·`Market Structure`·`Factor Analysis`·`Risk`·`More`(드롭다운 `Portfolio Optimization`·`Backtest`·`Compare`). 실제 플랫폼 표준 용어 검증(TradingView·Portfolio Visualizer·Qlib·Mantegna "market structure"). 본문 콘텐츠는 한글 유지.
+- **PageHeader(본문 최상단 제목) 제거**: 헤더 탭 활성이 현재 위치를 보여주므로 Explore·Analysis 본문 중복 제목 제거. **Tools 3종만 제목 유지**(헤더가 "More"로 묶여 개별 식별 안 됨). 마켓↔"시장 현황" 이름 불일치도 해소(헤더와 통일).
+- 검증: 단계마다 `vite build`·ESLint·`py_compile` 통과. 백엔드 거래비용/벤치마크 실호출 확인. **브라우저 육안 미검증**.

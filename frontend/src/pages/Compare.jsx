@@ -10,9 +10,9 @@ import { useAnalysisCart } from '../contexts/useAnalysisCart'
 
 import { SERIES as COLORS } from '../theme'
 
-// Y축 고정 기준선 — 종목을 토글해도 축이 흔들리지 않아 기존 라인 개형이 유지된다.
-// 일반 종목(90일 누적 -25~+34%)을 모두 담고, 극단 급등 종목을 고를 때만 위로 늘어난다(잘라내지 않음).
-const Y_DOMAIN = [-30, 50]
+// Y축 기준선 — 기본 [-30, 50]을 항상 보장해 일반 종목 토글 시 축이 흔들리지 않게 하되,
+// 극단 급등/급락 종목이 범위를 벗어나면 그만큼만 확장한다(잘라내지 않음 + 안정성 절충).
+const Y_BASE = [-30, 50]
 
 function Spinner() {
   return (
@@ -92,6 +92,17 @@ export default function Compare() {
     }
     return rows
   }, [selected, candlesByMarket])
+
+  // 기본 [-30,50]을 보장하되 데이터가 벗어나면 10단위로 확장 (극단값 잘림 방지).
+  const yDomain = useMemo(() => {
+    if (chartData.length === 0) return Y_BASE
+    let lo = Y_BASE[0], hi = Y_BASE[1]
+    chartData.forEach(row => selected.forEach(m => {
+      const v = row[m]
+      if (typeof v === 'number') { lo = Math.min(lo, v); hi = Math.max(hi, v) }
+    }))
+    return [Math.floor(lo / 10) * 10, Math.ceil(hi / 10) * 10]
+  }, [chartData, selected])
 
   if (tLoading) return <Spinner />
 
@@ -190,7 +201,7 @@ export default function Compare() {
             <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#9ca3af' }} interval={14} />
-              <YAxis domain={Y_DOMAIN} tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => v + '%'} />
+              <YAxis domain={yDomain} tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => v + '%'} />
               <Tooltip formatter={(v, name) => [v.toFixed(2) + '%', name.replace('KRW-', '')]} contentStyle={{ fontSize: 12 }} />
               <Legend formatter={name => name.replace('KRW-', '')} wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={0} stroke="#e5e7eb" />
@@ -227,11 +238,11 @@ export default function Compare() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">최고 수익률</span>
-                    <span className="font-medium text-red-500">+{maxVal.toFixed(2)}%</span>
+                    <span className={`font-medium ${maxVal >= 0 ? 'text-red-500' : 'text-blue-500'}`}>{maxVal >= 0 ? '+' : ''}{maxVal.toFixed(2)}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">최저 수익률</span>
-                    <span className="font-medium text-blue-500">{minVal.toFixed(2)}%</span>
+                    <span className={`font-medium ${minVal >= 0 ? 'text-red-500' : 'text-blue-500'}`}>{minVal >= 0 ? '+' : ''}{minVal.toFixed(2)}%</span>
                   </div>
                 </div>
               </div>

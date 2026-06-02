@@ -29,6 +29,16 @@ function MetricCard({ label, value, color = 'text-gray-800', sub }) {
 // 리스크 조정 지표 색상: 양수=빨강(좋음), 음수=파랑(나쁨), 0 부근=회색
 const raColor = v => (v > 0.1 ? 'text-red-500' : v < -0.1 ? 'text-blue-500' : 'text-gray-600')
 
+// 백테스트 신뢰성 경고 — 퀀트가 결과를 곧이곧대로 믿지 않도록 한계를 명시.
+function Caveat({ children }) {
+  return (
+    <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 leading-relaxed">
+      <span className="flex-shrink-0">⚠️</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
 function Spinner() {
   return (
     <div className="flex justify-center py-16">
@@ -44,7 +54,7 @@ export default function Backtest({ preset }) {
   const [strategy, setStrategy] = useState(preset?.weights?.length ? 'portfolio' : 'ma')
   // 진입 시 카트에 담긴 게 있으면 첫 종목, 없으면 BTC (마운트 1회만 — 이후 사용자 select 보존)
   const [market,   setMarket]   = useState(() => cart.items[0] || 'KRW-BTC')
-  const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200 })
+  const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200, fee: 5 })
   const [result,   setResult]   = useState(null)
   const [loading,  setLoading]  = useState(false)
 
@@ -55,7 +65,7 @@ export default function Backtest({ preset }) {
   async function handleRun() {
     setLoading(true)
     try {
-      const p = { market, count: params.count }
+      const p = { market, count: params.count, fee_bps: params.fee }
       const data = strategy === 'ma'
         ? await runMaCross({ ...p, fast: params.fast, slow: params.slow })
         : await runRsi({ ...p, period: params.period, oversold: params.oversold, overbought: params.overbought })
@@ -77,6 +87,7 @@ export default function Backtest({ preset }) {
   const equityData = result?.equity.map(e => ({
     time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
     value: e.value,
+    benchmark: e.benchmark,
   })) ?? []
 
   const tradeData = (result?.trades ?? []).filter(t => t.side === 'SELL')
@@ -196,6 +207,14 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
               className="border border-gray-200 rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-brand-400"
             />
           </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1.5 block">거래비용 (편도 bps, 1bps=0.01%)</label>
+            <input type="number" value={params.fee} min={0} max={100} step={1}
+              onChange={e => setParam('fee', e.target.value)}
+              title="매매마다 차감하는 편도 수수료. 업비트 KRW 마켓 ~5bps(0.05%)"
+              className="border border-gray-200 rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-brand-400"
+            />
+          </div>
           <button
             onClick={handleRun}
             disabled={loading}
@@ -210,17 +229,34 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
 
       {result && !loading && (
         <>
-          {/* 성과 지표 */}
-          <div className="grid grid-cols-4 gap-4">
-            <MetricCard
-              label="총 수익률"
-              value={(result.metrics.total_return >= 0 ? '+' : '') + result.metrics.total_return.toFixed(2) + '%'}
-              color={result.metrics.total_return >= 0 ? 'text-red-500' : 'text-blue-500'}
-            />
-            <MetricCard label="최대 낙폭(MDD)" value={'-' + result.metrics.mdd.toFixed(2) + '%'} color="text-blue-500" />
-            <MetricCard label="승률" value={result.metrics.win_rate.toFixed(1) + '%'} />
-            <MetricCard label="총 거래 횟수" value={result.metrics.trade_count + '회'} />
-          </div>
+          {/* 성과 지표 — 거래비용 차감 후. 알파 = 전략 − 매수보유(buy&hold) */}
+          {(() => {
+            const alpha = result.metrics.total_return - result.metrics.benchmark_return
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <MetricCard
+                  label="총 수익률"
+                  value={(result.metrics.total_return >= 0 ? '+' : '') + result.metrics.total_return.toFixed(2) + '%'}
+                  color={result.metrics.total_return >= 0 ? 'text-red-500' : 'text-blue-500'}
+                  sub={`거래비용 ${result.metrics.fee_bps}bps 반영`}
+                />
+                <MetricCard
+                  label="매수보유 (buy&hold)"
+                  value={(result.metrics.benchmark_return >= 0 ? '+' : '') + result.metrics.benchmark_return.toFixed(2) + '%'}
+                  color={result.metrics.benchmark_return >= 0 ? 'text-red-500' : 'text-blue-500'}
+                  sub="같은 종목 단순 보유"
+                />
+                <MetricCard
+                  label="초과수익 (알파)"
+                  value={(alpha >= 0 ? '+' : '') + alpha.toFixed(2) + '%p'}
+                  color={raColor(alpha)}
+                  sub="전략 − 매수보유"
+                />
+                <MetricCard label="최대 낙폭(MDD)" value={'-' + result.metrics.mdd.toFixed(2) + '%'} color="text-blue-500" />
+                <MetricCard label="승률 · 거래" value={result.metrics.win_rate.toFixed(1) + '% · ' + result.metrics.trade_count + '회'} />
+              </div>
+            )
+          })()}
 
           {/* 리스크 조정 수익률 (√365 연율화) */}
           <div className="grid grid-cols-3 gap-4">
@@ -244,18 +280,19 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
             />
           </div>
 
-          {/* 자산 곡선 */}
+          {/* 자산 곡선 — 전략 vs 매수보유 벤치마크 */}
           <div className="bg-white border border-gray-200 rounded-md p-5">
             <div className="text-sm font-semibold text-gray-700 mb-0.5">자산 곡선</div>
-            <div className="text-xs text-gray-400 mb-4">초기 자본 100 기준</div>
+            <div className="text-xs text-gray-400 mb-4">초기 자본 100 기준 · 전략(파랑) vs 매수보유 벤치마크(회색 점선)</div>
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={equityData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(equityData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip formatter={v => [v.toFixed(2), '자산']} contentStyle={{ fontSize: 12 }} />
+                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'benchmark' ? '매수보유' : '전략']} contentStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
-                <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="value" />
+                <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="benchmark" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -311,6 +348,11 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
               </div>
             </div>
           </div>
+
+          <Caveat>
+            과거 <b>인샘플</b> 백테스트입니다. 거래비용({result.metrics.fee_bps}bps)은 반영했으나 <b>슬리피지·세금·체결 지연은 미반영</b>이고,
+            상장폐지 종목이 제외된 <b>생존편향</b>이 있어 실제 성과는 더 낮을 수 있습니다. 미래 수익을 보장하지 않습니다.
+          </Caveat>
         </>
       )}
 
@@ -345,6 +387,7 @@ function PortfolioBacktest({ tickers, cart, preset }) {
   )
   const [rebalance, setRebalance] = useState(0)
   const [count, setCount] = useState(180)
+  const [fee, setFee] = useState(5)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -367,7 +410,7 @@ function PortfolioBacktest({ tickers, cart, preset }) {
     setLoading(true)
     try {
       const weights = markets.map(m => wmap[m] ?? 0)
-      const data = await runPortfolio({ markets, weights, count, rebalance_days: rebalance })
+      const data = await runPortfolio({ markets, weights, count, rebalance_days: rebalance, fee_bps: fee })
       setResult(data)
     } finally { setLoading(false) }
   }
@@ -414,12 +457,14 @@ function PortfolioBacktest({ tickers, cart, preset }) {
           </select>
           <input type="number" value={count} min={30} max={500} onChange={e => setCount(Number(e.target.value))}
             title="일봉 기간" className="w-24 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400" />
+          <input type="number" value={fee} min={0} max={100} onChange={e => setFee(Number(e.target.value))}
+            title="편도 거래비용(bps) · 진입+리밸런스 회전에 차감" className="w-20 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400" placeholder="bps" />
           <button onClick={run} disabled={loading || markets.length < 1}
             className="px-5 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {loading ? '실행 중...' : '백테스트 실행'}
           </button>
         </div>
-        <div className="text-[11px] text-gray-400 mt-2">※ 비중 합은 자동 정규화됩니다. 균등 비중이면 동일가중 벤치마크와 곡선이 겹칩니다.</div>
+        <div className="text-[11px] text-gray-400 mt-2">※ 비중 합은 자동 정규화 · 마지막 입력칸 = 편도 거래비용(bps, 진입+리밸런스 회전에 차감) · 균등 비중이면 동일가중 벤치마크와 곡선이 겹칩니다.</div>
       </div>
 
       {loading && <Spinner />}
@@ -465,6 +510,11 @@ function PortfolioBacktest({ tickers, cart, preset }) {
               ))}
             </div>
           </div>
+
+          <Caveat>
+            거래비용(진입+리밸런스 회전)은 반영했으나 <b>슬리피지·세금은 미반영</b>이고, 상장폐지 종목이 제외된 <b>생존편향</b>이 있습니다.
+            과거 성과이며 미래를 보장하지 않습니다.
+          </Caveat>
         </>
       )}
     </div>

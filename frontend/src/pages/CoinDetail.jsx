@@ -230,6 +230,10 @@ export function CoinDetailView({ market }) {
   const share = totalVol ? (ticker.acc_trade_price_24h / totalVol) * 100 : 0
   const w52span = ticker.w52_high - ticker.w52_low
   const w52pos = w52span > 0 ? Math.max(0, Math.min(100, (ticker.trade_price - ticker.w52_low) / w52span * 100)) : 0
+  // 호가 막대폭은 표시된 호가의 최대 잔량 대비 상대 스케일 (임의 배율 대신 깊이 비교가 의미 있게)
+  const maxDepth = orderbook
+    ? Math.max(...orderbook.asks.map(a => a.size), ...orderbook.bids.map(b => b.size), 1e-9)
+    : 1
 
   function toggleIndicator(key) {
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }))
@@ -325,19 +329,17 @@ export function CoinDetailView({ market }) {
             </div>
             <div className="flex gap-1 pr-2">
               {[
-                { key: 'ma',        label: 'MA',        color: 'indigo' },
-                { key: 'bollinger', label: 'Bollinger', color: 'emerald' },
-                { key: 'rsi',       label: 'RSI',       color: 'violet' },
-              ].map(({ key, label, color }) => (
+                { key: 'ma',        label: 'MA',        hex: '#6366f1' },
+                { key: 'bollinger', label: 'Bollinger', hex: '#10b981' },
+                { key: 'rsi',       label: 'RSI',       hex: '#8b5cf6' },
+              ].map(({ key, label, hex }) => (
                 <button
                   key={key}
                   onClick={() => toggleIndicator(key)}
                   className={`px-2.5 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
-                    indicators[key]
-                      ? `bg-${color}-500 text-white`
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    indicators[key] ? 'text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
-                  style={indicators[key] ? { backgroundColor: { indigo: '#6366f1', emerald: '#10b981', violet: '#8b5cf6' }[color] } : {}}
+                  style={indicators[key] ? { backgroundColor: hex } : {}}
                 >
                   {label}
                 </button>
@@ -364,7 +366,7 @@ export function CoinDetailView({ market }) {
             <div className="text-xs flex-1 min-h-0 overflow-y-auto">
               {[...orderbook.asks].reverse().map((ask, i) => (
                 <div key={i} className="relative flex items-center px-3 py-1 hover:bg-blue-50">
-                  <div className="absolute right-0 top-0 bottom-0 bg-blue-50" style={{ width: `${Math.min(75, ask.size * 25)}%` }} />
+                  <div className="absolute right-0 top-0 bottom-0 bg-blue-50" style={{ width: `${(ask.size / maxDepth) * 90}%` }} />
                   <span className="relative z-10 flex-1 text-blue-500 font-medium">{ask.price.toLocaleString()}</span>
                   <span className="relative z-10 text-gray-400">{ask.size.toFixed(4)}</span>
                 </div>
@@ -374,7 +376,7 @@ export function CoinDetailView({ market }) {
               </div>
               {orderbook.bids.map((bid, i) => (
                 <div key={i} className="relative flex items-center px-3 py-1 hover:bg-red-50">
-                  <div className="absolute right-0 top-0 bottom-0 bg-red-50" style={{ width: `${Math.min(75, bid.size * 25)}%` }} />
+                  <div className="absolute right-0 top-0 bottom-0 bg-red-50" style={{ width: `${(bid.size / maxDepth) * 90}%` }} />
                   <span className="relative z-10 flex-1 text-red-500 font-medium">{bid.price.toLocaleString()}</span>
                   <span className="relative z-10 text-gray-400">{bid.size.toFixed(4)}</span>
                 </div>
@@ -417,15 +419,28 @@ export function CoinDetailView({ market }) {
         </div>
       </div>
 
-      {/* 상관관계 분석 */}
+      {/* 상관관계 분석 — 동조(양의 상관) + 헤지 후보(음의 상관) 양쪽을 모두 노출 */}
       <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="flex items-center justify-between mb-0.5">
           <div className="text-sm font-semibold text-gray-700">타 종목 상관관계</div>
           <Link to="/structure#network" className="text-xs text-brand-600 hover:underline">전체 상관 네트워크 →</Link>
         </div>
-        <div className="text-xs text-gray-400 mb-4">60일 일봉 종가 기준 피어슨 상관계수</div>
+        <div className="text-xs text-gray-400 mb-4">60일 일봉 종가 기준 피어슨 상관계수 · 함께 움직이는 종목과 반대로 움직이는(헤지) 종목</div>
+
+        <div className="text-[11px] font-medium text-red-500 mb-1.5">가장 함께 움직임 (동조)</div>
         <div className="grid grid-cols-7 gap-2">
-          {corrData.slice(0, 14).map(item => (
+          {corrData.slice(0, 7).map(item => (
+            <div key={item.market} className={`rounded-md px-3 py-2.5 text-center ${corrColor(item.correlation)}`}>
+              <div className="text-xs font-semibold">{item.market.replace('KRW-', '')}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{item.korean_name}</div>
+              <div className="text-sm font-bold mt-1">{item.correlation.toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-[11px] font-medium text-blue-500 mt-4 mb-1.5">가장 반대로 움직임 (헤지 후보)</div>
+        <div className="grid grid-cols-7 gap-2">
+          {corrData.slice(-7).reverse().map(item => (
             <div key={item.market} className={`rounded-md px-3 py-2.5 text-center ${corrColor(item.correlation)}`}>
               <div className="text-xs font-semibold">{item.market.replace('KRW-', '')}</div>
               <div className="text-xs text-gray-500 mt-0.5">{item.korean_name}</div>

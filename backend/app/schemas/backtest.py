@@ -2,8 +2,9 @@ from pydantic import BaseModel
 
 
 class EquityPoint(BaseModel):
-    time: int      # unix timestamp (seconds)
-    value: float   # 포트폴리오 가치 (초기 100 기준)
+    time: int          # unix timestamp (seconds)
+    value: float       # 전략 자산 가치 (초기 100 기준, 거래비용 반영)
+    benchmark: float = 100.0  # 동일 종목 매수보유(buy&hold) 가치 (초기 100 기준)
 
 
 class TradeRecord(BaseModel):
@@ -14,10 +15,12 @@ class TradeRecord(BaseModel):
 
 
 class BacktestMetrics(BaseModel):
-    total_return: float   # 총 수익률 (%)
+    total_return: float   # 총 수익률 (%, 거래비용 반영)
+    benchmark_return: float = 0.0  # 매수보유(buy&hold) 총 수익률 (%) — 전략의 초과수익(알파) 비교용
     mdd: float            # 최대 낙폭 (%)
     win_rate: float       # 승률 (%)
     trade_count: int
+    fee_bps: float = 0.0  # 적용한 편도 거래비용 (bps, 1bps=0.01%)
     # 리스크 조정 수익률 (일별 equity 수익률 기반, 암호화폐는 365일 거래 → √365 연율화)
     sharpe: float         # 샤프 = (평균/표준편차) × √365 — 변동성 단위당 수익
     sortino: float        # 소르티노 = (평균/하방표준편차) × √365 — 손실 변동성만 패널티

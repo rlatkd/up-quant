@@ -1,17 +1,17 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ScatterChart, Scatter, BarChart, Bar, LineChart, Line, ComposedChart, Area,
   XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea,
   Cell, ResponsiveContainer,
 } from 'recharts'
 import { forceSimulation, forceManyBody, forceLink, forceCenter, forceCollide } from 'd3-force'
-import PageHeader from '../components/ui/PageHeader'
 import { Card, CardHeader } from '../components/ui/Card'
 import StatCard from '../components/ui/StatCard'
 import Spinner from '../components/ui/Spinner'
 import InfoTooltip from '../components/InfoTooltip'
 import { useTickers } from '../hooks/useTickers'
+import { useCoinStats } from '../hooks/useAnalysis'
 import {
   usePortfolio, useNetwork, usePCA, useClusters, useDendrogram,
   useMomentum, usePairs, useRegime,
@@ -387,7 +387,7 @@ function MomentumSection() {
   return (
     <Card>
       <CardHeader
-        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>, 하위 20%를 <b>숏</b>(달러중립). 동일가중 매수보유가 벤치마크입니다. ※ 인샘플·거래비용 미반영.</InfoTooltip></>}
+        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>, 하위 20%를 <b>숏</b>(달러중립). 동일가중 매수보유가 벤치마크입니다. 거래비용 <b>{data.fee_bps ?? 5}bps</b>(롱·숏 회전)를 차감했습니다. ⚠️ <b>인샘플·생존편향</b>(현재 상장 종목만)이 있어 실전 수익률은 더 낮습니다.</InfoTooltip></>}
         subtitle="20일 모멘텀 · 5일 리밸런스 · 롱숏 달러중립"
         action={<span className="text-[11px] text-gray-400">{data.n}종</span>}
       />
@@ -416,6 +416,10 @@ function MomentumSection() {
           <div className="grid grid-cols-2 gap-4 mt-4">
             <HoldingList title="현재 롱 (모멘텀 상위)" rows={data.long} color="text-red-500" />
             <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />
+          </div>
+          <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mt-4 leading-relaxed">
+            <span className="flex-shrink-0">⚠️</span>
+            <span>거래비용 {data.fee_bps ?? 5}bps를 차감했으나 <b>인샘플·생존편향</b>(현재 상장 종목만)이 있어 실전 성과는 더 낮습니다. 학술적 팩터 검증용입니다.</span>
           </div>
         </>
       )}
@@ -561,6 +565,157 @@ function RegimeSection() {
   )
 }
 
+// ── 8) 리스크 (변동성 분포 · 정규근사 VaR) ────────────────────
+// 데이터는 전종목 coinStats(부팅 프리페치) 재사용 — 추가 팬아웃 0, 계산만.
+const VAR_Z = 1.645 // 95% 단측 정규분위수
+const riskColor = (vol) => lerpColor('#94a3b8', '#e0913c', vol / 12) // 일변동성 0~12%+ → 회색→앰버
+const fmtKrwShort = (v) => {
+  if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
+  if (v >= 1e8) return Math.round(v / 1e8).toLocaleString() + '억'
+  return Math.round(v / 1e4).toLocaleString() + '만'
+}
+
+// VaR(정규근사 1일 95%) = z × 일변동성. coinStats.volatility는 30일 일간수익률 표준편차(%).
+function useRiskRows() {
+  const { data, loading } = useCoinStats()
+  const rows = useMemo(() => (
+    data
+      .filter(c => c.volatility > 0)
+      .map(c => ({ ...c, var95: +(VAR_Z * c.volatility).toFixed(2) }))
+  ), [data])
+  return { rows, loading }
+}
+
+function VolDistSection() {
+  const { rows, loading } = useRiskRows()
+  // 일변동성 히스토그램: 0~10%를 1%p 폭으로, 10%+ 한 칸.
+  const bins = useMemo(() => {
+    const out = Array.from({ length: 11 }, (_, i) => ({
+      label: i < 10 ? `${i}~${i + 1}` : '10+',
+      mid: i + 0.5,
+      count: 0,
+    }))
+    rows.forEach(r => { out[Math.min(Math.floor(r.volatility), 10)].count += 1 })
+    return out
+  }, [rows])
+
+  return (
+    <Card>
+      <CardHeader
+        title={<>변동성 분포<InfoTooltip width="w-80">전 종목의 <b>30일 일간수익률 표준편차(일변동성)</b>를 1%p 구간으로 히스토그램화했습니다. 오른쪽으로 갈수록 하루 가격이 크게 출렁이는 고위험 종목 군집입니다. 색이 진할수록 고변동.</InfoTooltip></>}
+        subtitle="전 종목 일변동성(30일) 히스토그램 · 진할수록 고변동"
+        action={<span className="text-[11px] text-gray-400">{rows.length}종</span>}
+      />
+      {loading ? <Spinner /> : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={bins} margin={{ top: 10, right: 16, bottom: 16, left: -8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9ca3af' }}
+              label={{ value: '일변동성 (%)', position: 'insideBottom', offset: -6, fontSize: 11, fill: '#9ca3af' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false}
+              label={{ value: '종목 수', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#9ca3af' }} />
+            <Tooltip contentStyle={{ fontSize: 12 }} cursor={{ fill: '#f9fafb' }}
+              formatter={(v) => [v + '종', '종목 수']} labelFormatter={l => `일변동성 ${l}%`} />
+            <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+              {bins.map((b, i) => <Cell key={i} fill={riskColor(b.mid)} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </Card>
+  )
+}
+
+function VarRankSection() {
+  const { rows, loading } = useRiskRows()
+  const navigate = useNavigate()
+  const ranked = useMemo(() => [...rows].sort((a, b) => b.var95 - a.var95).slice(0, 30), [rows])
+
+  return (
+    <Card>
+      <CardHeader
+        title={<>리스크 랭킹 (1일 95% VaR)<InfoTooltip width="w-80"><b>VaR(Value at Risk)</b>은 "95% 확률로 하루 손실이 이 값을 넘지 않는다"는 위험 척도입니다. 정규분포를 가정해 <b>1.645 × 일변동성</b>으로 근사했습니다. 값이 클수록 하루에 크게 잃을 수 있는 고위험 종목. ※ 정규근사라 실제 꼬리위험(급락)은 과소평가될 수 있습니다.</InfoTooltip></>}
+        subtitle="정규근사 1일 95% VaR = 1.645 × 일변동성 · 상위 30종"
+        action={<span className="text-[11px] text-gray-400">전 {rows.length}종 중</span>}
+      />
+      {loading ? <Spinner /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-gray-400 border-b border-gray-100">
+                <th className="px-3 py-2 text-left font-medium w-10">#</th>
+                <th className="px-3 py-2 text-left font-medium">종목</th>
+                <th className="px-3 py-2 text-right font-medium">일변동성</th>
+                <th className="px-3 py-2 text-right font-medium">1일 95% VaR</th>
+                <th className="px-3 py-2 text-right font-medium">1개월 수익률</th>
+                <th className="px-3 py-2 text-right font-medium">24h 거래대금</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r, i) => (
+                <tr key={r.market} onClick={() => navigate(`/coins/${r.market}`)}
+                  className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer">
+                  <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">
+                    {sym(r.market)} <span className="text-gray-400 font-normal">{r.korean_name}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-600">{r.volatility.toFixed(2)}%</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium text-blue-500">−{r.var95.toFixed(2)}%</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${up(r.return_1m)}`}>{pct(r.return_1m)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-500">{fmtKrwShort(r.acc_trade_price_24h)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function RiskReturnScatterSection() {
+  const { rows, loading } = useRiskRows()
+  const navigate = useNavigate()
+  // 분포 본체만 보이도록 거래대금 상위 120종으로 한정(잡코인 극단치가 축을 늘리는 것 방지).
+  const points = useMemo(() => (
+    [...rows]
+      .sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
+      .slice(0, 120)
+      .map(r => ({ ...r, x: r.volatility, y: r.return_1m }))
+  ), [rows])
+
+  return (
+    <Card>
+      <CardHeader
+        title={<>리스크-수익 분포<InfoTooltip width="w-80">거래대금 상위 120종을 <b>일변동성(X)</b> × <b>1개월 수익률(Y)</b> 평면에 흩뿌립니다. 오른쪽=고위험, 위=고수익. 왼쪽 위(저위험·고수익)가 효율적이고, 오른쪽 아래(고위험·손실)는 비효율적입니다. 점 색 = 1개월 수익률.</InfoTooltip></>}
+        subtitle="일변동성 × 1개월 수익률 · 색 = 수익률 · 점 클릭 → 상세"
+        action={<span className="text-[11px] text-gray-400">상위 120종</span>}
+      />
+      {loading ? <Spinner /> : (
+        <ResponsiveContainer width="100%" height={360}>
+          <ScatterChart margin={{ top: 10, right: 20, bottom: 16, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <ReferenceLine y={0} stroke="#e5e7eb" />
+            <XAxis type="number" dataKey="x" name="변동성" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }}
+              label={{ value: '일변동성 (%)', position: 'insideBottom', offset: -6, fontSize: 11, fill: '#9ca3af' }} />
+            <YAxis type="number" dataKey="y" name="1개월수익률" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+            <ZAxis range={[36, 36]} />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => payload?.[0] ? (
+              <div className="bg-white border border-gray-200 rounded px-2 py-1 text-xs shadow-sm">
+                <b>{sym(payload[0].payload.market)}</b> {payload[0].payload.korean_name}<br />
+                변동성 {payload[0].payload.x.toFixed(2)}% · 1M {pct(payload[0].payload.y)}
+              </div>
+            ) : null} />
+            <Scatter data={points} isAnimationActive={false} onClick={(p) => p?.market && navigate(`/coins/${p.market}`)} className="cursor-pointer">
+              {points.map((p, i) => <Cell key={i} fill={p.y >= 0 ? '#ef4444' : '#3b82f6'} fillOpacity={0.55} />)}
+            </Scatter>
+          </ScatterChart>
+        </ResponsiveContainer>
+      )}
+    </Card>
+  )
+}
+
 // ── 분석 허브 (관찰형 — 유니버스에서 자동 계산해 "보여주는" 분석) ──
 // 인풋(종목/전략 선택)이 필요한 설정형 도구(포트폴리오·GARCH·백테스트·비교)는 헤더 "도구"
 // 드롭다운 → Tools.jsx로 분리. 여기는 시장 전체를 자동 분석해 보여주는 것만.
@@ -580,6 +735,13 @@ const GROUPS = [
       { id: 'pairs', label: '페어트레이딩', Comp: PairsSection },
     ],
   },
+  {
+    label: '리스크', tabs: [
+      { id: 'riskreturn', label: '리스크-수익 분포', Comp: RiskReturnScatterSection },
+      { id: 'voldist', label: '변동성 분포', Comp: VolDistSection },
+      { id: 'varrank', label: 'VaR 랭킹', Comp: VarRankSection },
+    ],
+  },
 ]
 // 경로(/structure · /factor)가 어떤 그룹을 보여줄지 결정. 헤더 탭 2개와 1:1.
 const PAGE_META = {
@@ -592,6 +754,11 @@ const PAGE_META = {
     group: '팩터 분석',
     title: '팩터 분석',
     description: '시장 전체에서 팩터가 실재하는지 관찰 — 횡단면 모멘텀·공적분 페어 (고정 파라미터의 관찰형. 종목을 골라 돌리는 것은 \'전략 도구\'에서)',
+  },
+  risk: {
+    group: '리스크',
+    title: '리스크',
+    description: '전 종목의 위험을 한눈에 — 일변동성 분포와 정규근사 1일 95% VaR 랭킹 (꼬리위험은 과소평가될 수 있는 정규근사)',
   },
 }
 
@@ -624,11 +791,31 @@ function FactorSummary() {
   )
 }
 
+function RiskSummary() {
+  const { rows } = useRiskRows()
+  const { avgVol, avgVar, top } = useMemo(() => {
+    if (!rows.length) return { avgVol: 0, avgVar: 0, top: null }
+    const sum = rows.reduce((s, r) => s + r.volatility, 0)
+    const mean = sum / rows.length
+    return { avgVol: mean, avgVar: mean * VAR_Z, top: rows.reduce((a, b) => (b.volatility > a.volatility ? b : a)) }
+  }, [rows])
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatCard label="시장 평균 일변동성" value={avgVol.toFixed(2) + '%'} valueClass="text-2xl" />
+      <StatCard label="평균 1일 95% VaR" value={'−' + avgVar.toFixed(2) + '%'} color="text-blue-500" valueClass="text-2xl" />
+      <StatCard label="최고 변동성 종목" value={top ? sym(top.market) : '—'}
+        sub={top ? `${top.korean_name} · 일변동성 ${top.volatility.toFixed(1)}%` : ''} valueClass="text-2xl" />
+    </div>
+  )
+}
+
 export default function Analysis() {
   const { pathname, hash } = useLocation()
-  const seg = pathname.startsWith('/factor') ? 'factor' : 'structure'
+  const seg = pathname.startsWith('/factor') ? 'factor'
+    : pathname.startsWith('/risk') ? 'risk' : 'structure'
   const meta = PAGE_META[seg]
   const group = GROUPS.find(g => g.label === meta.group) ?? GROUPS[0]
+  const Summary = seg === 'factor' ? FactorSummary : seg === 'risk' ? RiskSummary : StructureSummary
 
   // 크로스링크(/structure#cluster 등)로 진입 시 해당 섹션으로 스크롤.
   useEffect(() => {
@@ -639,8 +826,8 @@ export default function Analysis() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={meta.title} description={meta.description} />
-      {seg === 'structure' ? <StructureSummary /> : <FactorSummary />}
+      {/* 페이지 제목은 헤더 탭 활성으로 드러나므로 본문 중복 제목(PageHeader) 생략. 바로 요약 스트립부터. */}
+      <Summary />
       <section className="space-y-4">
         {group.tabs.map(t => (
           <div key={t.id} id={t.id} className="scroll-mt-20">

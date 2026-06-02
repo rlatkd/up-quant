@@ -157,7 +157,10 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
 
 
 def get_correlation(market: str) -> list[CorrelationItem]:
-    all_markets = [m for m in _CATEGORIES.keys() if m != market]
+    # 섹터 스냅샷(_CATEGORIES)엔 상폐 코드(예: KRW-DRIFT)가 남아 있을 수 있다 →
+    # 라이브 마켓(/market/all 교집합)과 교집합만 순회해 404를 원천 차단한다.
+    live = set(market_service.valid_markets())
+    all_markets = [m for m in _CATEGORIES.keys() if m != market and m in live]
     base_candles = candle_service.get_candles(market, "days", 60)
     base_closes  = [c.close for c in base_candles]
 

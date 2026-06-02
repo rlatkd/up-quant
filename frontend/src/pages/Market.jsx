@@ -261,16 +261,27 @@ export default function Market() {
         </div>
       </div>
 
-      {/* 리스크-수익 분포·군집은 분석>클러스터링으로 일원화(중복 제거) */}
-      <Link to="/structure#cluster" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-700">리스크-수익 분포 · 종목 군집</div>
-            <div className="text-xs text-gray-400 mt-0.5">변동성 × 수익률 산점도와 K-means 군집은 <span className="text-brand-600 font-medium">분석 → 클러스터링</span>에서 봅니다</div>
+      {/* 리스크/군집 심화는 전용 페이지로 일원화(중복 제거) — 변동성 분포·VaR은 리스크 탭, 산점도·K-means는 분석>클러스터링 */}
+      <div className="grid grid-cols-2 gap-4">
+        <Link to="/risk" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-700">리스크 분포 · VaR</div>
+              <div className="text-xs text-gray-400 mt-0.5">전 종목 변동성 분포와 1일 95% VaR 랭킹은 <span className="text-brand-600 font-medium">리스크</span>에서 봅니다</div>
+            </div>
+            <span className="text-brand-600 text-sm font-medium whitespace-nowrap">리스크 →</span>
           </div>
-          <span className="text-brand-600 text-sm font-medium whitespace-nowrap">분석으로 →</span>
-        </div>
-      </Link>
+        </Link>
+        <Link to="/structure#cluster" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-700">리스크-수익 분포 · 종목 군집</div>
+              <div className="text-xs text-gray-400 mt-0.5">변동성 × 수익률 산점도와 K-means 군집은 <span className="text-brand-600 font-medium">분석 → 클러스터링</span>에서 봅니다</div>
+            </div>
+            <span className="text-brand-600 text-sm font-medium whitespace-nowrap">분석으로 →</span>
+          </div>
+        </Link>
+      </div>
     </div>
   )
 }

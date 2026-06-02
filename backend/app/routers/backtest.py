@@ -12,8 +12,9 @@ def ma_cross(
     fast: int   = Query(5,   ge=2, le=50),
     slow: int   = Query(20,  ge=5, le=200),
     count: int  = Query(200, ge=60, le=500),
+    fee_bps: float = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
 ):
-    return backtest_service.run_ma_cross(market, fast, slow, count)
+    return backtest_service.run_ma_cross(market, fast, slow, count, fee_bps)
 
 
 @router.get("/rsi", response_model=BacktestResult)
@@ -23,8 +24,9 @@ def rsi_strategy(
     oversold: float = Query(30.0, ge=10, le=45),
     overbought: float = Query(70.0, ge=55, le=90),
     count: int      = Query(200,  ge=60, le=500),
+    fee_bps: float  = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
 ):
-    return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count)
+    return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count, fee_bps)
 
 
 @router.get("/portfolio", response_model=PortfolioBacktestResult)
@@ -33,6 +35,7 @@ def portfolio(
     weights: str | None = Query(None, description="쉼표 구분 비중 (markets와 같은 개수, 생략 시 동일가중)"),
     count: int = Query(180, ge=30, le=500, description="일봉 기간"),
     rebalance_days: int = Query(0, ge=0, le=90, description="리밸런스 주기(일), 0=매수보유"),
+    fee_bps: float = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
 ):
     codes = [m.strip().upper() for m in markets.split(",") if m.strip()][:10]
     w = None
@@ -41,4 +44,4 @@ def portfolio(
             w = [float(x) for x in weights.split(",") if x.strip()]
         except ValueError:
             w = None
-    return backtest_service.run_portfolio(codes, w, count, rebalance_days)
+    return backtest_service.run_portfolio(codes, w, count, rebalance_days, fee_bps)

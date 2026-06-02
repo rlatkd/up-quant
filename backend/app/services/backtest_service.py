@@ -85,10 +85,14 @@ def run_ma_cross(
     fast: int = 5,
     slow: int = 20,
     count: int = 200,
+    fee_bps: float = 5.0,
 ) -> BacktestResult:
     candles = candle_service.get_candles(market, "days", count)
     closes = [c.close for c in candles]
     times  = [c.timestamp // 1000 for c in candles]
+
+    fee = fee_bps / 10000.0
+    base = closes[0] if closes and closes[0] > 0 else 1.0
 
     fast_ma = _sma(closes, fast)
     slow_ma = _sma(closes, slow)
@@ -100,9 +104,13 @@ def run_ma_cross(
     trades: list[TradeRecord] = []
     wins = 0
 
+    # 같은 종목 매수보유(buy&hold)를 벤치마크로 각 시점에 함께 기록 → 전략의 초과수익(알파) 가시화.
+    def _ep(i: int, val: float) -> EquityPoint:
+        return EquityPoint(time=times[i], value=round(val, 2), benchmark=round(100 * closes[i] / base, 2))
+
     for i in range(len(closes)):
         if fast_ma[i] is None or slow_ma[i] is None:
-            equity.append(EquityPoint(time=times[i], value=round(equity_val, 2)))
+            equity.append(_ep(i, equity_val))
             continue
 
         prev_fast = fast_ma[i - 1]
@@ -113,13 +121,14 @@ def run_ma_cross(
             if prev_fast <= prev_slow and fast_ma[i] > slow_ma[i]:
                 position = True
                 buy_price = closes[i]
+                equity_val *= (1 - fee)            # 진입 거래비용
                 trades.append(TradeRecord(time=times[i], side="BUY", price=closes[i], pnl=0.0))
 
         # 데드크로스 → 매도
         elif position and prev_fast is not None and prev_slow is not None:
             if prev_fast >= prev_slow and fast_ma[i] < slow_ma[i]:
                 pnl = (closes[i] - buy_price) / buy_price * 100
-                equity_val *= (1 + pnl / 100)
+                equity_val *= (1 + pnl / 100) * (1 - fee)   # 실현 후 청산 거래비용
                 if pnl > 0:
                     wins += 1
                 trades.append(TradeRecord(time=times[i], side="SELL", price=closes[i], pnl=round(pnl, 2)))
@@ -128,27 +137,30 @@ def run_ma_cross(
         # 포지션 보유 중이면 평가 반영
         if position:
             unrealized = (closes[i] - buy_price) / buy_price
-            equity.append(EquityPoint(time=times[i], value=round(equity_val * (1 + unrealized), 2)))
+            equity.append(_ep(i, equity_val * (1 + unrealized)))
         else:
-            equity.append(EquityPoint(time=times[i], value=round(equity_val, 2)))
+            equity.append(_ep(i, equity_val))
 
     sell_count = sum(1 for t in trades if t.side == "SELL")
     win_rate = round(wins / sell_count * 100, 1) if sell_count else 0.0
     equity_values = [e.value for e in equity]
     mdd = _compute_mdd(equity_values)
     sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
+    bench_return = round(closes[-1] / base * 100 - 100, 2) if closes else 0.0
 
     return BacktestResult(
         equity=equity,
         trades=trades,
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
+            benchmark_return=bench_return,
             mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
             sharpe=sharpe,
             sortino=sortino,
             calmar=calmar,
+            fee_bps=fee_bps,
         ),
     )
 
@@ -159,10 +171,14 @@ def run_rsi_strategy(
     oversold: float = 30.0,
     overbought: float = 70.0,
     count: int = 200,
+    fee_bps: float = 5.0,
 ) -> BacktestResult:
     candles = candle_service.get_candles(market, "days", count)
     closes = [c.close for c in candles]
     times  = [c.timestamp // 1000 for c in candles]
+
+    fee = fee_bps / 10000.0
+    base = closes[0] if closes and closes[0] > 0 else 1.0
 
     rsi_vals = _rsi(closes, period)
 
@@ -173,22 +189,26 @@ def run_rsi_strategy(
     trades: list[TradeRecord] = []
     wins = 0
 
+    def _ep(i: int, val: float) -> EquityPoint:
+        return EquityPoint(time=times[i], value=round(val, 2), benchmark=round(100 * closes[i] / base, 2))
+
     for i in range(len(closes)):
         r = rsi_vals[i]
         if r is None:
-            equity.append(EquityPoint(time=times[i], value=round(equity_val, 2)))
+            equity.append(_ep(i, equity_val))
             continue
 
         # RSI 과매도 → 매수
         if not position and r < oversold:
             position = True
             buy_price = closes[i]
+            equity_val *= (1 - fee)            # 진입 거래비용
             trades.append(TradeRecord(time=times[i], side="BUY", price=closes[i], pnl=0.0))
 
         # RSI 과매수 → 매도
         elif position and r > overbought:
             pnl = (closes[i] - buy_price) / buy_price * 100
-            equity_val *= (1 + pnl / 100)
+            equity_val *= (1 + pnl / 100) * (1 - fee)   # 실현 후 청산 거래비용
             if pnl > 0:
                 wins += 1
             trades.append(TradeRecord(time=times[i], side="SELL", price=closes[i], pnl=round(pnl, 2)))
@@ -196,27 +216,30 @@ def run_rsi_strategy(
 
         if position:
             unrealized = (closes[i] - buy_price) / buy_price
-            equity.append(EquityPoint(time=times[i], value=round(equity_val * (1 + unrealized), 2)))
+            equity.append(_ep(i, equity_val * (1 + unrealized)))
         else:
-            equity.append(EquityPoint(time=times[i], value=round(equity_val, 2)))
+            equity.append(_ep(i, equity_val))
 
     sell_count = sum(1 for t in trades if t.side == "SELL")
     win_rate = round(wins / sell_count * 100, 1) if sell_count else 0.0
     equity_values = [e.value for e in equity]
     mdd = _compute_mdd(equity_values)
     sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
+    bench_return = round(closes[-1] / base * 100 - 100, 2) if closes else 0.0
 
     return BacktestResult(
         equity=equity,
         trades=trades,
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
+            benchmark_return=bench_return,
             mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
             sharpe=sharpe,
             sortino=sortino,
             calmar=calmar,
+            fee_bps=fee_bps,
         ),
     )
 
@@ -230,9 +253,11 @@ def _empty_portfolio(rebalance_days: int) -> PortfolioBacktestResult:
 
 
 def run_portfolio(markets: list[str], weights: list[float] | None = None,
-                  count: int = 180, rebalance_days: int = 0) -> PortfolioBacktestResult:
+                  count: int = 180, rebalance_days: int = 0,
+                  fee_bps: float = 5.0) -> PortfolioBacktestResult:
     """여러 종목을 목표 비중으로 보유했을 때의 자산 곡선. rebalance_days=0이면 매수보유(비중 드리프트),
-    >0이면 그 주기로 목표 비중 리밸런스. 동일가중 매수보유를 벤치마크로 함께 반환."""
+    >0이면 그 주기로 목표 비중 리밸런스. 동일가중 매수보유를 벤치마크로 함께 반환.
+    거래비용(fee_bps, 편도)은 t0 진입 + 리밸런스 회전(거래대금)에 부과."""
     series: dict[str, tuple[list[float], list[int]]] = {}
     for m in markets:
         candles = candle_service.get_candles(m, "days", count=count)
@@ -254,14 +279,20 @@ def run_portfolio(markets: list[str], weights: list[float] | None = None,
     else:
         w = np.ones(n) / n
 
+    fee = fee_bps / 10000.0
+
     def _sim(weight_vec: np.ndarray) -> np.ndarray:
-        units = weight_vec / closes[0]   # t0 총가치 1
+        cash = 1.0 * (1 - fee)               # t0 진입 거래비용
+        units = weight_vec * cash / closes[0]
         vals = np.empty(t_len)
         for t in range(t_len):
             v = float((units * closes[t]).sum())
             vals[t] = v
             if rebalance_days > 0 and t > 0 and t % rebalance_days == 0:
-                units = weight_vec * v / closes[t]  # 목표 비중 복원
+                new_units = weight_vec * v / closes[t]            # 목표 비중 복원
+                turnover = float((np.abs(new_units - units) * closes[t]).sum())  # 거래대금
+                v_after = v - turnover * fee                      # 회전 거래비용
+                units = weight_vec * v_after / closes[t]
         return vals
 
     port = _sim(w) * 100

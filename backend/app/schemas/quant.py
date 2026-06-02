@@ -157,6 +157,7 @@ class MomentumResult(BaseModel):
     lookback: int             # 모멘텀 산정 기간(일)
     holding: int              # 리밸런스 주기(일)
     n: int                    # 유니버스 종목 수
+    fee_bps: float = 0.0      # 적용한 편도 거래비용(bps) — 리밸런스 회전에 차감
 
 
 # ── 7) 공적분 페어트레이딩 스크리너 ───────────────────────────

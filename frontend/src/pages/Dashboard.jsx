@@ -1,15 +1,23 @@
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { PieChart, Pie, Cell, AreaChart, Area, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import {
+  PieChart, Pie, Cell, AreaChart, Area, ComposedChart, ReferenceArea,
+  CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 import { useCategoryMonthly, useCoinStats } from '../hooks/useAnalysis'
+import { useRegime } from '../hooks/useQuant'
 import { DOM_COLORS } from '../theme'
 import CartButton from '../components/CartButton'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
-const PRICE_TABLE_N = 12    // 시세 표(거래대금 상위) 행 수
+const PRICE_TABLE_N = 10     // 시세 요약 미니표 행 수 (상세 전체는 코인목록 — 여기는 요약)
 
 const fmtRate = r => (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
 const changeColor = c => (c === 'RISE' ? 'text-red-500' : c === 'FALL' ? 'text-blue-500' : 'text-gray-600')
+
+// 시장 국면 색 (약세→강세): 파랑→회색→빨강 (Analysis RegimeSection과 동일 팔레트)
+const REGIME_COLORS = ['#3b82f6', '#94a3b8', '#fca5a5', '#ef4444']
 
 const FG_ZONES = [
   { s1: 0,  s2: 25,  color: '#3b82f6', label: '극도 공포' },
@@ -229,90 +237,6 @@ function KpiCard({ label, value, sub, color, valueClass = 'text-2xl' }) {
   )
 }
 
-// 미니 스파크라인 (시세 표 1일 추세, 0 기준 X로 변동 가시화)
-function MiniSpark({ ticker, width = 72, height = 28 }) {
-  const color = ticker.change === 'RISE' ? '#ef4444' : ticker.change === 'FALL' ? '#3b82f6' : '#94a3b8'
-  const data = (ticker.sparkline || []).map(v => ({ v }))
-  return (
-    <ResponsiveContainer width={width} height={height}>
-      <AreaChart data={data} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
-        <defs>
-          <linearGradient id={`dg-${ticker.market}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={color} stopOpacity={0.15} />
-            <stop offset="95%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <YAxis hide domain={['dataMin', 'dataMax']} />
-        {/* 작은 차트라 커서 툴팁이 그래프를 덮으므로 위쪽 바깥에 고정 (코인목록 스파크라인과 동일) */}
-        <Tooltip
-          allowEscapeViewBox={{ x: true, y: true }}
-          position={{ x: 0, y: -26 }}
-          wrapperStyle={{ pointerEvents: 'none', zIndex: 20 }}
-          contentStyle={{ fontSize: 11, padding: '1px 6px', lineHeight: 1.3 }}
-          formatter={(v) => v.toLocaleString() + ' KRW'}
-          labelFormatter={() => ''}
-        />
-        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#dg-${ticker.market})`} dot={false} isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
-  )
-}
-
-// 시세 표 — 거래대금 상위 N종 (메인 데이터 덩어리). 행 클릭 시 상세로.
-function PriceTable({ tickers }) {
-  const navigate = useNavigate()
-  const rows = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, PRICE_TABLE_N)
-  return (
-    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-700">
-          시세 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {PRICE_TABLE_N}</span>
-        </div>
-        <Link to="/coins" className="text-xs text-brand-600 hover:underline">코인 목록 →</Link>
-      </div>
-      <table className="w-full">
-        <thead>
-          <tr className="bg-gray-50 text-xs text-gray-400">
-            <th className="px-3 py-2 text-right font-medium w-9">#</th>
-            <th className="w-6"></th>
-            <th className="px-3 py-2 text-left font-medium">코인</th>
-            <th className="px-3 py-2 text-right font-medium">현재가</th>
-            <th className="px-3 py-2 text-right font-medium">24h</th>
-            <th className="px-3 py-2 text-center font-medium w-24">추세(1일)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((t, i) => (
-            <tr
-              key={t.market}
-              onClick={() => navigate(`/coins/${t.market}`)}
-              className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
-            >
-              <td className="px-3 py-2.5 text-right text-xs text-gray-400 tabular-nums">{i + 1}</td>
-              <td className="pl-1 pr-1 py-2.5 text-center"><CartButton market={t.market} /></td>
-              <td className="px-3 py-2.5">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
-                  <span className="text-[11px] text-gray-400">{t.market.replace('KRW-', '')}</span>
-                </div>
-              </td>
-              <td className={`px-3 py-2.5 text-right text-sm font-medium ${changeColor(t.change)}`}>
-                {t.trade_price.toLocaleString()}
-              </td>
-              <td className={`px-3 py-2.5 text-right text-sm font-medium ${changeColor(t.change)}`}>
-                {fmtRate(t.change_rate)}
-              </td>
-              <td className="px-3 py-2.5">
-                <div className="flex justify-center"><MiniSpark ticker={t} /></div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function FearGreedGauge({ score }) {
   const cx = 100, cy = 90, r = 65
 
@@ -418,6 +342,162 @@ function SectorPerf({ monthly }) {
   )
 }
 
+// 시장 종합 추세 (focal) — 동일가중 시장지수 + HMM 평온/격동 국면 밴드. get_regime 재활용(추가 호출 0).
+function MarketTrendChart() {
+  const { data, loading } = useRegime(2)
+  const segments = useMemo(() => {
+    const segs = []
+    let start = 0
+    for (let i = 1; i <= data.points.length; i++) {
+      if (i === data.points.length || data.points[i].regime !== data.points[start].regime) {
+        segs.push({ x1: data.points[start].time, x2: data.points[i - 1].time, regime: data.points[start].regime })
+        start = i
+      }
+    }
+    return segs
+  }, [data.points])
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-md p-5">
+      <div className="flex items-center justify-between mb-0.5">
+        <div className="text-sm font-semibold text-gray-700">시장 종합 추세</div>
+        {data.current_label && (
+          <span className="px-2 py-0.5 rounded text-xs font-medium"
+            style={{ backgroundColor: REGIME_COLORS[data.current_regime] + '22', color: REGIME_COLORS[data.current_regime] }}>
+            현재: {data.current_label}
+          </span>
+        )}
+      </div>
+      <div className="text-xs text-gray-400 mb-3">
+        전 종목 동일가중 시장지수 · 배경 = 평온/격동 국면(HMM) · <Link to="/structure#regime" className="text-brand-600 hover:underline">자세히 →</Link>
+      </div>
+      {loading ? (
+        <div className="h-[340px] flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={340}>
+          <ComposedChart data={data.points} margin={{ top: 4, right: 16, bottom: 0, left: -8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            {segments.map((s, i) => (
+              <ReferenceArea key={i} x1={s.x1} x2={s.x2} fill={REGIME_COLORS[s.regime]} fillOpacity={0.12} stroke="none" />
+            ))}
+            <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} scale="time"
+              tickFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+              tick={{ fontSize: 10, fill: '#9ca3af' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} domain={['auto', 'auto']} />
+            <Tooltip contentStyle={{ fontSize: 12 }} labelFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR')}
+              formatter={v => [v.toFixed(1), '시장지수']} />
+            <Area dataKey="index" stroke="#1763b6" strokeWidth={1.5} fill="#1763b6" fillOpacity={0.06} dot={false} isAnimationActive={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// 미니 스파크라인 (시세 요약 표 1일 추세, 0 기준 X로 변동 가시화)
+function MiniSpark({ ticker, width = 64, height = 26 }) {
+  const color = ticker.change === 'RISE' ? '#ef4444' : ticker.change === 'FALL' ? '#3b82f6' : '#94a3b8'
+  const data = (ticker.sparkline || []).map(v => ({ v }))
+  return (
+    <ResponsiveContainer width={width} height={height}>
+      <AreaChart data={data} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
+        <defs>
+          <linearGradient id={`dg-${ticker.market}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={color} stopOpacity={0.15} />
+            <stop offset="95%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <YAxis hide domain={['dataMin', 'dataMax']} />
+        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#dg-${ticker.market})`} dot={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  )
+}
+
+// 시세 요약 미니표 — 거래대금 상위 N종 요약(상세 전체는 코인목록). 행 클릭 → 상세, +로 카트.
+function PriceTable({ tickers }) {
+  const navigate = useNavigate()
+  const rows = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, PRICE_TABLE_N)
+  return (
+    <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-700">
+          시세 요약 <span className="text-xs font-normal text-gray-400">· 거래대금 상위 {PRICE_TABLE_N}</span>
+        </div>
+        <Link to="/coins" className="text-xs text-brand-600 hover:underline">전체 코인 목록 →</Link>
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="bg-gray-50 text-xs text-gray-400">
+            <th className="px-3 py-2 text-right font-medium w-9">#</th>
+            <th className="w-6"></th>
+            <th className="px-3 py-2 text-left font-medium">코인</th>
+            <th className="px-3 py-2 text-right font-medium">현재가</th>
+            <th className="px-3 py-2 text-right font-medium">24h</th>
+            <th className="px-3 py-2 text-center font-medium w-20">추세(1일)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((t, i) => (
+            <tr key={t.market} onClick={() => navigate(`/coins/${t.market}`)}
+              className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer">
+              <td className="px-3 py-2 text-right text-xs text-gray-400 tabular-nums">{i + 1}</td>
+              <td className="pl-1 pr-1 py-2 text-center"><CartButton market={t.market} /></td>
+              <td className="px-3 py-2">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
+                  <span className="text-[11px] text-gray-400">{t.market.replace('KRW-', '')}</span>
+                </div>
+              </td>
+              <td className={`px-3 py-2 text-right text-sm font-medium ${changeColor(t.change)}`}>
+                {t.trade_price.toLocaleString()}
+              </td>
+              <td className={`px-3 py-2 text-right text-sm font-medium ${changeColor(t.change)}`}>
+                {fmtRate(t.change_rate)}
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex justify-center"><MiniSpark ticker={t} /></div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// 시장 폭(breadth) — 상승/하락/보합 종목 수 분포 막대.
+function MarketBreadth({ tickers }) {
+  const rise = tickers.filter(t => t.change === 'RISE').length
+  const fall = tickers.filter(t => t.change === 'FALL').length
+  const even = tickers.length - rise - fall
+  const total = tickers.length || 1
+  const seg = [
+    { label: '상승', n: rise, color: '#ef4444' },
+    { label: '보합', n: even, color: '#d1d5db' },
+    { label: '하락', n: fall, color: '#3b82f6' },
+  ]
+  return (
+    <div>
+      <div className="flex h-3 rounded-full overflow-hidden mb-3">
+        {seg.map(s => <div key={s.label} style={{ width: `${(s.n / total) * 100}%`, backgroundColor: s.color }} />)}
+      </div>
+      <div className="space-y-1.5">
+        {seg.map(s => (
+          <div key={s.label} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-gray-500">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />{s.label}
+            </span>
+            <span className="tabular-nums text-gray-700 font-medium">{s.n}종 <span className="text-gray-400">({(s.n / total * 100).toFixed(0)}%)</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { tickers, loading: tickersLoading } = useTickers()
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
@@ -431,16 +511,19 @@ export default function Dashboard() {
     )
   }
 
-  // KPI
+  // KPI — 다른 위젯과 겹치지 않는 지표만. (도미넌스→지배력 도넛, 상승비율→시장 폭 위젯과 중복이라 제외)
   const totalVolume = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
   const riseCount = tickers.filter(t => t.change === 'RISE').length
-  const riseRatio = tickers.length ? (riseCount / tickers.length * 100).toFixed(1) : '0'
-  const btc = tickers.find(t => t.market === 'KRW-BTC')
-  const btcDom = btc ? (btc.acc_trade_price_24h / totalVolume * 100).toFixed(1) : '0'
   const avgChange = tickers.length
     ? (tickers.reduce((s, t) => s + t.change_rate, 0) / tickers.length * 100)
     : 0
   const avgChangeStr = (avgChange >= 0 ? '+' : '') + avgChange.toFixed(2) + '%'
+  const w52high = tickers.filter(t => t.is_52w_high).length
+  const w52low = tickers.filter(t => t.is_52w_low).length
+  // 거래대금 집중도 — 상위 10종이 전체 거래대금에서 차지하는 비중(시장 쏠림)
+  const top10Vol = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
+    .slice(0, 10).reduce((s, t) => s + t.acc_trade_price_24h, 0)
+  const concentration = totalVolume ? (top10Vol / totalVolume * 100).toFixed(1) : '0'
 
   // 공포·탐욕 지수 (상승비율 60% + 평균변화율 환산 40%)
   const riseRatioPct = tickers.length ? (riseCount / tickers.length) * 100 : 50
@@ -449,55 +532,60 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Opportunity Feed — "오늘의 시그널" 최상단 액션 트리거 */}
-      <OpportunityFeed tickers={tickers} coinStats={coinStats} monthly={monthly} />
-
-      {/* KPI row */}
-      <div className="grid grid-cols-4 gap-5">
+      {/* ① KPI — 시장 종합 숫자 요약 (전용 위젯과 중복 없는 지표) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <KpiCard
           label="24h 총 거래대금"
           value={<span className="whitespace-nowrap">{fmtKrw(totalVolume)}<span className="text-sm font-medium text-gray-400 ml-1">KRW</span></span>}
           valueClass="text-xl"
         />
         <KpiCard
-          label="상승 코인 비율"
-          value={riseRatio + '%'}
-          sub={`${riseCount} / ${tickers.length} 종목 상승`}
-          color="text-red-500"
-        />
-        <KpiCard label="BTC 도미넌스" value={btcDom + '%'} sub="거래대금 기준" />
-        <KpiCard
           label="시장 평균 등락률"
           value={avgChangeStr}
           color={avgChange >= 0 ? 'text-red-500' : 'text-blue-500'}
         />
+        <KpiCard
+          label="52주 신고 / 신저 (오늘)"
+          value={<span><span className="text-red-500">{w52high}</span><span className="text-gray-300 mx-1">/</span><span className="text-blue-500">{w52low}</span></span>}
+          sub="오늘 경신 종목 수"
+        />
+        <KpiCard label="거래대금 집중도" value={concentration + '%'} sub="상위 10종 비중" />
       </div>
 
-      {/* 메인: 시세 표 (전폭) — 거래대금 상위 메인 데이터 덩어리. 행 클릭 → 상세 */}
-      <PriceTable tickers={tickers} />
+      {/* ② 히어로 focal — 시장 종합 추세 (전폭·확대, 명확한 주인공) */}
+      <MarketTrendChart />
 
-      {/* 하단: 이번 달 섹터 성과 | 공포·탐욕 | 시장 지배력
-          (52주·급등급락은 상단 '오늘의 시그널'과 탐색>마켓으로 일원화 — 대시보드 중복 제거) */}
-      <div className="grid grid-cols-3 gap-5">
-        {/* 드릴다운 진입 카드 — 카드 전체 클릭 → 섹터 분석(시연 점프대) */}
-        <Link to="/sectors" className="block bg-white border border-gray-200 rounded-md p-5 hover:border-brand-300 transition-colors">
-          <div className="flex items-center justify-between mb-0.5">
-            <div className="text-sm font-semibold text-gray-700">이번 달 섹터 성과</div>
-            <span className="text-xs text-brand-600 font-medium">섹터 분석 →</span>
-          </div>
-          <SectorPerf monthly={monthly} />
-        </Link>
-        <div className="bg-white border border-gray-200 rounded-md p-5">
+      {/* ③ 오늘의 시그널 — 액션 트리거 (전폭) */}
+      <OpportunityFeed tickers={tickers} coinStats={coinStats} monthly={monthly} />
+
+      {/* ④ 보조 지표 — 작고 균일한 4카드 (위계상 히어로보다 가벼움, 동일 규격으로 정렬) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
+        <div className="bg-white border border-gray-200 rounded-md p-5 flex flex-col">
           <div className="text-sm font-semibold text-gray-700 mb-0.5">공포·탐욕 지수</div>
-          <div className="text-xs text-gray-400 mb-3">상승비율 · 평균등락률 기반 시장 심리</div>
-          <FearGreedGauge score={fearGreedScore} />
+          <div className="text-xs text-gray-400 mb-3">상승비율·평균등락 기반 심리</div>
+          <div className="flex-1 flex items-center justify-center"><FearGreedGauge score={fearGreedScore} /></div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-md p-5">
+        <div className="bg-white border border-gray-200 rounded-md p-5 flex flex-col">
           <div className="text-sm font-semibold text-gray-700 mb-0.5">시장 지배력</div>
-          <div className="text-xs text-gray-400 mb-3">24h 거래대금 기준</div>
-          <MarketDominance tickers={tickers} />
+          <div className="text-xs text-gray-400 mb-3">24h 거래대금 비중</div>
+          <div className="flex-1 flex items-center justify-center"><MarketDominance tickers={tickers} /></div>
         </div>
+        <div className="bg-white border border-gray-200 rounded-md p-5 flex flex-col">
+          <div className="text-sm font-semibold text-gray-700 mb-0.5">시장 폭 (Breadth)</div>
+          <div className="text-xs text-gray-400 mb-3">상승·하락 종목 분포</div>
+          <div className="flex-1 flex flex-col justify-center"><MarketBreadth tickers={tickers} /></div>
+        </div>
+        <Link to="/sectors" className="bg-white border border-gray-200 rounded-md p-5 flex flex-col hover:border-brand-300 transition-colors">
+          <div className="flex items-center justify-between mb-0.5">
+            <div className="text-sm font-semibold text-gray-700">섹터 성과</div>
+            <span className="text-xs text-brand-600 font-medium">→</span>
+          </div>
+          <div className="flex-1 flex flex-col justify-center"><SectorPerf monthly={monthly} /></div>
+        </Link>
       </div>
+
+      {/* ⑤ 디테일 — 시세 요약 표 (전폭, 비대칭 제거) */}
+      <PriceTable tickers={tickers} />
     </div>
   )
 }

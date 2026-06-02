@@ -81,7 +81,13 @@ def get_candles(interval: str, market: str, count: int = 200, to: str | None = N
     params: dict = {"market": market, "count": min(count, 200)}
     if to:
         params["to"] = to
-    return _get(path, params)
+    try:
+        return _get(path, params)
+    except httpx.HTTPStatusError as e:
+        # 상폐/미존재 종목은 404 → 캔들 없음으로 처리(전체 집계가 한 종목 때문에 죽지 않도록).
+        if e.response.status_code == 404:
+            return []
+        raise
 
 
 def get_orderbook(market: str) -> dict | None:
