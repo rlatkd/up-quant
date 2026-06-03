@@ -32,13 +32,13 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - 사용 엔드포인트: `/market/all`, `/ticker`, `/candles/*`, `/orderbook`, `/trades/ticks`.
 - **분석 유니버스는 KRW 마켓 전체(~261종)** — `core/config.py`의 `USE_ALL_KRW_MARKETS`. 부팅 시 `/market/all`과 **교집합만** 사용 → 상장폐지 종목 자동 제외. (예: `KRW-MATIC`은 POL 마이그레이션으로 폐지 → `KRW-POL` 사용).
 - **카테고리(섹터) 분류 = 업비트 데이터랩 '코인 분류' 스냅샷** (`app/data/upbit_sectors.json`). 업비트 시세 Open API는 카테고리를 안 주므로, 데이터랩(`datalab.upbit.com/sector?tab=marketMap`)의 Next.js RSC 페이로드를 **1회 스크랩**해 정적 파일로 보관. 261종 전체에 level1(대분류 5종: 스마트 컨트랙트 플랫폼·인프라·디파이·문화/엔터테인먼트·밈)/level2/level3 + marketCap. `config.MARKET_CATEGORIES`(market→level1)·`CATEGORY_LIST`(종목수 desc)·`MARKET_SUBCATEGORIES`로 노출. 스냅샷이라 신규 상장은 미분류(`None`), 분류 변경 시 재스크랩 필요. (스크랩 경위·후보 비교는 엔지니어링노트 §12)
-- **카테고리 수익률은 실데이터** — 섹터 소속 종목의 **월봉 close 동일가중 평균**으로 월별/누적 수익률 집계(`analysis_service`). 상관관계 히트맵은 프론트가 월별값으로 계산. (집계 방식·변동성 드래그는 엔지니어링노트 §14) 더 이상 더미 아님 → "예시" 배지는 "업비트 분류" 출처 배지로 대체.
+- **카테고리 수익률은 실데이터** — **월별 히트맵**은 섹터 소속 종목의 **월봉 close 동일가중 평균**(`get_category_monthly`). **누적수익률 차트는 Phase 23부터 일봉**(`get_category_daily_cumulative`) — 섹터 소속 종목의 일봉 close를 윈도우 첫날=1.0으로 정규화해 동일가중 평균(=동일금액 매수·보유 지수)한 누적%, 전 종목 공통 윈도우(`min_len=150`)로 모든 섹터가 같은 날짜축, 공용 일봉캐시 재사용→팬아웃0. (월봉 누적은 월 단위 점이 12개뿐이라 호버가 끊겨 일봉화. 엔지니어링노트 참조) 상관관계 히트맵은 프론트가 월별값으로 계산. 더 이상 더미 아님 → "예시" 배지는 "업비트 분류" 출처 배지로 대체.
 
 ## 필드/포맷 규약
 
 - `Ticker.change_rate` = Upbit `signed_change_rate`(부호 있음). `w52_high/low` = `highest/lowest_52_week_price`.
 - **52주 신고가/신저가 판정**: `Ticker.is_52w_high/low` = 업비트 `highest/lowest_52_week_date`가 **오늘(KST)인지**(=오늘 경신). 과거엔 `현재가 ≥/≤ 52주가`로 판정했으나 정확히 일치하는 순간이 거의 없어 전수 0개였음 → 달성일 기준으로 변경(엔지니어링노트 §11). **마켓현황 배지(`W52Badges`)는 거래대금 상위 30종(`Market.W52_LIMIT`)으로 한정 노출** — 하락장에 유동성 낮은 잡코인 신저가가 수십 개 깔리는 노이즈 제거(메이저 경신만 신호로 취급, 트리맵 30과 통일). 판정 자체는 전 종목 계산.
-- **카테고리 수익률 응답** `CategoryReturns` = `{ categories: [섹터명…], rows: [{ label, <섹터명>: 수익률%, … }] }`. (과거 고정 5필드 `CategoryMonthly`에서 동적 구조로 변경 — 섹터가 가변이므로). `/analysis/category/monthly`(최근 6개월)·`/cumulative?period=월|분기|년`.
+- **카테고리 수익률 응답** `CategoryReturns` = `{ categories: [섹터명…], rows: [{ label, <섹터명>: 수익률%, … }] }`. (과거 고정 5필드 `CategoryMonthly`에서 동적 구조로 변경 — 섹터가 가변이므로). `/analysis/category/monthly`(최근 6개월 월봉, 히트맵용)·`/cumulative-daily`(최근 ~200일 **일봉** 동일가중 누적, rows에 `t`=unix초 포함, Sectors 누적차트). 과거 `/cumulative?period=월|분기|년`(월봉)은 Phase 23에서 일봉으로 대체 — 코드는 남아 있으나 프론트 미사용(엔지니어링노트 참조).
 - 캔들은 **오름차순(오래된→최신)** 으로 반환 (lightweight-charts 요구). Upbit는 최신순이라 뒤집음.
 - `CandleItem.timestamp`=ms, `Trade.timestamp`=초(프론트가 ×1000), `EquityPoint.time`=초.
 - 프론트 캔들 interval: `minutes/{1|3|5|15|30|60|240}` | `days` | `weeks` | `months`.
@@ -55,12 +55,13 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 ## UI 컨벤션
 
-- **색상(업비트 톤, Phase 15)**: 상승/매수/양(+) = 빨강, 하락/매도/음(−) = 파랑 (한국 거래소 관행, **의미색은 고정·불변**). **액센트 = 업비트 블루** — `brand-500 #1763b6`(버튼·활성탭·포커스·스피너·선택강조 등 크롬 전부), 헤더 네이비 `brand-700 #093687`. **과거 indigo(보라빛) 액센트를 전 페이지 교체**. 색 토큰은 `index.css`의 `@theme`(`--color-brand-*`)로 정의 → `bg-brand-500`·`text-brand-600` 등으로 사용. **페이지 배경 옅은 회색**(`bg-gray-50`)에 흰 카드, 카드 라운드 `rounded-md`(과거 `rounded-lg`에서 완화). 본문 폰트 **Pretendard**(`index.css` CDN import).
+- **색상(업비트 톤, Phase 15)**: 상승/매수/양(+) = 빨강, 하락/매도/음(−) = 파랑 (한국 거래소 관행, **의미색은 고정·불변**). **액센트 = 업비트 블루** — `brand-500 #1763b6`(버튼·활성탭·포커스·스피너·선택강조 등 크롬 전부), 헤더 네이비 `brand-700 #093687`. **과거 indigo(보라빛) 액센트를 전 페이지 교체**. 색 토큰은 `index.css`의 `@theme`(`--color-brand-*`)로 정의 → `bg-brand-500`·`text-brand-600` 등으로 사용. **페이지 배경 옅은 쿨 그레이블루 `#e6eaf2`**(Phase 23, 과거 `bg-gray-50`/`#f4f5f7`보다 어둡게 — 흰 카드 분리감↑. body(index.css)+Layout 둘 다)에 흰 카드, 카드 라운드 `rounded-md`(과거 `rounded-lg`에서 완화). 본문 폰트 **Pretendard**(`index.css` CDN import).
 - **구분용 색 팔레트**: 방향 없는 시리즈/섹터 구분색은 `src/theme.js`의 `SERIES`(7색)·`DOM_COLORS`(지배력 도넛)로 **한 곳에서** 관리. Sectors(`CAT_PALETTE = SERIES`)·Dashboard(`DOM_COLORS`)·Compare(`COLORS`)가 import. (과거 컴포넌트마다 흩어져 튀던 indigo/emerald/violet 정리.) **팔레트는 밝은 톤으로 조정**(Phase 16, 사용자 "너무 어둡다"): 블루 `#4c8dd6`·teal `#27b3ab`·amber `#e0913c`·violet `#9b7fc7`·slate `#7d93a8`·rose `#d56e83`·green `#4cae76`. `DOM_COLORS`는 **단일 블루 농담이 아니라 hue 분리**(블루·teal·amber·violet + 기타 회색 `#d1d5db`) — 도넛 5조각이 다 파래서 구분 안 된다는 피드백 반영. ⚠️ 의미색(상승 빨강 `#ef4444`/하락 파랑 `#3b82f6`)과 안 헷갈리게 순수 red/blue는 제외. (CoinDetail 지표 토글 MA/Bollinger/RSI 색은 차트 오버레이와 묶여 있어 미변경.)
 - **로고/헤더**: 로고는 **흰색 기울임꼴 워드마크 `UPquant`**(별도 아이콘 마크 없음 — 사용자가 "업비트엔 그런 거 없다"고 명시). `font-black italic tracking-wide`(사용자 "더 굵게" 요청, Phase 16). 동그란 "UP" 아이콘은 **favicon/앱 아이콘에만**(파란 원 + 흰 기울임 UP, 파일은 `public/favicon.png` — Phase 16에 `favicon.svg`→PNG 교체, `index.html`이 PNG 참조). 헤더 탭 글씨 볼드(비활성 `font-semibold`·활성 `font-bold`).
 - **공용 UI 컴포넌트**(`src/components/ui/`): `PageHeader`(페이지 상단 제목+설명, **전 페이지 적용**)·`Spinner`·`Card`/`CardHeader`·`StatCard`. 카드 스타일·간격·제목을 한 곳에서 통일하려는 토대. (Card/StatCard는 생성만 해뒀고 기존 KpiCard/MetricCard는 이미 톤이 맞아 미적용 — 필요 시 교체.)
 - **커서**: 클릭 가능 요소(`button`/`select`/onClick 행)에만 `cursor-pointer`, disabled엔 `disabled:cursor-not-allowed`. **일반 텍스트엔 `cursor-default`를 넣지 말 것**(브라우저 기본값에 위임, I-beam 신호 보존). 앵커는 기본 pointer라 생략.
-- 라우트(**Phase 20 재편**): `/`(대시보드) `/explore`(탐색) `/coins` `/coins/:market` `/quant`(퀀트 랩) **+ `/compare`·`/backtest`(분석 도구)** 는 Layout(헤더) 안. `/help`(도움말)만 헤더 **? 버튼**에서 `window.open`으로 띄우는 **별도 창**이라 Layout 밖 단독 라우트. **탐색 통합**: 과거 별도였던 `/market`·`/sectors`·`/screener`는 모두 `Explore`(`/explore`) 단일 페이지의 **URL 기반 서브탭**(시장 현황·섹터·스크리너)으로 렌더 — 경로가 곧 초기 탭이라 기존 딥링크·대시보드 링크 호환. **헤더 구성**: 메인 탭 3개(대시보드·탐색·코인목록) + **"서비스 더보기" 드롭다운**(비교분석·백테스트 — 스크리너는 탐색으로 이동) + **별도 강조 "퀀트 랩" 탭**(앰버색·차트 아이콘, 정량 분석 플래그십). 헤더는 `sticky top-0 z-50` 고정. 더보기 도구·퀀트 랩은 **진입 즉시 디폴트 결과** + 제목 옆 `?` 안내 툴팁(공용 `components/InfoTooltip.jsx`). (헤더 진화: 과거 6탭 평면 → 4탭+더보기 드롭다운(Phase 16) → 탐색 통합·퀀트 랩 추가(Phase 20). 엔지니어링노트 §22.)
+- 라우트(**Phase 21~23 기준**): 로고(`/`)=**코인 목록**(master-detail, `/coins`·`/coins/:market`도 동일). `/dashboard`(대시보드, 별도 경로). 탐색계열 `/market`·`/sectors`·`/screener`(+`/explore`)는 `Explore` 단일 페이지의 URL 서브탭. 정량분석 `/structure`(시장 구조: 상관네트워크·PCA·군집·국면)·`/factor`(팩터: 모멘텀·페어)·`/risk`(리스크: 변동성분포·VaR)는 `Analysis` 단일 페이지(`PAGE_META`로 경로→그룹 매핑). 전략도구 `/tools/portfolio`·`/tools/backtest`·`/tools/compare`(독립 페이지). 옛 `/quant`·`/analysis/*`·`/compare`·`/backtest`는 리다이렉트. `/help`·`/guide`만 `window.open` 별도 창(Layout 밖). **헤더(`sticky top-0 z-50`, 한글 라벨)**: 4그룹 — 대시보드 │ 마켓·섹터·스크리너 │ 시장 구조·팩터 분석·리스크 │ **"서비스 더보기" 드롭다운**(호버 펼침·빨간점, 포트폴리오 최적화·백테스트·비교 분석) + 우측 분석카트·가이드·도움말. 그룹 논리 = 요약→탐색→정량분석→실행도구. (헤더 진화: 6탭평면→4탭+드롭다운(16)→탐색통합·퀀트랩(20)→평탄7탭+그룹(21)→More드롭다운·영어화(22)→한글화(23). 엔지니어링노트 §22·§30.)
+- **공통 푸터(Phase 23)**: `components/layout/Footer.jsx`, 전 페이지(Layout). 흰 배경은 **헤더처럼 뷰포트 full-bleed**, 내부 요소는 `max-w-[1440px]` 중앙정렬, 화면 맨 아래까지(Layout `flex flex-col`+main `flex-1`). 좌측 브랜드(logo.png를 CSS `mask`로 네이비 #093687)+데이터출처 / 네비 3컬럼(둘러보기·정량분석·전략도구) / 안내(도움말·가이드·Open API) / 하단 면책·저작권. 가짜 사업자정보 없음.
 - **페이지 역할 분담(Phase 16)**: **대시보드 = 시세 표(메인) + 인사이트 위젯 + 드릴다운 진입점**. 3블록 — ⑴KPI 4 ⑵**2-컬럼: 왼쪽(2/3) 시세 표**(거래대금 상위 16종 — 순위·코인·현재가·24h·1일 스파크라인, 행클릭→상세) + **오른쪽(1/3) 위젯 스택**(공포탐욕 게이지·시장 지배력 도넛·급등급락) ⑶**하단 2-컬럼**(이번 달 섹터 성과→`/sectors` / 52주 신고·신저 요약→`/market`). 깊은 분석(카테고리 3종·산점도)은 섹터분석으로 보내고, 메인은 **빽빽한 시세 표를 중심 데이터 덩어리로** 둬 세로를 채우고 시장 전체를 보여준다(진짜 크립토 대시보드 정석). 전부 프리페치된 tickers·월봉 기반이라 콜드 0. (한때 "비트코인 단독 추세 히어로"를 뒀으나 "한 코인만 대표하는 게 어색·여전히 휑함" 피드백으로 시세 표로 교체 — 엔지니어링노트 §22.) **섹터 분석(`/sectors`, 신설) = top-down 인사이트**(카테고리 누적·월별·상관 + 리스크-수익 분포) — 과거 대시보드에 다 몰려 무겁던 카테고리 3종+산점도를 이리로 이동. **마켓 현황 = 순위·트리맵·52주**. 급등급락(대시보드 요약) ↔ 상승/하락 상위(마켓 전체 순위)는 "한눈 요약 ↔ 자세히" 관계.
 
 ## 작업 규칙
@@ -98,15 +99,17 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **퀀트/ML 분석 묶음 + 퀀트 랩(2026-05-31)** — Phase 19. 외부 라이브러리(numpy/scipy/scikit-learn/statsmodels/arch/hmmlearn/networkx) 도입해 정량 분석 8종 신설: **Markowitz 효율적 경계선**(P1-2 흡수)·**상관 네트워크 MST**(P3-1 흡수)·**PCA 시장요인**·**K-means+계층 덴드로그램**(P3-2 흡수)·**GARCH 변동성예측+VaR**·**횡단면 모멘텀 팩터 백테스트**·**공적분 페어트레이딩**·**HMM 시장국면**. 신규 `services/quant_service.py`(공용 `returns_matrix` 헬퍼 + 8기능)·`schemas/quant.py`·`routers/quant.py`(`/api/quant/*` 9개). 부팅 프리페치에 9종 워밍 추가(콜드0). 프론트 `pages/QuantLab.jsx`(8 서브탭, d3-force 네트워크·SVG 덴드로그램)·`api/quant.js`·`hooks/useQuant.js`, 헤더에 **별도 "퀀트 랩" 탭**(/quant). (빌드·ESLint·py_compile 통과, 실데이터 산출 확인. 브라우저는 네트워크 탭 1건만 수정 검증)
 - **P2 묶음: 탐색 통합 + 코인상세 강화 + 포트폴리오 백테스트(2026-05-31)** — Phase 20. ⑴**P2-1**: Market·Sectors·Screener를 `/explore` 단일 페이지의 URL기반 서브탭으로 통합(`pages/Explore.jsx`, 기존 본문 재사용), 헤더 `대시보드·탐색·코인목록`으로 단순화(스크리너→탐색). ⑵**P2-2**: 코인상세에 주요지표 카드(30일 변동성·1개월수익률·시장점유율·**GARCH 연변동성·1일 VaR**)+52주 위치 바. ⑶**P2-3**: 백테스트에 **포트폴리오 보유** 모드 — 백엔드 `/api/backtest/portfolio`(가중 보유+선택적 리밸런스+동일가중 벤치마크), 프론트 `PortfolioBacktest`(카트 종목·비중 입력·자산곡선 vs 벤치·기여도). (빌드·린트·py_compile 통과, 브라우저 육안 미검증)
 
-- **IA 재편 + 라우트 정리 + 동선/가이드(2026-06-01)** — Phase 21. ⑴분석/도구 분리 리팩터 마감(헤더 드롭다운→평탄 탭, "팩터·전략"→"팩터 분석" 개명, 도구의 GARCH 탭 제거=코인상세 일원화) ⑵탐색의 묻힌 서브탭(마켓·섹터·스크리너)을 **헤더 탭으로 승격** + 의도별 그룹 구분선 ⑶**코인 목록을 메인('/')으로**(로고=코인목록), 대시보드는 `/dashboard`로, 코인목록 헤더 탭 제거 ⑷시장구조/팩터분석 라우트 `/analysis/*`→`/structure`·`/factor`(크로스링크 4곳 정정) ⑸C-⑨ 포트폴리오 동선(축소안): 최적화 ★/◆ 비중 카드에 `이 비중으로 백테스트 →`(Tools가 preset 보관→백테스트 포트폴리오 모드 자동) ⑹중복정리: 마켓 거래대금 표 제거·대시보드 W52Summary/MoversFeed 제거(오늘의 시그널 일원화)·시세표 전폭 ⑺시장구조/팩터분석 상단 "한눈 요약" 스트립 ⑻**별도 가이드 창 `/guide`**(방법론·기술스택 + 다이어그램 placeholder, 헤더 "가이드" 버튼). 빌드·ESLint 통과, 브라우저는 사용자 직접 확인 중.
+- **IA 재편 + 라우트 정리 + 동선/가이드(2026-06-01)** — Phase 21. ⑴분석/도구 분리 리팩터 마감(헤더 드롭다운→평탄 탭, "팩터·전략"→"팩터 분석" 개명, 도구의 GARCH 탭 제거=코인상세 일원화) ⑵탐색의 묻힌 서브탭(마켓·섹터·스크리너)을 **헤더 탭으로 승격** + 의도별 그룹 구분선 ⑶**코인 목록을 메인('/')으로**(로고=코인목록), 대시보드는 `/dashboard`로, 코인목록 헤더 탭 제거 ⑷시장구조/팩터분석 라우트 `/analysis/*`→`/structure`·`/factor`(크로스링크 4곳 정정) ⑸C-⑨ 포트폴리오 동선(축소안): 최적화 ★/◆ 비중 카드에 `이 비중으로 백테스트 →`(Tools가 preset 보관→백테스트 포트폴리오 모드 자동) ⑹중복정리: 마켓 거래대금 표 제거·대시보드 W52Summary/MoversFeed 제거(오늘의 시그널 일원화)·시세표 전폭 ⑺시장구조/팩터분석 상단 "한눈 요약" 스트립 ⑻**별도 가이드 창 `/guide`**(방법론·기술스택 + 다이어그램 placeholder, 헤더 "가이드" 버튼).
+- **상폐 404 + 리스크 탭 + 거래비용·생존편향 + 대시보드 관제탑 + IA 영어화(2026-06-02~03)** — Phase 22. 상폐 종목 404→500 전파 버그(valid_markets 교집합+404→[] 안전망), **리스크 탭 `/risk` 신설**(변동성 분포·VaR 랭킹, coinStats 재사용 호출0), 거래비용(`fee_bps` 5bps) 백테스트·모멘텀 반영, 단일전략 buy&hold 벤치마크+알파, 신뢰성 ⚠️Caveat 배지, 대시보드 관제탑 재구성(KPI4+시장종합추세 focal+오늘의시그널+보조4카드+시세표), 전략도구 "More" 드롭다운+독립 라우트(`/tools/*`), 헤더 라벨 영어화, 본문 PageHeader 제거.
+- **헤더 한글화 + 차트 버그수정 + 섹터 누적 일봉화 + 로고/배경/공통 푸터(2026-06-03)** — Phase 23. 헤더 영어→한글 전문음차 환원, RSI 흰화면 크래시(v5 `getSeries`)·차트 로고·지표 토글 줌리셋 수정, 섹터 누적수익률 월봉→일봉(recharts 표준 Tooltip), 팩터/백테스트 경고 제거, 로고 점 제거, 배경 `#e6eaf2`, **공통 푸터 신설**(full-bleed 흰배경·logo mask). 상세는 작업 이력 Phase 23.
 
 **다음 작업 (우선순위 순)**
-1. ⭐ **리스크 신규 탭 (착수 직전 보류)** — 시장 분석 그룹에 **`/risk` 신설**. 전종목 변동성 분포·정규근사 1일 95% VaR(=1.645×일변동성)·리스크 랭킹. 데이터=기존 `coinStats`(프리페치, 추가 호출 0). Analysis.jsx에 risk seg/GROUP/요약 스트립 + 헤더 탭(시장구조·팩터분석 옆) + App 라우트.
-2. **코인 상세 보강 (보류)** — 딱 2개: ⑴거래대금 순위(전체 KRW 중 N위, `tickers` 계산) ⑵호가 매수/매도 압력 바(`orderbook` 잔량 비율). 추가 호출 0, 기존 카드 통합. (계산값 넣었다 되돌린 상태)
-3. **대시보드 제거 예정** — 루트가 코인목록으로 바뀌어 의미 축소. 제거 시 유용 위젯(공포탐욕·지배력·오늘의 시그널)은 코인목록/탐색 이전 검토.
-4. **문서 동기화 (이번 세션 미반영)** — README·pages.md·엔지니어링노트가 옛 IA(`QuantLab.jsx`·`/quant`·드롭다운·탐색 통합) 기준. **Help.jsx 본문도 stale**(옛 페이지 구조·제거 위젯 참조).
-5. **브라우저 육안 검증** — 헤더 8탭 폭·요약 스트립·가이드 새 창·새 라우팅.
-6. WebSocket 실시간 시세 · 에러/로딩 UI · 카테고리 잔여.
+1. **발표/영상 준비(진행 중)** — 발표용 PPT 구성·대본·다른 LLM용 PPT 생성 프롬프트·스크린샷을 별도 파일(`references/발표.md`)에 정리. 서비스 전수 파악 → 5~7분 시연 영상.
+2. **문서 최신화(진행 중)** — README·pages.md·엔지니어링노트·메모리·Help.jsx가 옛 IA(`QuantLab.jsx`·`/quant`·탐색 통합·영어 헤더) 기준이라 Phase 21~23 반영 필요.
+3. **포트폴리오 효율적 경계선 원 뭉침 확인/개선(보류)** — 원들이 모여 보이는 게 정상인지 진단 후 시각 개선.
+4. **분석 카트 필요성 논의(보류)** — 지금 필요한 기능인지 재검토.
+5. **코인 상세 보강(보류)** — 거래대금 순위 + 호가 매수/매도 압력 바(추가 호출 0).
+6. **브라우저 육안 검증** · WebSocket 실시간 시세 · 에러/로딩 UI(+에러 바운더리 — Phase 23 흰화면 크래시 계기).
 
 **의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
 
@@ -287,3 +290,16 @@ P2-1~P2-3 묶음.
 - **헤더 라벨 영어화(A·퀀트 전문 톤)**: `Dashboard`·`Markets`·`Sectors`·`Screener`·`Market Structure`·`Factor Analysis`·`Risk`·`More`(드롭다운 `Portfolio Optimization`·`Backtest`·`Compare`). 실제 플랫폼 표준 용어 검증(TradingView·Portfolio Visualizer·Qlib·Mantegna "market structure"). 본문 콘텐츠는 한글 유지.
 - **PageHeader(본문 최상단 제목) 제거**: 헤더 탭 활성이 현재 위치를 보여주므로 Explore·Analysis 본문 중복 제목 제거. **Tools 3종만 제목 유지**(헤더가 "More"로 묶여 개별 식별 안 됨). 마켓↔"시장 현황" 이름 불일치도 해소(헤더와 통일).
 - 검증: 단계마다 `vite build`·ESLint·`py_compile` 통과. 백엔드 거래비용/벤치마크 실호출 확인. **브라우저 육안 미검증**.
+
+### Phase 23 — 헤더 한글화 + 차트 버그수정(흰화면 크래시) + 섹터 누적 일봉화 + 로고/배경/공통 푸터 (2026-06-03)
+이전 세션 마지막 미완(More 페이지 제목 제거)부터 이어 사용자 요청 UI 묶음 + 버그 수정. 사용자와 다회 핑퐁(특히 헤더 라벨·푸터).
+- **헤더 라벨 영어→한글 전문 음차 환원**: Phase 22 영어화를 사용자 요청으로 한글로 — `대시보드·마켓·섹터·스크리너·시장 구조·팩터 분석·리스크·서비스 더보기`(드롭다운 `포트폴리오 최적화·백테스트·비교 분석`). 헤더 그룹 4분할(대시보드 │ 마켓·섹터·스크리너 │ 시장구조·팩터·리스크 │ 서비스 더보기)의 논리(요약→탐색→정량분석→실행도구)는 사용자와 점검 후 **유지 확정**. Tools 3페이지 본문 `PageHeader` 제거(이전 세션 마지막 요청 완수).
+- **코인 상세 차트 버그(흰 화면 크래시 포함)**: ⑴TradingView attribution 로고 안 꺼지던 버그 — `attributionLogo:false`가 v5 `LayoutOptions` 소속인데 최상위에 둬서 무시됨 → `layout` 안으로 이동. ⑵**RSI 클릭→흰 화면**: `chart.getSeries()`가 v5에선 `IPaneApi` 소속(chart에 없음)→`TypeError`→에러바운더리 없어 트리 언마운트. `seriesRef`로 직접 추적·제거로 수정. + StrictMode 더블마운트 시 옛 차트 시리즈를 새 차트에서 removeSeries하던 2차 크래시("Value is undefined")도 마운트 effect `seriesRef` 초기화로 해결. ⑶지표 토글마다 `fitContent()`로 줌 리셋되던 것 — 캔들 setData/fitContent(인터벌 변경)와 오버레이 그리기(토글) effect 분리.
+- **코인 목록 사이드바**: 한글명 컬럼 `w-20`+truncate, 좌우 비율 17:7(8.5:3.5, 24컬럼 그리드), 정렬 화살표 활성 컬럼만 노출(비활성 `↕` 제거)+화살표 자리 고정폭 예약(토글 시 안 밀림).
+- **대시보드 섹터 성과 막대**: 방향색→카테고리별 색상(섹터 페이지 `catColor`와 동일 규칙)+섹터명 색점. 증감률 숫자는 빨강/파랑 유지.
+- **섹터 누적수익률 월봉→일봉 전환**(사용자: 호버 시 월 단위 스냅 끊김 지적, A안 선택): 백엔드 `get_category_daily_cumulative()`(섹터별 일봉 동일가중 지수=첫날 1.0 정규화 평균의 누적%, 전 종목 공통 윈도우 `min_len=150`으로 동일 날짜축, 공용 일봉캐시 재사용→팬아웃0)·`/api/analysis/category/cumulative-daily`·프리페치 월/분기/년 3종→일봉 1종. 프론트 `useCategoryDailyCumulative`+`Sectors.jsx CumulativeChart` recharts 표준 `Tooltip`+`activeDot` 재작성(커스텀 픽셀보간 호버 제거)·기간 선택기 제거·`type=monotone`·Y축 상단 기본 50% 보장(초과 확장). 월별 히트맵은 월봉 유지.
+- **신뢰성 경고 제거**(사용자 요청): 팩터 분석 모멘텀 하단 "5bps…인샘플·생존편향" 경고 div 삭제, 백테스트 `Caveat`(단일·포트 2곳+정의) 삭제.
+- **로고 점 제거**: `public/logo.png` 우측 하단 파란 다이아몬드를 PIL로 투명 처리(구석 텍스트 없음 확인 후 박스 클리어, 원본 git 보존). favicon은 사용자가 별도 교체(건드리지 않음).
+- **배경색** `#f4f5f7`→**`#e6eaf2`**(쿨 그레이블루) — body(index.css)+Layout.
+- **공통 푸터 신설**(`components/layout/Footer.jsx`, 전 페이지): 좌측 브랜드(logo.png를 CSS `mask`로 네이비 #093687 입힘)+데이터출처 / 네비 3컬럼(둘러보기·정량분석·전략도구) / 안내 / 하단 면책·저작권. **흰 배경은 헤더처럼 뷰포트 full-bleed**, 내부는 `max-w-[1440px]` 중앙정렬, 화면 맨 아래까지(Layout `flex flex-col`+main `flex-1`). 가짜 사업자정보 없이 실제 정보만.
+- 검증: 단계마다 `vite build`·ESLint·`py_compile` 통과, 섹터 일봉 누적 실데이터(154일 5섹터) 확인. 브라우저는 사용자 직접 핑퐁 확인.

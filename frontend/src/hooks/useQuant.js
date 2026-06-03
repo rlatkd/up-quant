@@ -34,5 +34,5 @@ export const useClusters   = (top = 80, k = 4) => useKeyed(() => quant.getCluste
 export const useDendrogram = (top = 40)       => useKeyed(() => quant.getDendrogram(top), `den:${top}`, EMPTY_DENDRO)
 export const useGarch      = (market)         => useKeyed(() => quant.getGarch(market), `gar:${market}`, EMPTY_GARCH)
 export const useMomentum   = (top = 40, lb = 20, hd = 5) => useKeyed(() => quant.getMomentum(top, lb, hd), `mom:${top}:${lb}:${hd}`, EMPTY_MOM)
-export const usePairs      = (top = 30)       => useKeyed(() => quant.getPairs(top), `pair:${top}`, EMPTY_PAIRS)
+export const usePairs      = (top = 50)       => useKeyed(() => quant.getPairs(top), `pair:${top}`, EMPTY_PAIRS)
 export const useRegime     = (nStates = 2)    => useKeyed(() => quant.getRegime(nStates), `reg:${nStates}`, EMPTY_REGIME)

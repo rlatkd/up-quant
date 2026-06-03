@@ -417,10 +417,6 @@ function MomentumSection() {
             <HoldingList title="현재 롱 (모멘텀 상위)" rows={data.long} color="text-red-500" />
             <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />
           </div>
-          <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mt-4 leading-relaxed">
-            <span className="flex-shrink-0">⚠️</span>
-            <span>거래비용 {data.fee_bps ?? 5}bps를 차감했으나 <b>인샘플·생존편향</b>(현재 상장 종목만)이 있어 실전 성과는 더 낮습니다. 학술적 팩터 검증용입니다.</span>
-          </div>
         </>
       )}
     </Card>
@@ -455,7 +451,7 @@ function SignalBadge({ signal }) {
 }
 
 function PairsSection() {
-  const { data, loading } = usePairs(30)
+  const { data, loading } = usePairs(50)
   return (
     <Card>
       <CardHeader
@@ -781,7 +777,7 @@ function StructureSummary() {
 
 function FactorSummary() {
   const { data: mom } = useMomentum(40, 20, 5)
-  const { data: pairs } = usePairs(30)
+  const { data: pairs } = usePairs(50)
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <StatCard label="모멘텀 팩터 총수익률" value={pct(mom.total_return)} color={up(mom.total_return)} valueClass="text-2xl" />

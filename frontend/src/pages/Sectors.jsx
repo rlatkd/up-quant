@@ -1,10 +1,10 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
-  ReferenceLine, ResponsiveContainer,
+  ReferenceLine, ResponsiveContainer, Tooltip,
 } from 'recharts'
-import { useCategoryMonthly, useCategoryCumulative, useCoinStats } from '../hooks/useAnalysis'
+import { useCategoryMonthly, useCategoryDailyCumulative, useCoinStats } from '../hooks/useAnalysis'
 import { useTickers } from '../hooks/useTickers'
 import { SERIES } from '../theme'
 import CartButton from '../components/CartButton'
@@ -111,8 +111,6 @@ function HeatmapCell({ value }) {
     </td>
   )
 }
-
-const PERIOD_OPTIONS = ['월', '분기', '년']
 
 // 섹터 클릭 시 띄우는 모달 — 소속 종목 리스트(거래대금 desc) + 행 클릭 상세 + 카트 담기.
 // ESC·바깥 클릭으로 닫힘. 종목은 useCoinStats(category 포함) + useTickers(현재가) 결합.
@@ -225,55 +223,42 @@ function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
   )
 }
 
-// 카테고리별 누적 수익률 라인 차트.
-// recharts 기본 툴팁은 가장 가까운 데이터 점에 "스냅"(중점에서 값이 툭 바뀜)하지만,
-// 여기선 마우스 x를 픽셀→데이터 좌표로 역변환해 두 점 사이를 **선형 보간**한 값을
-// 연속적으로 보여준다. 보간이 정확하려면 플롯 영역의 좌/우 픽셀 경계를 알아야 하므로
-// YAxis 폭·margin을 고정한다.
-// ⚠️ 실데이터는 월 단위 점이며, 라인은 type="natural"(자연 스플라인 곡선)으로 그린다.
-// 곡선은 점 사이를 매끄럽게 잇는 시각적 보간일 뿐 추가 데이터가 아니다. natural은 보기 좋지만
-// 구간 중간에서 실제 월별 값보다 위/아래로 다소 출렁일(오버슈트) 수 있다(없던 고점/저점처럼 보임).
-// 또 그려진 곡선값과 툴팁의 선형 보간값도 구간 중간에서 달라지므로, 툴팁 라벨에 "부근"(근사)을 명시한다.
-const CUM_MARGIN = { top: 4, right: 20, bottom: 0, left: 0 }
-const CUM_YAXIS_W = 48
-
+// 카테고리별 누적 수익률 라인 차트 (일봉 동일가중 지수, 최근 ~200일).
+// 데이터가 일 단위로 촘촘해, 대시보드 시장 종합 추세처럼 recharts 표준 Tooltip + activeDot를 쓴다.
+// (과거 월봉 12점이라 점 사이를 픽셀 보간하던 커스텀 호버를 제거 — 실제 데이터 점 값만 정직하게 표시)
 const CUM_BASE_H = 380       // 기본 높이(px) — 세로로 크게(라인 간격 확보)
 const CUM_ZOOM_STEP = 0.5
 const CUM_ZOOM_MAX = 3
 
+// 표준 Tooltip 내용 — 호버 시점의 전 섹터 값을 큰 순으로, 색점과 함께.
+function CumTooltip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null
+  const date = new Date(label * 1000).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })
+  const items = [...payload].sort((a, b) => b.value - a.value)
+  return (
+    <div className="bg-white border border-gray-200 rounded shadow-sm px-2.5 py-2 w-[150px]">
+      <div className="text-[11px] text-gray-400 mb-1">{date}</div>
+      {items.map(it => (
+        <div key={it.dataKey} className="flex items-center justify-between gap-2 text-xs leading-5">
+          <span className="flex items-center gap-1 min-w-0">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: it.color }} />
+            <span className="truncate text-gray-600">{it.dataKey}</span>
+          </span>
+          <span className="font-medium text-gray-800 flex-shrink-0">{it.value.toFixed(2)}%</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function CumulativeChart({ rows, categories }) {
-  const wrapRef = useRef(null)
-  const [hover, setHover] = useState(null) // { x, w, label, items:[{cat,color,value}] }
   const [zoom, setZoom] = useState(1)      // 세로 확대 배율(가로는 항상 100%)
   const n = rows.length
   const chartH = Math.round(CUM_BASE_H * zoom)
 
-  function handleMove(e) {
-    if (n < 2 || !wrapRef.current) return
-    const rect = wrapRef.current.getBoundingClientRect()
-    const plotLeft = CUM_MARGIN.left + CUM_YAXIS_W
-    const plotRight = rect.width - CUM_MARGIN.right
-    if (plotRight <= plotLeft) return
-    const mx = Math.max(plotLeft, Math.min(plotRight, e.clientX - rect.left))
-    const dataX = (mx - plotLeft) / (plotRight - plotLeft) * (n - 1)
-    const i0 = Math.floor(dataX)
-    const i1 = Math.min(n - 1, i0 + 1)
-    const t = dataX - i0
-    const items = categories.map(cat => ({
-      cat,
-      color: catColor(categories, cat),
-      value: rows[i0][cat] + (rows[i1][cat] - rows[i0][cat]) * t,
-    }))
-    setHover({ x: mx, w: rect.width, label: rows[Math.round(dataX)]?.label ?? '', items })
-  }
-
-  // 표시 눈금: 점이 많으면(>8) 한 칸 걸러, 적으면 전부
-  const ticks = rows.map((_, i) => i).filter(i => n <= 8 || i % 2 === 0)
-
-  const BOX_W = 150
-  const boxLeft = hover
-    ? (hover.x + 12 + BOX_W > hover.w ? Math.max(0, hover.x - BOX_W - 12) : hover.x + 12)
-    : 0
+  // x축 눈금 — 일봉 ~150점이라 약 8개만 노출(타임스탬프 기준)
+  const step = Math.max(1, Math.floor(n / 8))
+  const ticks = rows.filter((_, i) => i % step === 0).map(r => r.t)
 
   return (
     <div>
@@ -294,74 +279,51 @@ function CumulativeChart({ rows, categories }) {
           className="w-6 h-6 rounded border border-gray-200 text-gray-600 leading-none cursor-pointer hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >+</button>
       </div>
-      <div ref={wrapRef} className="relative" onMouseMove={handleMove} onMouseLeave={() => setHover(null)}>
       <ResponsiveContainer width="100%" height={chartH}>
-        <LineChart data={rows.map((r, i) => ({ ...r, idx: i }))} margin={CUM_MARGIN}>
+        <LineChart data={rows} margin={{ top: 4, right: 20, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
           <XAxis
-            dataKey="idx" type="number" domain={[0, n - 1]}
-            ticks={ticks} tickFormatter={i => rows[i]?.label ?? ''}
-            tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false}
+            dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
+            ticks={ticks}
+            tickFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+            tick={{ fontSize: 11, fill: '#9ca3af' }}
           />
           <YAxis
-            width={CUM_YAXIS_W}
+            width={48}
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             tickFormatter={v => v + '%'}
-            // 자동 스케일이 데이터 끝에 딱 맞아 라인이 위/아래 모서리에 붙으므로, 양쪽에 여유(10단위 반올림 + 헤드룸)를 준다.
+            // 하단은 데이터에 맞춰 동적(5단위, 헤드룸). 상단은 기본 50% 보장하되 데이터가 넘으면 확장
+            // (Compare Y축과 동일: 고정이 아니라 "기본 범위 보장 + 극단 확장"이라 강세장에서 안 잘림).
             domain={[
-              (dmin) => Math.floor((Math.min(0, dmin) * 1.3 - 5) / 10) * 10,
-              (dmax) => Math.ceil((dmax * 1.2 + 5) / 10) * 10,
+              (dmin) => Math.floor((Math.min(0, dmin) * 1.15 - 2) / 5) * 5,
+              (dmax) => Math.max(50, Math.ceil((dmax * 1.15 + 2) / 5) * 5),
             ]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
+          <Tooltip content={<CumTooltip />} />
           {categories.map(cat => (
             <Line
               key={cat}
-              type="natural"
+              type="monotone"
               dataKey={cat}
               stroke={catColor(categories, cat)}
               strokeWidth={2}
               dot={false}
+              activeDot={{ r: 3 }}
               isAnimationActive={false}
             />
           ))}
         </LineChart>
       </ResponsiveContainer>
-
-      {hover && (
-        <>
-          <div
-            className="absolute pointer-events-none"
-            style={{ left: hover.x, top: CUM_MARGIN.top, bottom: 30, width: 1, background: '#9ca3af' }}
-          />
-          <div
-            className="absolute pointer-events-none bg-white border border-gray-200 rounded shadow-sm px-2.5 py-2"
-            style={{ top: 4, left: boxLeft, width: BOX_W }}
-          >
-            <div className="text-[11px] text-gray-400 mb-1">{hover.label} 부근</div>
-            {hover.items.map(it => (
-              <div key={it.cat} className="flex items-center justify-between gap-2 text-xs leading-5">
-                <span className="flex items-center gap-1 min-w-0">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: it.color }} />
-                  <span className="truncate text-gray-600">{it.cat}</span>
-                </span>
-                <span className="font-medium text-gray-800 flex-shrink-0">{it.value.toFixed(2)}%</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      </div>
     </div>
   )
 }
 
 export default function Sectors() {
-  const [cumPeriod, setCumPeriod] = useState('월')
   const [activeSector, setActiveSector] = useState(null)  // 모달용 — 클릭된 섹터명
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
-  const { data: cumulative, loading: cumLoading } = useCategoryCumulative(cumPeriod)
+  const { data: cumulative, loading: cumLoading } = useCategoryDailyCumulative()
   // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가)
   const { data: coinStats } = useCoinStats()
   const { tickers } = useTickers()
@@ -408,23 +370,8 @@ export default function Sectors() {
       <div className="bg-white border border-gray-200 rounded-md p-5">
         <div className="flex items-center justify-between mb-1">
           <div className="text-sm font-semibold text-gray-700">카테고리별 누적 수익률</div>
-          <div className="flex gap-1">
-            {PERIOD_OPTIONS.map(p => (
-              <button
-                key={p}
-                onClick={() => setCumPeriod(p)}
-                className={`px-2.5 py-1 text-xs rounded font-medium cursor-pointer transition-colors ${
-                  cumPeriod === p
-                    ? 'bg-brand-500 text-white'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
         </div>
-        <div className="text-xs text-gray-400 mb-4">기간 첫 구간 대비 누적 등락률 (%) · 섹터 소속 종목 동일가중 월봉 집계</div>
+        <div className="text-xs text-gray-400 mb-4">최근 약 200일 시작일 대비 누적 등락률 (%) · 섹터 소속 종목 동일가중 일봉 지수</div>
         {cumLoading ? (
           <div className="h-[220px] flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />

@@ -60,7 +60,7 @@ def get_momentum(
 
 
 @router.get("/pairs", response_model=PairsResult)
-def get_pairs(top: int = Query(30, ge=5, le=40, description="거래대금 상위 N종 유니버스 (5~40)")):
+def get_pairs(top: int = Query(50, ge=5, le=80, description="거래대금 상위 N종 유니버스 (5~80)")):
     return quant_service.get_pairs(top)
 
 

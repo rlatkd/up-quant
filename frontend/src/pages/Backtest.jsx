@@ -29,16 +29,6 @@ function MetricCard({ label, value, color = 'text-gray-800', sub }) {
 // 리스크 조정 지표 색상: 양수=빨강(좋음), 음수=파랑(나쁨), 0 부근=회색
 const raColor = v => (v > 0.1 ? 'text-red-500' : v < -0.1 ? 'text-blue-500' : 'text-gray-600')
 
-// 백테스트 신뢰성 경고 — 퀀트가 결과를 곧이곧대로 믿지 않도록 한계를 명시.
-function Caveat({ children }) {
-  return (
-    <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 leading-relaxed">
-      <span className="flex-shrink-0">⚠️</span>
-      <span>{children}</span>
-    </div>
-  )
-}
-
 function Spinner() {
   return (
     <div className="flex justify-center py-16">
@@ -349,10 +339,6 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
             </div>
           </div>
 
-          <Caveat>
-            과거 <b>인샘플</b> 백테스트입니다. 거래비용({result.metrics.fee_bps}bps)은 반영했으나 <b>슬리피지·세금·체결 지연은 미반영</b>이고,
-            상장폐지 종목이 제외된 <b>생존편향</b>이 있어 실제 성과는 더 낮을 수 있습니다. 미래 수익을 보장하지 않습니다.
-          </Caveat>
         </>
       )}
 
@@ -511,10 +497,6 @@ function PortfolioBacktest({ tickers, cart, preset }) {
             </div>
           </div>
 
-          <Caveat>
-            거래비용(진입+리밸런스 회전)은 반영했으나 <b>슬리피지·세금은 미반영</b>이고, 상장폐지 종목이 제외된 <b>생존편향</b>이 있습니다.
-            과거 성과이며 미래를 보장하지 않습니다.
-          </Caveat>
         </>
       )}
     </div>

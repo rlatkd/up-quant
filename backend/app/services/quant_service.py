@@ -523,7 +523,8 @@ def get_momentum(top: int = _MOM_TOP, lookback: int = _MOM_LOOKBACK,
 # ── 7) 공적분 페어트레이딩 스크리너 ───────────────────────────
 # 두 종목의 로그가격이 장기적으로 같이 움직이면(공적분) 스프레드가 평균회귀한다. 상관 높은
 # 페어만 Engle-Granger 공적분 검정 → p<0.05면 채택, OLS 헤지비율로 스프레드 z점수 → 진입신호.
-_PAIR_TOP = 30
+_PAIR_TOP = 50          # 거래대금 상위 30은 메이저뿐 → 서로 상관만 높고 공적분 X. 동일생태계
+                        # 중캡(HBAR·HIVE·ENA 등)이 들어오도록 유니버스를 넓혀야 페어가 검출됨.
 _PAIR_CANDLES = 150
 _PAIR_MIN_LEN = 120
 _PAIR_CORR_GATE = 0.5     # 이 이상 상관인 페어만 검정(연산 절감 + 무의미 페어 제외)
@@ -572,7 +573,7 @@ def _compute_pairs(top: int) -> PairsResult:
 
 
 def get_pairs(top: int = _PAIR_TOP) -> PairsResult:
-    top = max(5, min(top, 40))
+    top = max(5, min(top, 80))
     return cached(f"quant:pairs:{top}", config.TTL_CANDLE_DAYS, lambda: _compute_pairs(top))
 
 

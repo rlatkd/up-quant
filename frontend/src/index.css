@@ -27,8 +27,8 @@ html {
 }
 
 body {
-  /* 흰 카드가 또렷하게 분리되도록 페이지는 옅은 회색 (업비트식 구획감) */
-  background-color: #f4f5f7;
+  /* 흰 카드가 또렷하게 분리되도록 페이지는 옅은 쿨 그레이블루 (업비트식 구획감) */
+  background-color: #e6eaf2;
   color: #1f2937;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

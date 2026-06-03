@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
-import { getCategoryMonthly, getCategoryCumulative, getCoinStats, getCorrelation } from '../api/analysis'
+import { getCategoryMonthly, getCategoryCumulative, getCategoryDailyCumulative, getCoinStats, getCorrelation } from '../api/analysis'
 
 const EMPTY_RETURNS = { categories: [], rows: [] }
+
+// 섹터 일봉 동일가중 누적수익률 (최근 ~200일). 파라미터 없음 — 단일 일봉 뷰.
+export function useCategoryDailyCumulative() {
+  const [data, setData] = useState(EMPTY_RETURNS)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    getCategoryDailyCumulative().then(setData).finally(() => setLoading(false))
+  }, [])
+  return { data, loading }
+}
 
 export function useCategoryMonthly() {
   const [data, setData] = useState(EMPTY_RETURNS)
