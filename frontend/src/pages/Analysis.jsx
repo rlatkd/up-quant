@@ -187,7 +187,8 @@ function WeightCard({ title, spot, onSend }) {
 // ── 2) 상관 네트워크 (MST) ────────────────────────────────────
 function NetworkSection() {
   const { data, loading } = useNetwork(50)
-  const W = 760, H = 480
+  const W = 760, H = 480   // 그래프 레이아웃 좌표(원래 비율 — 노드 배치는 이 안에서)
+  const VH = 600           // 그래프를 담는 영역(캔버스) 높이 — 그래프는 이 안에서 세로 중앙 배치
 
   // d3-force 정적 레이아웃(애니메이션 없이 N틱 수렴 후 좌표 고정).
   const laid = useMemo(() => {
@@ -224,25 +225,28 @@ function NetworkSection() {
       {loading ? <Spinner /> : (
         <>
           <div className="w-full overflow-hidden">
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 480 }}>
-              {laid.edges.map((e, i) => (
-                <line key={i}
-                  x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                  stroke="#cbd5e1" strokeWidth={0.5 + e.corr * 2} strokeOpacity={0.25 + e.corr * 0.45} />
-              ))}
-              {laid.nodes.map((n, i) => {
-                const r = 5 + n.degree * 1.8
-                const isHub = n.degree >= Math.max(4, maxDeg - 1)
-                return (
-                  <g key={i}>
-                    <circle cx={n.x} cy={n.y} r={r} fill={sectorColor(n.category)} fillOpacity={0.85} stroke="#fff" strokeWidth={1} />
-                    {(isHub || r > 9) && (
-                      <text x={n.x} y={n.y - r - 2} textAnchor="middle" fontSize={isHub ? 11 : 9}
-                        fontWeight={isHub ? 700 : 500} fill={isHub ? '#093687' : '#64748b'}>{sym(n.market)}</text>
-                    )}
-                  </g>
-                )
-              })}
+            <svg viewBox={`0 0 ${W} ${VH}`} className="w-full" style={{ height: VH }}>
+              {/* 그래프(W×H)를 더 큰 영역(W×VH) 안에서 세로 중앙에 배치 */}
+              <g transform={`translate(0, ${(VH - H) / 2})`}>
+                {laid.edges.map((e, i) => (
+                  <line key={i}
+                    x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                    stroke="#cbd5e1" strokeWidth={0.5 + e.corr * 2} strokeOpacity={0.25 + e.corr * 0.45} />
+                ))}
+                {laid.nodes.map((n, i) => {
+                  const r = 5 + n.degree * 1.8
+                  const isHub = n.degree >= Math.max(4, maxDeg - 1)
+                  return (
+                    <g key={i}>
+                      <circle cx={n.x} cy={n.y} r={r} fill={sectorColor(n.category)} fillOpacity={0.85} stroke="#fff" strokeWidth={1} />
+                      {(isHub || r > 9) && (
+                        <text x={n.x} y={n.y - r - 2} textAnchor="middle" fontSize={isHub ? 11 : 9}
+                          fontWeight={isHub ? 700 : 500} fill={isHub ? '#093687' : '#64748b'}>{sym(n.market)}</text>
+                      )}
+                    </g>
+                  )
+                })}
+              </g>
             </svg>
           </div>
           <div className="mt-2"><SectorLegend /></div>
@@ -326,7 +330,8 @@ function ClusterSection() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis type="number" dataKey="volatility" name="변동성" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }}
                 label={{ value: '30일 변동성 (%)', position: 'insideBottom', offset: -6, fontSize: 11, fill: '#9ca3af' }} />
-              <YAxis type="number" dataKey="return_1m" name="1개월수익률" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+              <YAxis type="number" dataKey="return_1m" name="1개월수익률" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }}
+                domain={[(min) => Math.floor((min - 15) / 10) * 10, (max) => Math.ceil((max + 5) / 10) * 10]} />
               <ZAxis type="number" dataKey="log_value" range={[30, 260]} />
               <ReferenceLine y={0} stroke="#e5e7eb" />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => payload?.[0] ? (
