@@ -2,6 +2,8 @@ import math
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
+import numpy as np
+
 from app.core import config
 from app.core.cache import cached
 from app.core.config import MARKET_CATEGORIES
@@ -122,6 +124,67 @@ def get_category_cumulative(period: str = "월") -> CategoryReturns:
         return CategoryReturns(categories=cats, rows=rows)
 
     return cached(f"category:cumulative:{period}", config.TTL_CATEGORY, build)
+
+
+def _day_label(ts_ms: int) -> str:
+    """캔들 timestamp(ms) → 'MM-DD' (KST 일 기준)."""
+    return datetime.fromtimestamp(ts_ms / 1000, tz=_KST).strftime("%m-%d")
+
+
+# 일봉 기반 섹터 누적수익률 — 공용 일봉 캐시(200개) 재사용이라 윈도우도 그에 맞춤.
+_DAILY_CUM_CANDLES = 200
+_DAILY_CUM_MIN_LEN = 150  # 신규 상장(히스토리 짧은) 코인 제외 → 공통 윈도우가 줄지 않게(대시보드 regime과 동일)
+
+
+def get_category_daily_cumulative(n_days: int = _DAILY_CUM_CANDLES) -> CategoryReturns:
+    """섹터별 일간 동일가중 지수의 누적 등락률(%) — 최근 ~200일 일봉.
+
+    각 섹터 소속 종목의 일봉 close를 윈도우 첫날=1.0으로 정규화해 동일가중 평균(=동일금액 매수·보유 지수),
+    누적 등락률 = (지수 − 1)×100. 모든 섹터가 같은 날짜축(공통 윈도우 T)을 공유하도록 전체 종목을
+    공통 길이로 맞춘다(min_len 미만 신규 상장은 제외해 T가 줄지 않게). 일봉은 공용 캐시 재사용 → 팬아웃 0.
+    (과거 월봉 기반 월/분기/년 집계를 대체 — 일 단위라 호버가 촘촘·부드러움)
+    """
+    from app.services import quant_service  # 순환 import 방지(지연 로드)
+
+    def build() -> CategoryReturns:
+        live = set(market_service.valid_markets())
+        members: dict[str, list[str]] = defaultdict(list)
+        for market, cat in _CATEGORIES.items():
+            if market in live:
+                members[cat].append(market)
+
+        all_markets = [m for cat in config.CATEGORY_LIST for m in members.get(cat, [])]
+        kept, closes = quant_service.closes_matrix(all_markets, count=n_days, min_len=_DAILY_CUM_MIN_LEN)
+        if not kept:
+            return CategoryReturns(categories=[], rows=[])
+        T = closes.shape[0]
+        idx_of = {m: i for i, m in enumerate(kept)}
+        norm = closes / closes[0]  # (T, n) — 각 종목 시작=1.0
+
+        # 날짜축 — kept 중 하나의 최근 T개 일봉 timestamp (일봉은 연속이라 종목 무관 동일 날짜)
+        ref = "KRW-BTC" if "KRW-BTC" in idx_of else kept[0]
+        ref_candles = candle_service.get_candles(ref, "days", count=n_days)[-T:]
+        labels = [_day_label(c.timestamp) for c in ref_candles]
+        times = [int(c.timestamp // 1000) for c in ref_candles]
+
+        cats: list[str] = []
+        series: dict[str, np.ndarray] = {}
+        for cat in config.CATEGORY_LIST:
+            cols = [idx_of[m] for m in members.get(cat, []) if m in idx_of]
+            if not cols:
+                continue
+            series[cat] = (norm[:, cols].mean(axis=1) - 1.0) * 100
+            cats.append(cat)
+
+        rows: list[dict] = []
+        for i in range(T):
+            row: dict = {"label": labels[i], "t": times[i]}
+            for cat in cats:
+                row[cat] = round(float(series[cat][i]), 2)
+            rows.append(row)
+        return CategoryReturns(categories=cats, rows=rows)
+
+    return cached("category:cumulative_daily", config.TTL_CATEGORY, build)
 
 
 def _volatility(market: str) -> float:

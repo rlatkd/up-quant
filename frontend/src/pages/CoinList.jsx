@@ -42,18 +42,19 @@ function changeColor(change) {
   return 'text-gray-600'
 }
 
-function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right' }) {
+function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthClass = '' }) {
   const active = sortKey === col
   const alignClass = align === 'left' ? 'text-left' : 'text-right'
   return (
     <th
-      className={`px-2 py-2 font-medium cursor-pointer select-none hover:text-gray-600 transition-colors ${alignClass}`}
+      className={`px-2 py-2 font-medium cursor-pointer select-none hover:text-gray-600 transition-colors ${alignClass} ${widthClass}`}
       onClick={() => onSort(col)}
     >
       <span className="inline-flex items-center gap-0.5">
         {label}
-        <span className={active ? 'text-brand-400' : 'text-gray-300'}>
-          {active ? (sortDir === 'desc' ? '↓' : '↑') : '↕'}
+        {/* 화살표 자리를 항상 고정폭으로 예약 — 정렬 토글로 화살표가 생겨도 컬럼이 밀리지 않음 */}
+        <span className="inline-block w-2.5 text-center text-brand-400">
+          {active ? (sortDir === 'desc' ? '↓' : '↑') : ''}
         </span>
       </span>
     </th>
@@ -118,16 +119,16 @@ export default function CoinList() {
     return r
   }, [tickers, filter, favorites, search, sortKey, sortDir])
 
-  // 좌: 메인 상세 (col 9, ~75%) │ 우: 슬림 코인 리스트 (col 3, ~25%, sticky)
+  // 좌: 메인 상세 (17/24, ~71%) │ 우: 코인 리스트 (7/24, ~29%, sticky) — 8.5:3.5 비율
   return (
-    <div className="grid grid-cols-12 gap-4 items-start">
+    <div className="grid grid-cols-[repeat(24,minmax(0,1fr))] gap-4 items-start">
       {/* 좌측 메인 — 코인 상세 */}
-      <div className="col-span-9 min-w-0">
+      <div className="col-span-[17] min-w-0">
         <CoinDetailView market={selectedMarket} />
       </div>
 
       {/* 우측 사이드바 — 코인 리스트 */}
-      <aside className="col-span-3 bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col sticky top-[68px] max-h-[calc(100vh-84px)]">
+      <aside className="col-span-[7] bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col sticky top-[68px] max-h-[calc(100vh-84px)]">
         {/* 검색 */}
         <div className="p-3 border-b border-gray-100 shrink-0">
           <input
@@ -167,7 +168,7 @@ export default function CoinList() {
               <tr>
                 <th className="px-2 py-2 w-6"></th>
                 <th className="px-2 py-2 w-6"></th>
-                <SortTh label="한글명"   col="korean_name"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+                <SortTh label="한글명"   col="korean_name"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" widthClass="w-20" />
                 <SortTh label="현재가"   col="trade_price"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh label="전일대비" col="change_rate"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh label="거래대금" col="acc_trade_price_24h"  sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
@@ -198,9 +199,9 @@ export default function CoinList() {
                     <td className="px-1 py-1.5 text-center">
                       <CartButton market={t.market} />
                     </td>
-                    <td className="px-2 py-1.5 min-w-0">
+                    <td className="px-2 py-1.5 w-20 max-w-20">
                       <div className="font-medium text-gray-800 truncate">{t.korean_name}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">{t.market.replace('KRW-', '')}/KRW</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5 truncate">{t.market.replace('KRW-', '')}/KRW</div>
                     </td>
                     <td className={`px-2 py-1.5 text-right font-medium tabular-nums ${changeColor(t.change)}`}>
                       {t.trade_price.toLocaleString()}

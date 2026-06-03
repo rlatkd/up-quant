@@ -7,7 +7,7 @@ import {
 import { useTickers } from '../hooks/useTickers'
 import { useCategoryMonthly, useCoinStats } from '../hooks/useAnalysis'
 import { useRegime } from '../hooks/useQuant'
-import { DOM_COLORS } from '../theme'
+import { DOM_COLORS, SERIES } from '../theme'
 import CartButton from '../components/CartButton'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
@@ -316,6 +316,9 @@ function SectorPerf({ monthly }) {
   const last = rows[rows.length - 1]
   const perf = categories.map(cat => ({ cat, value: last[cat] ?? 0 })).sort((a, b) => b.value - a.value)
   const maxAbs = Math.max(1, ...perf.map(p => Math.abs(p.value)))
+  // 막대 색은 카테고리별로 구분(섹터 페이지와 동일 규칙: 원래 categories 순서 인덱스로 팔레트 매핑).
+  // 정렬 후 위치가 아니라 원래 인덱스를 써야 섹터 페이지 색과 일치한다.
+  const catColor = (cat) => SERIES[Math.max(0, categories.indexOf(cat)) % SERIES.length]
   return (
     <>
       <div className="text-xs text-gray-400 mb-3">{last.label} · 섹터별 평균 등락률</div>
@@ -324,11 +327,14 @@ function SectorPerf({ monthly }) {
           const pos = p.value >= 0
           return (
             <div key={p.cat} className="flex items-center gap-2 text-xs">
-              <span className="w-24 truncate text-gray-600 flex-shrink-0">{p.cat}</span>
+              <span className="w-24 truncate text-gray-600 flex-shrink-0 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(p.cat) }} />
+                <span className="truncate">{p.cat}</span>
+              </span>
               <div className="flex-1 h-3 rounded-full bg-gray-100 overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${pos ? 'bg-red-400' : 'bg-blue-400'}`}
-                  style={{ width: `${(Math.abs(p.value) / maxAbs) * 100}%` }}
+                  className="h-full rounded-full"
+                  style={{ width: `${(Math.abs(p.value) / maxAbs) * 100}%`, backgroundColor: catColor(p.cat) }}
                 />
               </div>
               <span className={`w-12 text-right font-medium flex-shrink-0 ${pos ? 'text-red-500' : 'text-blue-500'}`}>

@@ -7,33 +7,33 @@ import { useAnalysisCart } from '../../contexts/useAnalysisCart'
 // 과거 탐색에 묻혀 있던 마켓·섹터·스크리너 서브탭을 헤더 탭으로 승격(서로 다른 목적이라 분리).
 const tabGroups = [
   [
-    { to: '/dashboard', label: 'Dashboard', match: (p) => p.startsWith('/dashboard') },
+    { to: '/dashboard', label: '대시보드', match: (p) => p.startsWith('/dashboard') },
   ],
   [
     // 코인 목록은 로고(/)가 곧 진입점이라 별도 탭 없음.
-    { to: '/market',   label: 'Markets',  match: (p) => p.startsWith('/market') || p === '/explore' },
-    { to: '/sectors',  label: 'Sectors',  match: (p) => p.startsWith('/sectors') },
-    { to: '/screener', label: 'Screener', match: (p) => p.startsWith('/screener') },
+    { to: '/market',   label: '마켓',     match: (p) => p.startsWith('/market') || p === '/explore' },
+    { to: '/sectors',  label: '섹터',     match: (p) => p.startsWith('/sectors') },
+    { to: '/screener', label: '스크리너', match: (p) => p.startsWith('/screener') },
   ],
   [
-    { to: '/structure', label: 'Market Structure', match: (p) => p.startsWith('/structure') },
-    { to: '/factor',    label: 'Factor Analysis',  match: (p) => p.startsWith('/factor') },
-    { to: '/risk',      label: 'Risk',             match: (p) => p.startsWith('/risk') },
+    { to: '/structure', label: '시장 구조', match: (p) => p.startsWith('/structure') },
+    { to: '/factor',    label: '팩터 분석', match: (p) => p.startsWith('/factor') },
+    { to: '/risk',      label: '리스크',    match: (p) => p.startsWith('/risk') },
   ],
 ]
 
 // 전략 도구는 "서비스 더보기" 드롭다운(호버 시 목록) — 각 항목은 독립 페이지(/tools/<tab>).
 const TOOL_ITEMS = [
   {
-    tab: 'portfolio', label: 'Portfolio Optimization', desc: '위험 대비 최적 비중 (효율적 경계선)',
+    tab: 'portfolio', label: '포트폴리오 최적화', desc: '위험 대비 최적 비중 (효율적 경계선)',
     icon: <path d="M21 12a9 9 0 1 1-9-9v9z" />,
   },
   {
-    tab: 'backtest', label: 'Backtest', desc: '과거 데이터로 전략 성과 검증',
+    tab: 'backtest', label: '백테스트', desc: '과거 데이터로 전략 성과 검증',
     icon: <><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></>,
   },
   {
-    tab: 'compare', label: 'Compare', desc: '여러 종목 수익률을 나란히 비교',
+    tab: 'compare', label: '비교 분석', desc: '여러 종목 수익률을 나란히 비교',
     icon: <><rect x="4" y="10" width="4" height="10" /><rect x="10" y="5" width="4" height="15" /><rect x="16" y="13" width="4" height="7" /></>,
   },
 ]
@@ -165,7 +165,7 @@ function ServiceMoreMenu() {
         }`}
       >
         <span className="relative">
-          More
+          서비스 더보기
           <span className="absolute -top-1 -right-3 w-1.5 h-1.5 rounded-full bg-red-500" />
         </span>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"

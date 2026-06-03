@@ -54,8 +54,8 @@ function CandlestickChart({ candles, indicators }) {
     if (!containerRef.current) return
     const chart = createChart(containerRef.current, {
       autoSize: true,  // 컨테이너 크기에 맞춰 자동 리사이즈 (부모 flex 높이를 채움)
-      attributionLogo: false,
-      layout: { background: { color: '#ffffff' }, textColor: '#9ca3af' },
+      // attributionLogo는 LayoutOptions 소속 — layout 안에 둬야 적용됨(최상위에 두면 무시).
+      layout: { background: { color: '#ffffff' }, textColor: '#9ca3af', attributionLogo: false },
       grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
       rightPriceScale: { borderColor: '#e5e7eb' },
       timeScale: { borderColor: '#e5e7eb', timeVisible: true },
@@ -72,6 +72,8 @@ function CandlestickChart({ candles, indicators }) {
     return () => { chart.remove() }
   }, [])
 
+  // 캔들 데이터 — 인터벌(candles) 변경 시에만 setData + fitContent.
+  // (지표 토글 effect와 분리: 토글로 fitContent가 불려 줌/스크롤이 리셋되던 문제 해결)
   useEffect(() => {
     const { candle, chart } = seriesRef.current
     if (!candle || !candles.length) return
@@ -81,14 +83,19 @@ function CandlestickChart({ candles, indicators }) {
     }))
     candle.setData(data)
     chart.timeScale().fitContent()
+  }, [candles])
 
-    // MA 시리즈 제거 후 재생성
+  // 오버레이 지표(MA·Bollinger) — candles 또는 토글 변경 시 제거 후 재생성. fitContent 없음 → 줌 유지.
+  useEffect(() => {
+    const { chart } = seriesRef.current
+    if (!chart || !candles.length) return
+
     ;['ma20', 'ma60', 'bbUpper', 'bbLower'].forEach(k => {
       if (seriesRef.current[k]) { chart.removeSeries(seriesRef.current[k]); seriesRef.current[k] = null }
     })
 
     const closes = candles.map(c => c.close)
-    const times  = data.map(d => d.time)
+    const times  = candles.map(c => Math.floor(c.timestamp / 1000))
 
     if (indicators.ma) {
       const ma20 = calcMA(closes, 20)
@@ -118,28 +125,34 @@ function CandlestickChart({ candles, indicators }) {
 function RSIChart({ candles }) {
   const containerRef = useRef(null)
   const chartRef     = useRef(null)
+  const seriesRef    = useRef([])
 
   useEffect(() => {
     if (!containerRef.current) return
     const chart = createChart(containerRef.current, {
-      attributionLogo: false,
-      layout: { background: { color: '#ffffff' }, textColor: '#9ca3af' },
+      // attributionLogo는 LayoutOptions 소속 — layout 안에 둬야 적용됨(최상위에 두면 무시).
+      layout: { background: { color: '#ffffff' }, textColor: '#9ca3af', attributionLogo: false },
       grid: { vertLines: { color: '#f3f4f6' }, horzLines: { color: '#f3f4f6' } },
       rightPriceScale: { borderColor: '#e5e7eb', scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { borderColor: '#e5e7eb', timeVisible: true },
     })
     chartRef.current = chart
+    // 새 차트엔 시리즈가 없음 — 이전(제거된) 차트의 stale 시리즈 참조를 비운다.
+    // (StrictMode 더블 마운트 시 옛 차트 시리즈를 새 차트에서 removeSeries 하면 "Value is undefined" 크래시)
+    seriesRef.current = []
     const onResize = () => {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
     }
     window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); chart.remove() }
+    return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = [] }
   }, [])
 
   useEffect(() => {
     if (!chartRef.current || !candles.length) return
     const chart = chartRef.current
-    chart.getSeries().forEach(s => chart.removeSeries(s))
+    // v5에서 getSeries()는 IPaneApi 소속(chart엔 없음) → 직접 만든 시리즈를 ref로 추적해 제거
+    seriesRef.current.forEach(s => chart.removeSeries(s))
+    seriesRef.current = []
 
     const closes = candles.map(c => c.close)
     const times  = candles.map(c => Math.floor(c.timestamp / 1000))
@@ -155,6 +168,7 @@ function RSIChart({ candles }) {
       ob.setData(validTimes.map(t => ({ time: t, value: 70 })))
       os.setData(validTimes.map(t => ({ time: t, value: 30 })))
     }
+    seriesRef.current = [rsiSeries, ob, os]
     chart.timeScale().fitContent()
   }, [candles])
 
