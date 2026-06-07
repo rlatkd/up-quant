@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from app.schemas.analysis import CategoryReturns, CoinStat, CorrelationItem
 from app.services import analysis_service
@@ -9,11 +9,6 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 @router.get("/category/monthly", response_model=CategoryReturns)
 def get_monthly():
     return analysis_service.get_category_monthly()
-
-
-@router.get("/category/cumulative", response_model=CategoryReturns)
-def get_cumulative(period: str = Query("월", description="월|분기|년")):
-    return analysis_service.get_category_cumulative(period)
 
 
 @router.get("/category/cumulative-daily", response_model=CategoryReturns)

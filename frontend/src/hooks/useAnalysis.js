@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getCategoryMonthly, getCategoryCumulative, getCategoryDailyCumulative, getCoinStats, getCorrelation } from '../api/analysis'
+import { getCategoryMonthly, getCategoryDailyCumulative, getCoinStats, getCorrelation } from '../api/analysis'
 
 const EMPTY_RETURNS = { categories: [], rows: [] }
 
@@ -20,20 +20,6 @@ export function useCategoryMonthly() {
     getCategoryMonthly().then(setData).finally(() => setLoading(false))
   }, [])
   return { data, loading }
-}
-
-export function useCategoryCumulative(period = '월') {
-  // loading은 (loadedKey !== period)로 파생 — effect 안 setLoading(true) 제거하여
-  // cascading render(react-hooks/set-state-in-effect) 회피.
-  const [state, setState] = useState({ data: EMPTY_RETURNS, loadedKey: null })
-  useEffect(() => {
-    let cancelled = false
-    getCategoryCumulative(period).then(data => {
-      if (!cancelled) setState({ data, loadedKey: period })
-    })
-    return () => { cancelled = true }
-  }, [period])
-  return { data: state.data, loading: state.loadedKey !== period }
 }
 
 export function useCoinStats() {

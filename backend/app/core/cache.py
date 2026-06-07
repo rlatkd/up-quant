@@ -3,6 +3,8 @@ import time
 from typing import Any, Callable
 
 _store: dict[str, tuple[Any, float]] = {}
+# 키별 single-flight 락. 키 집합은 _store와 동일하게 유한(종목×캐시종류)하고 재검증마다
+# 재사용하므로 무한 증가/누수가 아니다 → 별도 정리 불필요(stale 시 같은 락을 다시 씀).
 _locks: dict[str, threading.Lock] = {}
 _meta_lock = threading.Lock()
 

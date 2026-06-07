@@ -14,13 +14,6 @@ from app.services import candle_service, market_service
 _CATEGORIES = MARKET_CATEGORIES
 _KST = timezone(timedelta(hours=9))  # 월봉 라벨은 KST 월 기준
 
-# 누적 수익률 기간 옵션 → (집계 단위 개월, 표시 구간 수)
-_PERIOD_SPEC = {
-    "월":  (1, 12),   # 최근 12개월
-    "분기": (3, 12),   # 최근 12분기(=36개월)
-    "년":  (12, 5),   # 최근 5년
-}
-
 
 def _month_label(ts_ms: int) -> str:
     """캔들 timestamp(ms) → 'YYYY-MM' (KST 월 기준)."""
@@ -77,53 +70,6 @@ def get_category_monthly() -> CategoryReturns:
         return CategoryReturns(categories=cats, rows=rows)
 
     return cached("category:monthly", config.TTL_CATEGORY, build)
-
-
-def _period_key(label: str, period: str) -> str:
-    """월라벨 'YYYY-MM' → 구간 표시 라벨."""
-    y, m = label.split("-")
-    if period == "분기":
-        return f"{y}Q{(int(m) - 1) // 3 + 1}"
-    if period == "년":
-        return y
-    return label  # 월
-
-
-def get_category_cumulative(period: str = "월") -> CategoryReturns:
-    """기간별 섹터 누적 등락률(%) — 첫 구간 대비 누적곱."""
-    unit, n_units = _PERIOD_SPEC.get(period, _PERIOD_SPEC["월"])
-
-    def build() -> CategoryReturns:
-        series = _sector_monthly_avg_series()
-        cats = config.CATEGORY_LIST
-        labels = _all_labels(series)
-        cat_map = {c: dict(series[c]) for c in cats}
-
-        # 시간순 구간 키 목록 (유니크) → 최근 n_units개만
-        keys: list[str] = []
-        for lbl in labels:
-            k = _period_key(lbl, period)
-            if k not in keys:
-                keys.append(k)
-        sel = keys[-n_units:]
-
-        rows: list[dict] = []
-        cum = {c: 1.0 for c in cats}
-        for k in sel:
-            months_in = [lbl for lbl in labels if _period_key(lbl, period) == k]
-            row: dict = {"label": k}
-            for c in cats:
-                factor = 1.0
-                for lbl in months_in:
-                    r = cat_map[c].get(lbl)
-                    if r is not None:
-                        factor *= 1 + r / 100
-                cum[c] *= factor
-                row[c] = round((cum[c] - 1) * 100, 2)
-            rows.append(row)
-        return CategoryReturns(categories=cats, rows=rows)
-
-    return cached(f"category:cumulative:{period}", config.TTL_CATEGORY, build)
 
 
 def _day_label(ts_ms: int) -> str:
@@ -219,6 +165,11 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
     return round(num / (dx * dy), 3) if dx * dy else 0.0
 
 
+# 상관 계산에 필요한 최소 공통 관측 수. 이보다 짧으면(신규 상장 등) 표본이 적어
+# 상관계수가 노이즈가 되므로 제외한다(quant returns_matrix의 min_len과 같은 취지).
+_CORR_MIN_OVERLAP = 40
+
+
 def get_correlation(market: str) -> list[CorrelationItem]:
     # 섹터 스냅샷(_CATEGORIES)엔 상폐 코드(예: KRW-DRIFT)가 남아 있을 수 있다 →
     # 라이브 마켓(/market/all 교집합)과 교집합만 순회해 404를 원천 차단한다.
@@ -233,6 +184,8 @@ def get_correlation(market: str) -> list[CorrelationItem]:
         candles = candle_service.get_candles(m, "days", 60)
         closes  = [c.close for c in candles]
         n = min(len(base_closes), len(closes))
+        if n < _CORR_MIN_OVERLAP:  # 공통 관측이 너무 적으면 상관 노이즈 → 제외
+            continue
         corr = _pearson(base_closes[-n:], closes[-n:])
         t = ticker_map.get(m)
         result.append(CorrelationItem(
@@ -243,19 +196,73 @@ def get_correlation(market: str) -> list[CorrelationItem]:
     return sorted(result, key=lambda x: x.correlation, reverse=True)
 
 
+def _daily_returns(closes: list[float]) -> list[float]:
+    """일간 단순수익률 (소수). close가 0/음수인 구간은 건너뛴다."""
+    return [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes)) if closes[i - 1]]
+
+
 def _compute_coin_stats() -> list[CoinStat]:
-    # 분석 유니버스 전체를 대상으로 변동성·1개월 수익률 산출 (공용 일봉 캐시 재사용).
+    # 분석 유니버스 전체를 대상으로 변동성·1개월 수익률·BTC 베타·거래량 급증·변동성 z-score 산출
+    # (공용 일봉 캐시 재사용 → BTC 일봉만 1회 추가, 나머지는 캐시 히트).
     # 카테고리는 업비트 섹터 스냅샷에 있으면 부여, 없으면 None (신규 상장 등).
     tickers = market_service.get_tickers()
-    result = []
+
+    # 베타 기준 = BTC 30일 일간수익률 분포 (모분산 ÷n)
+    btc_candles = candle_service.get_candles("KRW-BTC", "days", count=30)
+    btc_rets = _daily_returns([c.close for c in btc_candles])
+    btc_mean = sum(btc_rets) / len(btc_rets) if btc_rets else 0.0
+    btc_var = sum((r - btc_mean) ** 2 for r in btc_rets) / len(btc_rets) if btc_rets else 0.0
+
+    # 1패스 — 종목별 지표 계산 (z-score는 전종목 분포가 필요해 2패스로 뒤에서)
+    rows: list[tuple] = []
     for t in tickers:
+        candles = candle_service.get_candles(t.market, "days", count=30)
+        closes = [c.close for c in candles]
+        volumes = [c.volume for c in candles]
+        volatility = _volatility(t.market)
+        return_1m = _return_1m(t.market)
+
+        # BTC 베타 = cov(종목, BTC) / var(BTC) — 공통 최근 구간으로 정렬
+        rets = _daily_returns(closes)
+        n = min(len(rets), len(btc_rets))
+        if n >= 5 and btc_var > 0:
+            sr, br = rets[-n:], btc_rets[-n:]
+            sm, bm = sum(sr) / n, sum(br) / n
+            cov = sum((sr[i] - sm) * (br[i] - bm) for i in range(n)) / n
+            beta = round(cov / btc_var, 2)
+        else:
+            beta = 0.0
+
+        # 거래량 급증 = 최신 일봉 거래량 / 직전 7일 평균
+        if len(volumes) >= 8:
+            avg7 = sum(volumes[-8:-1]) / 7
+            surge = round(volumes[-1] / avg7, 2) if avg7 > 0 else 0.0
+        else:
+            surge = 0.0
+
+        rows.append((t, volatility, return_1m, beta, surge))
+
+    # 2패스 — 전종목 변동성 분포로 z-score
+    vols_all = [v for _, v, _, _, _ in rows if v > 0]
+    if len(vols_all) >= 2:
+        vmean = sum(vols_all) / len(vols_all)
+        vstd = math.sqrt(sum((v - vmean) ** 2 for v in vols_all) / (len(vols_all) - 1))
+    else:
+        vmean, vstd = 0.0, 0.0
+
+    result = []
+    for t, volatility, return_1m, beta, surge in rows:
+        zscore = round((volatility - vmean) / vstd, 2) if vstd > 0 else 0.0
         result.append(CoinStat(
             market=t.market,
             korean_name=t.korean_name,
             category=_CATEGORIES.get(t.market),
-            volatility=_volatility(t.market),
-            return_1m=_return_1m(t.market),
+            volatility=volatility,
+            return_1m=return_1m,
             acc_trade_price_24h=t.acc_trade_price_24h,
+            btc_beta=beta,
+            vol_zscore=zscore,
+            vol_surge=surge,
         ))
     return result
 

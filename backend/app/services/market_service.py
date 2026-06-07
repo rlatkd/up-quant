@@ -27,6 +27,11 @@ def valid_markets() -> list[str]:
     return [m for m in config.MARKETS if m in names]
 
 
+# 스파크라인(1시간봉 24개)은 대시보드 시세표(상위 10)·마켓 상단 카드(상위 4)만 쓰는 시각 요소라,
+# 거래대금 상위 N종만 채운다. 261종 전부 받으면 콜드/갱신마다 불필요한 팬아웃이 커진다.
+_SPARK_LIMIT = 30
+
+
 def _sparkline(market: str) -> list[float]:
     """최근 24시간 1시간봉 종가 — 코인목록 '1일' 미니 그래프용 (가벼운 별도 캐시)."""
     raw = cached(
@@ -70,7 +75,7 @@ def get_tickers() -> list[Ticker]:
             high_price=r["high_price"],
             low_price=r["low_price"],
             prev_closing_price=r["prev_closing_price"],
-            sparkline=_sparkline(m),
+            sparkline=[],  # 아래에서 거래대금 상위 N종만 채움(팬아웃 절감)
             is_52w_high=r.get("highest_52_week_date") == today_kst,
             is_52w_low=r.get("lowest_52_week_date") == today_kst,
             w52_high=w52_high,
@@ -78,6 +83,9 @@ def get_tickers() -> list[Ticker]:
         ))
     # 거래대금(24h) 내림차순 — 코인목록·비교·스크리너의 기본 노출 순서(인기 종목 우선)
     result.sort(key=lambda t: t.acc_trade_price_24h, reverse=True)
+    # 스파크라인은 상위 종목만(시각 요소). 정렬 후라야 거래대금 상위를 알 수 있다.
+    for t in result[:_SPARK_LIMIT]:
+        t.sparkline = _sparkline(t.market)
     return result
 
 
