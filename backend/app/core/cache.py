@@ -2,6 +2,8 @@ import threading
 import time
 from typing import Any, Callable
 
+from app.core import metrics
+
 _store: dict[str, tuple[Any, float]] = {}
 # 키별 single-flight 락. 키 집합은 _store와 동일하게 유한(종목×캐시종류)하고 재검증마다
 # 재사용하므로 무한 증가/누수가 아니다 → 별도 정리 불필요(stale 시 같은 락을 다시 씀).
@@ -32,21 +34,24 @@ def cached(key: str, ttl: int, fetch: Callable[[], Any]) -> Any:
     if hit is not None:
         value, expiry = hit
         if expiry > now:
+            metrics.incr("cache_hits")
             return value  # 신선
         # stale → 백그라운드 갱신 트리거(이미 갱신 중이면 스킵), 옛 값 즉시 반환
+        metrics.incr("cache_stale_serves")
         lock = _key_lock(key)
         if lock.acquire(blocking=False):
             def _revalidate() -> None:
                 try:
                     _store[key] = (fetch(), time.time() + ttl)
                 except Exception:
-                    pass
+                    metrics.incr("cache_revalidate_errors")  # stale 값은 유지됨
                 finally:
                     lock.release()
             threading.Thread(target=_revalidate, daemon=True).start()
         return value
 
     # 콜드: 동기 fetch (최초 1회)
+    metrics.incr("cache_misses")
     data = fetch()
     _store[key] = (data, now + ttl)
     return data

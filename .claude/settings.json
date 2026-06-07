@@ -8,7 +8,9 @@
       "Bash(curl -s \"https://api.upbit.com/v1/candles/months?market=KRW-DRIFT&count=3\")",
       "Bash(curl -s \"https://api.upbit.com/v1/candles/days?market=KRW-DRIFT&count=3\")",
       "Bash(.venv/Scripts/python.exe -m py_compile app/services/market_service.py app/services/analysis_service.py app/services/quant_service.py)",
-      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -c ' *)"
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -c ' *)",
+      "Bash(python -m py_compile app/schemas/quant.py app/services/quant_service.py)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -c \"from app.services import quant_service as q; r=q.get_garch\\('KRW-BTC'\\); print\\('var_95\\(정규\\)',r.var_95,'hist_var_95',r.hist_var_95,'cvar_95',r.cvar_95,'n_obs',r.n_obs\\)\")"
     ]
   }
 }

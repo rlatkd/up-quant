@@ -4,6 +4,8 @@ import time
 
 import httpx
 
+from app.core import metrics
+
 logger = logging.getLogger("upbit")
 
 _BASE = "https://api.upbit.com/v1"
@@ -51,7 +53,12 @@ def _get(path: str, params: dict | None = None, retries: int = 3) -> list | dict
     last: httpx.Response | None = None
     for attempt in range(retries):
         _throttle()
-        last = _client.get(path, params=params)
+        metrics.incr("upbit_calls")
+        try:
+            last = _client.get(path, params=params)
+        except Exception:
+            metrics.incr("upbit_errors")
+            raise
         if last.status_code == 429:  # 한도 초과 → 백오프 후 재시도
             time.sleep(0.5 * (attempt + 1))
             continue

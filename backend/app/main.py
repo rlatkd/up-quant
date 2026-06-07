@@ -9,8 +9,9 @@ import websockets
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core import metrics
 from app.core.logging import request_id, setup_logging
-from app.routers import markets, candles, analysis, backtest, quant
+from app.routers import markets, candles, analysis, backtest, quant, system, report
 
 setup_logging()
 logger = logging.getLogger("upquant")
@@ -33,6 +34,7 @@ def _prefetch() -> None:
         m = len(analysis_service.get_coin_stats())
         c = len(analysis_service.get_category_monthly().rows)
         analysis_service.get_category_daily_cumulative()
+        analysis_service.get_advance_decline()  # A-D 라인(시장 폭) — 공용 일봉 캐시 재사용
         # 퀀트 전역(파라미터 없는/기본) 분석 워밍.
         quant_service.get_network()
         quant_service.get_pca()
@@ -82,10 +84,12 @@ async def log_requests(request: Request, call_next):
     except Exception:
         dur = (time.perf_counter() - t0) * 1000
         api_log.exception("%s %s → ERROR (%.0fms)", request.method, request.url.path, dur)
+        metrics.record_request(rid, request.method, request.url.path, 500, dur)
         request_id.reset(token)
         raise
     dur = (time.perf_counter() - t0) * 1000
     api_log.info("%s %s → %d (%.0fms)", request.method, request.url.path, response.status_code, dur)
+    metrics.record_request(rid, request.method, request.url.path, response.status_code, dur)
     response.headers["X-Request-Id"] = rid
     request_id.reset(token)
     return response
@@ -96,6 +100,8 @@ app.include_router(candles.router)
 app.include_router(analysis.router)
 app.include_router(backtest.router)
 app.include_router(quant.router)
+app.include_router(system.router)
+app.include_router(report.router)
 
 
 @app.get("/health")
@@ -137,10 +143,12 @@ class TickerHub:
         from app.services import market_service
         markets = await asyncio.to_thread(market_service.valid_markets)
         req = json.dumps([{"ticket": "upquant"}, {"type": "ticker", "codes": markets}])
+        backoff = 2  # 재연결 지수 백오프(초) — 연속 실패 시 늘려 업비트 부하/로그 폭주 방지, 연결 성공 시 리셋
         while self.clients:
             try:
                 async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None) as upbit:
                     await upbit.send(req)
+                    backoff = 2
                     api_log.info("ticker hub: 업비트 WS 연결 (구독자 %d)", len(self.clients))
                     async for raw in upbit:
                         if not self.clients:
@@ -160,9 +168,10 @@ class TickerHub:
                                 await c.send_json(msg)
                             except Exception:  # noqa: BLE001 — 끊긴 클라이언트 정리
                                 self.clients.discard(c)
-            except Exception as e:  # noqa: BLE001 — 업비트 끊김 → 잠시 후 재연결
-                api_log.warning("ticker hub: 업비트 WS 재연결 (%s)", e)
-                await asyncio.sleep(2)
+            except Exception as e:  # noqa: BLE001 — 업비트 끊김 → 지수 백오프 후 재연결
+                api_log.warning("ticker hub: 업비트 WS %ds 후 재연결 (%s)", backoff, e)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30)  # 2→4→8→16→30(상한)
         api_log.info("ticker hub: 구독자 0 → 업비트 WS 중단")
 
 
