@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* 클래스 기반 다크모드 — <html class="dark"> 토글 제어 (기본 prefers-color-scheme 대신) */
+@custom-variant dark (&:where(.dark, .dark *));
 /* 본문 글씨체 Pretendard(업비트 톤, 한국 금융 UI 표준 산세리프)는 index.html의 <link>로 로드.
    여기 CSS @import는 Tailwind v4가 @import "tailwindcss"를 인라인 전개하면서 다른 규칙들을
    먼저 박아버려 "다른 규칙 뒤"가 되고, 표준상 무시되어 폰트가 실제로 안 불러와짐 → HTML <link>가 정답. */
