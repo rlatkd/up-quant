@@ -21,6 +21,9 @@ Thumbs.db
 .idea/
 *.swp
 
+# Claude Code 로컬 설정(런타임에 자주 변경됨)
+.claude/
+
 # 마크다운은 기본 제외(로컬 메모용)하되, 아래 문서들은 추적
 *.md
 !README.md
