@@ -247,17 +247,31 @@ up-quant/
 │   │   ├── theme.js                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
 │   │   ├── api/                      # axios 호출 래퍼
 │   │   │   ├── client.js             # axios 인스턴스 + 요청/응답 로깅 인터셉터(rid)
-│   │   │   └── markets.js · candles.js · analysis.js · backtest.js · quant.js
+│   │   │   ├── markets.js            # 현재가·요약·호가·체결
+│   │   │   ├── candles.js            # 캔들
+│   │   │   ├── analysis.js           # 카테고리 수익률·코인 통계·상관관계
+│   │   │   ├── backtest.js           # 백테스트 (MA·RSI·전략비교·워크포워드·포트폴리오)
+│   │   │   └── quant.js              # 정량/ML 9종
 │   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 패턴)
-│   │   │   ├── useTickers.js · useCandles.js · useAnalysis.js · useQuant.js
+│   │   │   ├── useTickers.js         # 현재가 목록
+│   │   │   ├── useCandles.js         # 캔들 (인터벌·개수별)
+│   │   │   ├── useAnalysis.js        # 카테고리 수익률·코인 통계·상관관계
+│   │   │   ├── useQuant.js           # 정량/ML 분석 9종
 │   │   │   └── useMarketStream.js    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
 │   │   ├── contexts/                 # 실시간 시세 (외부 store + 종목별 selector)
 │   │   │   ├── Realtime.jsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
 │   │   │   ├── realtimeStore.js      # 외부 store (종목별 리스너 — useSyncExternalStore)
 │   │   │   └── useRealtime.js        # useLivePrice · useWsConnected · usePulse
 │   │   ├── components/
-│   │   │   ├── ui/                   # 공용 UI (Spinner · Card · StatCard · PageLoading)
-│   │   │   ├── layout/               # Header · Footer · Layout(+ErrorBoundary)
+│   │   │   ├── ui/                   # 공용 UI 컴포넌트
+│   │   │   │   ├── Spinner.jsx       # 로딩 스피너
+│   │   │   │   ├── Card.jsx          # 카드 · 카드헤더
+│   │   │   │   ├── StatCard.jsx      # 통계 카드
+│   │   │   │   └── PageLoading.jsx   # 페이지 단위 통짜 로딩
+│   │   │   ├── layout/               # 레이아웃
+│   │   │   │   ├── Header.jsx        # 헤더 (탭 4그룹 · WS 연결 인디케이터)
+│   │   │   │   ├── Footer.jsx        # 공통 푸터 (full-bleed)
+│   │   │   │   └── Layout.jsx        # Outlet + ErrorBoundary 래핑
 │   │   │   ├── LiveCells.jsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
 │   │   │   ├── ErrorBoundary.jsx     # 페이지 단위 에러 경계
 │   │   │   └── InfoTooltip.jsx       # 제목 옆 ? 호버 안내
@@ -266,12 +280,19 @@ up-quant/
 │   │       ├── CoinDetail.jsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
 │   │       ├── Dashboard.jsx         # '/dashboard' — 관제탑(시그널·KPI·시장추세·시세표)
 │   │       ├── Explore.jsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
-│   │       ├── Market.jsx · Sectors.jsx · Screener.jsx   # 탐색 본문(Explore가 재사용)
+│   │       ├── Market.jsx            # 탐색: 마켓 현황 본문 (Explore가 재사용)
+│   │       ├── Sectors.jsx           # 탐색: 섹터 분석 본문 (Explore가 재사용)
+│   │       ├── Screener.jsx          # 탐색: 스크리너 본문 (Explore가 재사용)
 │   │       ├── Analysis.jsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
 │   │       ├── Tools.jsx             # '/tools/*' 래퍼 (PortfolioPage·BacktestPage·ComparePage)
-│   │       ├── Backtest.jsx · Compare.jsx   # 전략도구 본문(Tools가 재사용)
-│   │       └── Guide.jsx · Help.jsx  # '/guide' · '/help' (별도 창)
-│   └── index.html · vite.config.js · eslint.config.js · package.json
+│   │       ├── Backtest.jsx          # 전략도구: 백테스트 본문 (Tools가 재사용)
+│   │       ├── Compare.jsx           # 전략도구: 비교 분석 본문 (Tools가 재사용)
+│   │       ├── Guide.jsx             # '/guide' — 방법론·기술스택 (별도 창)
+│   │       └── Help.jsx              # '/help' — 기능 안내 (별도 창)
+│   ├── index.html                    # HTML 엔트리 · Pretendard 폰트 · favicon
+│   ├── vite.config.js                # Vite 빌드 설정
+│   ├── eslint.config.js              # ESLint 설정
+│   └── package.json                  # 의존성 · npm 스크립트
 ├── references/                       # 기획서 · API 명세(API.md) · 엔지니어링 노트 · 발표 자료(pt/)
 ├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~25)
 └── pages.md                          # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 (보조 작업 문서)
