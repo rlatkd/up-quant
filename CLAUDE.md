@@ -106,14 +106,15 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **헤더 한글화 + 차트 버그수정 + 섹터 누적 일봉화 + 로고/배경/공통 푸터(2026-06-03)** — Phase 23. 헤더 영어→한글 전문음차 환원, RSI 흰화면 크래시(v5 `getSeries`)·차트 로고·지표 토글 줌리셋 수정, 섹터 누적수익률 월봉→일봉(recharts 표준 Tooltip), 팩터/백테스트 경고 제거, 로고 점 제거, 배경 `#e6eaf2`, **공통 푸터 신설**(full-bleed 흰배경·logo mask). 상세는 작업 이력 Phase 23.
 - **효율적 경계선 곡선 + 시장구조 2분리 + 신뢰성 경고 정비 + 성능/죽은코드 정리 + 분석 카트 제거 + 에러 바운더리 + 코인상세 보강(2026-06-06)** — Phase 24. 상세는 작업 이력 Phase 24.
 - **실시간 WebSocket 시세 중계 + 백테스트 강화(전략 비교·워크포워드·BTC 벤치마크) + 통합 로딩 컴포넌트(2026-06-07)** — Phase 25. 상세는 작업 이력 Phase 25.
+- **수익률/위험조정 레버 4종 + AI 리포트 + UX·운영 묶음 + 전면 TypeScript(2026-06-07)** — Phase 26. **신규 기능**: A-D(시장 폭) 라인·몬테카를로 백테스트·추세추종(TSMOM)·가격 알림(🔔 토스트)·다크모드·차트 PNG export·비교 공유 링크·시스템 모니터링(`/system` 자체 메트릭). **수익률 레버**: TSMOM 고도화(12-1 skip·국면/크래시 필터·변동성 타게팅·히스테리시스 → 하락장 MDD 35→12%)·Ledoit-Wolf 수축 공분산+리스크 패리티·Historical VaR/CVaR·유동성 슬리피지·다중검정 과최적화 p값. **AI 전략 리포트**(Gemini, 호출부 주석·종류별 차등 캐시). **엔지니어링**: requirements 정리·수치 pytest 9개·라우트 코드 스플리팅·CI·cache 재검증 메트릭·**전 프론트 `.tsx` 전환(tsc 그린)**·Backtest 파일 분리. (이미 구현돼 있던 것 발견: BTC베타·z-score·거래량급증·VWAP/Volume Profile.) 상세는 작업 이력 Phase 26.
 
 **다음 작업 (우선순위 순)**
-1. **브라우저 육안 검증** — Phase 24~25 변경분(효율적 경계선 곡선·시장구조 분리·**실시간 시세 펄스/연결 인디케이터**·**전략 비교·워크포워드**·코인리스트 줄아웃 레이아웃) 전부 브라우저 미검증.
-2. **표시 종수 일관성(보류)** — 요약(10) vs 분석(VaR 30·산점도 120) 구분이 명문화 안 됨. 현재 문제 아님, 통일 원하면 조정.
-3. **실시간 확장(보류)** — 코인목록/마켓 순위까지 실시간 정렬·갱신, WS 재연결 백오프 튜닝, 체결 스트림 시각화 보강.
-4. **문서 최신화(상시)** — README·pages.md·엔지니어링노트는 여전히 옛 IA(`QuantLab.jsx`·`/quant`·탐색 통합) 잔재 가능 → 점검 필요.
+1. **브라우저 육안 검증** — Phase 24~26 변경분(다크모드·가격알림 토스트·AI 리포트 모달·몬테카를로 부채꼴·추세추종·A-D 라인·시스템 모니터링·효율적 경계선 곡선·실시간 펄스) 전부 미검증. **신규 백엔드 라우트는 서버 재기동 필요**.
+2. **TS strict 점진 강화** — 현재 `strict:false`로 전환 완료(빌드·lint·`tsc --noEmit` 그린). `any` 캐스팅·`useState` 제네릭을 실제 타입(API 응답 인터페이스)으로 좁히기.
+3. **수익률 레버 후속(선택)** — 인트라데이(분봉) 백테스트·김치프리미엄·멀티팩터 컴포지트 스코어.
+4. **AI 리포트 LLM 연동** — `GEMINI_API_KEY` + `report_service.py` Gemini 호출부 주석 해제.
 
-**의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정.
+**의도적으로 보류**: Redis(분산 캐시, 나중 작업) · LLM 종목 한 줄 요약(나중 작업) · async httpx(병목=업비트 레이트리밋이라 실익 음) · 배포 설정. (※ TypeScript·다크모드·테스트 코드는 Phase 26에서 완료돼 보류 해제.)
 
 ## 작업 이력
 
@@ -329,4 +330,13 @@ P2-1~P2-3 묶음.
 - **코인 상세 호가·체결 실시간**(`/ws/market/{market}` + `hooks/useMarketStream.js`): 종목별 on-demand 1연결(공유 허브 불필요), 호가·체결을 WS로 수신해 REST 폴백 위에 덧씌움. 종목 전환 시 재연결·잔상 제거.
 - **백테스트 강화**: ⑴**전략 비교**(`/api/backtest/compare`·`run_compare` + `CompareBody`): 한 종목에 MA 크로스·RSI 역추세를 동시에 돌려 자산곡선을 겹쳐 비교. ⑵**워크포워드**(`/api/backtest/walk-forward`·`run_walk_forward` + `WalkForwardBody`): 전체 기간을 N분할해 각 구간 직전 데이터(in-sample)에서 MA 파라미터를 그리드서치로 고르고, 그 다음 구간(out-of-sample)에서만 성과를 집계 — 인샘플 과최적화를 거르는 표준 검증법. 구간별 선택 파라미터·OOS 수익률 표. ⑶**BTC 매수보유 벤치마크**(`_btc_benchmark`): 기존 종목 매수보유에 더해 시장 대표(BTC) 곡선·총수익률을 단일전략·비교에 함께 표기(`EquityPoint.benchmark_btc`·`BacktestMetrics.benchmark_btc_return`).
 - **통합 로딩 컴포넌트**(`components/ui/PageLoading.jsx`): 페이지 단위 통짜 로딩 표시를 8개 페이지(대시보드·마켓·코인목록·코인상세·스크리너·섹터·비교·백테스트)에서 공용으로. 요소별 부분 스피너 대신 페이지가 쓰는 데이터가 다 준비될 때까지 본문 자리에 표시(프리페치 덕에 실사용은 대부분 캐시 히트로 빠르게 지나감).
+
+### Phase 26 — 수익률/위험조정 레버 4종 + 신규 기능 묶음 + AI 리포트 + 전면 TypeScript (2026-06-07)
+"서비스가 결국 돈을 더 버는 게 목적"이라는 문제의식에서 출발해, **새 알파보다 (a) 잘못된 전략을 안 굴리게 막는 정직화 (b) 같은 신호를 더 잘 사이징하는 리스크 관리**가 실현수익의 핵심임을 정리하고 레버를 구현. 엔지니어링 정비까지 한 묶음.
+- **신규 기능(아이디어 비축 소진)**: ⑴**Advance-Decline 라인**(`/api/analysis/advance-decline`, 거래대금 상위 100종 상승−하락 누적 + 동일가중 시장지수 divergence) → 마켓. ⑵**몬테카를로 백테스트**(`/api/backtest/montecarlo`, 과거 일간수익률 부트스트랩 1000경로 → 백분위 부채꼴 + 손실확률) → 백테스트 탭. ⑶**추세추종(TSMOM)** → 백테스트 탭. ⑷**가격 알림**(`contexts/PriceAlerts` + 헤더 🔔, 실시간 WS 감시→토스트, localStorage). ⑸**다크모드**(`@custom-variant dark` + 헤더 🌙 토글·FOUC 방지, 전 페이지 `dark:` variant·차트 테마). ⑹**차트 PNG export**(`utils/chartExport` SVG→PNG)·**비교 공유 링크**(`?markets=` URL 인코딩). ⑺**시스템 모니터링**(`/system` + `core/metrics.py` + `/api/system/metrics`: 캐시 적중률·외부 호출·응답시간·최근 rid). ※ 발견: BTC베타·변동성 z-score·거래량 급증·VWAP/Volume Profile은 이미 구현돼 있었음(작업이력 누락분).
+- **수익률 레버**(엔지니어링노트 §38~): ①**TSMOM 고도화**(`run_tsmom`) — 12-1 skip(최근 N일 반전 제외)·**국면/크래시 필터**(시장 약세·고변동 시 익스포저 동적 축소, Daniel·Moskowitz 2016·Moreira·Muir 2017)·변동성 타게팅·턴오버 히스테리시스 → 하락장 MDD 34.8%→11.8%·총 −22%→−2.3%(벤치 −16%). ②**Ledoit-Wolf 수축 공분산**(`sklearn.LedoitWolf`)+**리스크 패리티**(역변동성, mu 추정 비의존) → Markowitz 코너해 완화(`PortfolioResult.risk_parity`·`shrinkage`). ③**Historical VaR/CVaR**(경험분위, GARCH 정규근사의 팻테일 과소평가 보완 — `GarchResult.hist_var_95`·`cvar_95`). ④**유동성 슬리피지**(`_liquidity_slippage_bps`, 거래대금 프록시: BTC 5.7bps/저유동 100bps 상한)·**다중검정 과최적화 p값**(`_overfit_pvalue`, 귀무 하 N시도 최대샤프 분포 대비 → `WalkForwardResult.overfit_pvalue`). 신규 지표 전부 프론트 노출(슬리피지·다중검정 경고·CVaR·▲리스크패리티·수축강도).
+- **AI 전략 리포트**(`report_service.py`·`/api/report/strategy`·`ReportModal`): 시장 데이터(프리페치 재사용)를 모아 **Gemini**가 표준 리서치 5섹션 마크다운 생성. **LLM 호출부는 주석 처리**(프롬프트·SDK 코드·데이터 주입 완성, `GEMINI_API_KEY`+주석해제로 동작) — 미연동 시 데이터 기반 자동 초안 반환. **종류별 차등 캐시**(시장 2h / 포트·리스크 6h, LLM 비결정성·비용 차단). 헤더 "AI 리포트" 버튼 → 모달(종류 탭·복사·.md 다운로드).
+- **엔지니어링**: ⑴`requirements.txt` 4중복 정리(동일 핀, 257→64줄). ⑵`backend/tests/test_numeric.py` 수치 코어 pytest 9개(MDD·리스크조정·과최적화 p값·피어슨·일간수익률, 9/9 pass — TSMOM 스테이블 버그류 회귀 차단). ⑶**프론트 라우트 코드 스플리팅**(`App` `React.lazy`+`Suspense`): 단일 1.07MB→청크 분리, "500KB 초과" 경고 해소. ⑷**CI**(`.github/workflows/ci.yml`): 백엔드 compileall+pytest / 프론트 lint+typecheck+build. ⑸`cache._revalidate` 예외를 `metrics`로 카운트(조용히 삼키던 SWR 갱신 실패 관측). ⑹**Backtest.jsx 파일 분리**(`pages/backtest/`: parts·helpers + 6개 전략 본문 + 슬림 오케스트레이터). ⑺**전면 TypeScript**: 전 소스 55파일 `.tsx/.ts` 전환 + `tsconfig`(점진 strict:false)·`typescript-eslint`·`vite-env.d.ts`·`typecheck` 스크립트. 컴포넌트 prop 디폴트화로 TS2741 다수 일괄 해소 → **build·lint·`tsc --noEmit` 전부 그린**.
+- **정직하게 제외**: async httpx(병목=업비트 레이트리밋이라 실익 음, 동기 전계층 비동기화는 리스크만), Redis·LLM 종목 한줄요약은 나중 작업 보류. (의사결정 엔지니어링노트 참조)
+- 검증: 단계마다 백엔드 `compileall`·`pytest 9/9`·라우트 36, 프론트 `build`·`lint`·`tsc` 그린. 신규 기능은 직접 실데이터 호출로 산출 확인. **브라우저 육안 미검증**(서버 재기동 필요).
 - 검증: `py_compile`·`vite build`·ESLint 통과, 라우트 27개 + WS 2개. **브라우저 육안 미검증**(실시간 펄스·연결 인디케이터·전략 비교·워크포워드).

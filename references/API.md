@@ -101,6 +101,10 @@ UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open 
 - **경로 파라미터**: `market`
 - **응답**: `CorrelationItem[]`
 
+### `GET /api/analysis/advance-decline`
+Advance-Decline 라인 — 시장 폭(breadth)의 추세. 거래대금 상위 100종으로 매일 (상승−하락) 종목 수를 누적한 라인 + 동일가중 시장지수. 시장지수는 오르는데 A-D가 안 오르면 소수 대형주만 끌어올린 것(divergence).
+- **응답**: `AdvanceDeclineResult` — `points[{time(unix초), ad_line(누적), advancers, decliners, index(첫날=100)}]` + `n`(집계 종목 수)·`n_obs`
+
 ---
 
 ## 4. Backtest — `/api/backtest`
@@ -132,7 +136,7 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 - **응답**: `BacktestResult`
 
-> `ma-cross`·`rsi` 응답에는 거래비용(`fee_bps`, 기본 5bps) 반영 자산곡선과 두 벤치마크(같은 종목 매수보유 `benchmark`/`benchmark_return`, BTC 매수보유 `benchmark_btc`/`benchmark_btc_return`)가 함께 포함된다.
+> `ma-cross`·`rsi` 응답에는 거래비용(`fee_bps`, 기본 5bps) + **유동성 기반 추정 슬리피지(`slippage_bps`, 거래대금 프록시: 고유동 종목 작고 저유동 클수록 큼, 상한 100bps)** 반영 자산곡선과 두 벤치마크(같은 종목 매수보유 `benchmark`/`benchmark_return`, BTC 매수보유 `benchmark_btc`/`benchmark_btc_return`)가 함께 포함된다.
 
 ### `GET /api/backtest/compare`
 한 종목에 MA 크로스·RSI 역추세를 동시에 돌려 자산 곡선을 겹쳐 비교.
@@ -142,7 +146,17 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 ### `GET /api/backtest/walk-forward`
 워크포워드 검증 — 전체 기간을 `n_splits`+1 구간으로 나눠, 각 구간 직전 데이터(in-sample)에서 MA 파라미터를 그리드서치로 고르고 그 다음 구간(out-of-sample)에서만 성과를 집계. 인샘플 과최적화를 거르는 표준 검증법.
 - **쿼리**: `market`(기본 `KRW-BTC`), `count`(int 120~500, 기본 300), `n_splits`(int 2~8, 기본 4), `fee_bps`(float 0~100, 기본 5)
-- **응답**: `WalkForwardResult` — `folds[{fast, slow, oos_return, train_end, test_end}]`(구간별 선택 파라미터·OOS 성과) + `equity[{time, value}]`(OOS만 이어붙인 누적, 100 시작) + `total_return`·`n_splits`
+- **응답**: `WalkForwardResult` — `folds[{fast, slow, oos_return, train_end, test_end}]`(구간별 선택 파라미터·OOS 성과) + `equity[{time, value}]`(OOS만 이어붙인 누적, 100 시작) + `total_return`·`n_splits` + **`overfit_pvalue`·`n_trials`**(다중검정 보정 — 그리드 N개에서 고른 최고 인샘플 샤프가 귀무 하 우연일 확률, 낮을수록 과최적화 아님)
+
+### `GET /api/backtest/montecarlo`
+몬테카를로 시뮬레이션 — 과거 일간수익률 분포에서 복원추출(부트스트랩)로 향후 `horizon`일 가격 경로를 `n_paths`개 생성. 정규근사 대신 실제 분포라 팻테일 보존.
+- **쿼리**: `market`(기본 `KRW-BTC`), `horizon`(int 5~120, 기본 30), `n_paths`(int 200~5000, 기본 1000), `count`(int 60~500, 기본 180)
+- **응답**: `MonteCarloResult` — `bands[{day, p5, p25, p50, p75, p95}]`(시점별 백분위 부채꼴, 100 시작) + `final_p5/p50/p95`·`expected_return`·`prob_loss`(%) + `daily_mean`·`daily_vol`·`n_obs`
+
+### `GET /api/backtest/tsmom`
+시계열 모멘텀(추세추종) + 변동성 타게팅 — 각 종목이 자기 과거(12-1 skip 적용) 대비 오르면 롱/현금, 변동성 역가중. 시장 약세·고변동 시 총 익스포저 동적 축소(모멘텀 크래시 필터), 턴오버 히스테리시스. 스테이블 제외·종목당 상한 25%.
+- **쿼리**: `top`(10~100, 30), `lookback`(10~180, 60), `holding`(1~30, 5), `count`(120~500, 200), `fee_bps`(0~100, 5)
+- **응답**: `TsmomResult` — `equity[{time, value, benchmark}]`(100 시작, benchmark=동일가중 매수보유) + `total_return`·`benchmark_return`·`sharpe`·`mdd`·`avg_exposure`(평균 투자비중%) + `holdings[{market, korean_name, momentum, weight}]`(현재 보유)
 
 ### `GET /api/backtest/portfolio`
 여러 종목을 목표 비중으로 보유했을 때의 자산 곡선(가중 매수보유 + 선택적 주기 리밸런스).
@@ -156,12 +170,12 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 | 엔드포인트 | 쿼리 | 응답 요지 |
 |---|---|---|
-| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]`(Dirichlet α=0.3) + `frontier[{vol,ret}]`(효율적 경계선 곡선, 목표수익률별 최소분산 60점) + `max_sharpe`/`min_vol`(`PortfolioSpot`: 좌표 + `weights[]`) + `assets[]`(개별 종목점) (Markowitz, scipy SLSQP) |
+| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]`(Dirichlet α=0.3) + `frontier[{vol,ret}]`(효율적 경계선 곡선, 60점) + `max_sharpe`/`min_vol`/**`risk_parity`**(`PortfolioSpot`: 좌표 + `weights[]`; 리스크패리티=역변동성, mu 추정 비의존) + `assets[]` + **`shrinkage`**(Ledoit-Wolf 수축 강도 0~1; 공분산은 표본 대신 수축 추정) (Markowitz, scipy SLSQP) |
 | `GET /network` | `top`(5~100, 50) | `NetworkResult` — `nodes[{market, category, value, degree}]` + `edges[{source,target,corr}]`(MST, networkx) |
 | `GET /pca` | `top`(5~100, 50) | `PCAResult` — `components[{index,explained}]` + `loadings[{market,category,pc1,pc2}]` + `pc1_explained`(시장요인 설명비율%) |
 | `GET /clusters` | `top`(10~150, 80), `k`(2~8, 4) | `ClusterResult` — `points[{market,category,cluster,volatility,return_1m,log_value}]` (K-means) |
 | `GET /dendrogram` | `top`(5~60, 40) | `DendrogramResult` — scipy 플롯 좌표 `icoord/dcoord` + `labels/markets/categories`(잎 순서) |
-| `GET /garch/{market}` | — | `GarchResult` — `cond_vol[{time,vol}]` + `forecast_vol[]` + `current_vol_annual`·`var_95`·`persistence`(arch GARCH(1,1)) |
+| `GET /garch/{market}` | — | `GarchResult` — `cond_vol[{time,vol}]` + `forecast_vol[]` + `current_vol_annual`·`var_95`(정규근사)·**`hist_var_95`·`cvar_95`**(경험분위 VaR/기대손실 — 팻테일 반영)·`persistence`(arch GARCH(1,1)) |
 | `GET /momentum` | `top`(10~100,40), `lookback`(5~60,20), `holding`(1~20,5) | `MomentumResult` — `equity[{time,factor,benchmark}]` + `total_return`·`benchmark_return`·`sharpe`·`mdd` + `long[]`/`short[]` (횡단면 롱숏) |
 | `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal}]` + `tested`·`found` (statsmodels 공적분) |
 | `GET /regime` | `n_states`(2~4, 2) | `RegimeResult` — `points[{time,regime,index}]` + `stats[{regime,label,mean_return,volatility,days,share}]` + `current_regime`·`current_label` (hmmlearn HMM) |
@@ -173,6 +187,15 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 ### `GET /health`
 서버 상태 확인.
 - **응답**: `{ "status": "ok" }`
+
+### `GET /api/report/strategy`
+LLM(Gemini) 투자 전략 리포트 — 시장 데이터(프리페치 재사용)를 모아 표준 리서치 5섹션 마크다운 생성. **LLM 호출부는 주석 처리(미연동)** — `GEMINI_API_KEY` + 주석 해제 시 동작, 미연동 시 데이터 기반 자동 초안 반환. **종류별 차등 캐시**(시장 2h / 포트·리스크 6h).
+- **쿼리**: `report_type`(`market`|`portfolio`|`risk`, 기본 `market`)
+- **응답**: `ReportResult` — `report_type`·`title`·`markdown`·`model`·`generated_at`(unix초)·`enabled`(실제 LLM 호출 여부)·`note`
+
+### `GET /api/system/metrics`
+관측성 메트릭(외부 의존성 없는 자체 구현). 캐시 적중률·외부 호출수·평균 응답시간·최근 요청(rid).
+- **응답**: `{ uptime_sec, cache_hit_rate(%), cache_hits/stale_serves/misses, cache_keys, upbit_calls/errors, cache_revalidate_errors, requests, avg_response_ms, recent[{rid, method, path, status, ms}] }`
 
 ---
 
