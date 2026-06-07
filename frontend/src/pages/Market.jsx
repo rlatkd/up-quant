@@ -3,7 +3,7 @@ import {
   AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap,
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import CartButton from '../components/CartButton'
+import PageLoading from '../components/ui/PageLoading'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
@@ -71,7 +71,6 @@ function RankTable({ title, rows, color, onRowClick }) {
       <table className="w-full">
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400">
-            <th className="w-6"></th>
             <th className="px-3 py-2 text-left font-medium">종목</th>
             <th className="px-3 py-2 text-right font-medium">현재가</th>
             <th className="px-3 py-2 text-right font-medium">등락률</th>
@@ -84,7 +83,6 @@ function RankTable({ title, rows, color, onRowClick }) {
               onClick={() => onRowClick(t.market)}
               className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
             >
-              <td className="pl-2 pr-1 py-2.5 text-center"><CartButton market={t.market} /></td>
               <td className="px-3 py-2.5">
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
@@ -189,11 +187,7 @@ export default function Market() {
   const { tickers, loading } = useTickers()
   const navigate = useNavigate()
 
-  if (loading) return (
-    <div className="py-24 flex justify-center">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <PageLoading />
 
   const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)
   const byVolume = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)

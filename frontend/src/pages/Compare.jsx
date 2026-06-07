@@ -4,9 +4,9 @@ import {
   Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
+import PageLoading from '../components/ui/PageLoading'
 import api from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
-import { useAnalysisCart } from '../contexts/useAnalysisCart'
 
 import { SERIES as COLORS } from '../theme'
 
@@ -23,13 +23,9 @@ function Spinner() {
 }
 
 export default function Compare() {
-  const cart = useAnalysisCart()
   const { tickers, loading: tLoading } = useTickers()
-  // 진입 즉시 결과가 보이도록 — 카트에 담긴 게 있으면 카트 상위 5종, 없으면 메이저 3종(BTC·ETH·XRP).
-  // 마운트 시 1회만 초기화 (이후 사용자가 토글한 selected를 카트가 덮지 않게).
-  const [selected, setSelected] = useState(() =>
-    cart.items.length > 0 ? cart.items.slice(0, 5) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
-  )
+  // 진입 즉시 결과가 보이도록 메이저 3종(BTC·ETH·XRP)으로 시작. 이후 사용자가 종목을 토글한다.
+  const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const [query, setQuery] = useState('')
   // 종목별 캔들을 캐시해 두고, 선택이 바뀌어도 이미 받은 종목은 재요청하지 않는다.
   const [candlesByMarket, setCandlesByMarket] = useState({})
@@ -104,7 +100,7 @@ export default function Compare() {
     return [Math.floor(lo / 10) * 10, Math.ceil(hi / 10) * 10]
   }, [chartData, selected])
 
-  if (tLoading) return <Spinner />
+  if (tLoading) return <PageLoading />
 
   return (
     <div className="space-y-4">

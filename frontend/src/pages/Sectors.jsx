@@ -6,8 +6,8 @@ import {
 } from 'recharts'
 import { useCategoryMonthly, useCategoryDailyCumulative, useCoinStats } from '../hooks/useAnalysis'
 import { useTickers } from '../hooks/useTickers'
+import PageLoading from '../components/ui/PageLoading'
 import { SERIES } from '../theme'
-import CartButton from '../components/CartButton'
 
 // 카테고리(섹터)는 업비트 데이터랩 '코인 분류'에서 받아온 가변 목록(한글)이라,
 // 색상은 응답 categories 순서대로 팔레트를 매핑한다. 라벨은 섹터명(한글) 그대로 사용.
@@ -175,7 +175,6 @@ function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 text-xs text-gray-400 z-10">
                 <tr>
-                  <th className="w-6"></th>
                   <th className="px-3 py-2 text-left font-medium">종목</th>
                   <th className="px-3 py-2 text-right font-medium">현재가</th>
                   <th className="px-3 py-2 text-right font-medium">전일대비</th>
@@ -194,7 +193,6 @@ function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
                       onClick={() => goCoin(r.market)}
                       className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer"
                     >
-                      <td className="pl-2 pr-1 py-2 text-center"><CartButton market={r.market} /></td>
                       <td className="px-3 py-2">
                         <div className="font-medium text-gray-800">{r.market.replace('KRW-', '')}</div>
                         <div className="text-[11px] text-gray-400">{r.korean_name}</div>
@@ -328,13 +326,8 @@ export default function Sectors() {
   const { data: coinStats } = useCoinStats()
   const { tickers } = useTickers()
 
-  if (monthlyLoading) {
-    return (
-      <div className="py-24 flex justify-center">
-        <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-      </div>
-    )
-  }
+  // 누적 차트(일봉)·월별 히트맵이 모두 준비될 때까지 통짜 로딩
+  if (monthlyLoading || cumLoading) return <PageLoading />
 
   return (
     <div className="space-y-4">
