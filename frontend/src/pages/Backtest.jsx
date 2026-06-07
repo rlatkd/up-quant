@@ -5,14 +5,16 @@ import {
   BarChart, Bar, Cell,
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
-import { runMaCross, runRsi, runPortfolio } from '../api/backtest'
+import PageLoading from '../components/ui/PageLoading'
+import { runMaCross, runRsi, runPortfolio, runCompare, runWalkForward } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
-import { useAnalysisCart } from '../contexts/useAnalysisCart'
 import { SERIES } from '../theme'
 
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
   { key: 'rsi', label: 'RSI 역추세' },
+  { key: 'compare', label: '전략 비교' },
+  { key: 'walkforward', label: '워크포워드' },
   { key: 'portfolio', label: '포트폴리오 보유' },
 ]
 
@@ -38,12 +40,10 @@ function Spinner() {
 }
 
 export default function Backtest({ preset }) {
-  const cart = useAnalysisCart()
   const { tickers, loading: tLoading } = useTickers()
   // 포트폴리오 최적화에서 비중을 넘겨받았으면(preset) '포트폴리오 보유' 전략으로 진입.
   const [strategy, setStrategy] = useState(preset?.weights?.length ? 'portfolio' : 'ma')
-  // 진입 시 카트에 담긴 게 있으면 첫 종목, 없으면 BTC (마운트 1회만 — 이후 사용자 select 보존)
-  const [market,   setMarket]   = useState(() => cart.items[0] || 'KRW-BTC')
+  const [market,   setMarket]   = useState('KRW-BTC')
   const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200, fee: 5 })
   const [result,   setResult]   = useState(null)
   const [loading,  setLoading]  = useState(false)
@@ -72,12 +72,13 @@ export default function Backtest({ preset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (tLoading) return <Spinner />
+  if (tLoading) return <PageLoading />
 
   const equityData = result?.equity.map(e => ({
     time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
     value: e.value,
     benchmark: e.benchmark,
+    benchmark_btc: e.benchmark_btc,
   })) ?? []
 
   const tradeData = (result?.trades ?? []).filter(t => t.side === 'SELL')
@@ -109,7 +110,11 @@ export default function Backtest({ preset }) {
       </div>
 
       {strategy === 'portfolio' ? (
-        <PortfolioBacktest tickers={tickers} cart={cart} preset={preset} />
+        <PortfolioBacktest tickers={tickers} preset={preset} />
+      ) : strategy === 'compare' ? (
+        <CompareBody market={market} setMarket={setMarket} tickers={tickers} />
+      ) : strategy === 'walkforward' ? (
+        <WalkForwardBody market={market} setMarket={setMarket} tickers={tickers} />
       ) : (
         <SingleStrategyBody
           strategy={strategy} market={market} setMarket={setMarket} tickers={tickers}
@@ -117,6 +122,174 @@ export default function Backtest({ preset }) {
           result={result} equityData={equityData} tradeData={tradeData}
         />
       )}
+    </div>
+  )
+}
+
+// 종목 선택 드롭다운(전략 비교·워크포워드 공용)
+function MarketSelect({ market, setMarket, tickers }) {
+  return (
+    <select value={market} onChange={e => setMarket(e.target.value)}
+      className="border border-gray-200 rounded-md px-3 py-2 text-sm cursor-pointer focus:outline-none focus:border-brand-400">
+      {tickers.slice(0, 80).map(t => (
+        <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} · {t.korean_name}</option>
+      ))}
+    </select>
+  )
+}
+
+// 다중 전략 겹쳐 비교 — 한 종목에 MA·RSI를 동시에 돌려 자산곡선을 겹쳐 본다.
+function CompareBody({ market, setMarket, tickers }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const run = () => { setLoading(true); runCompare({ market, count: 200 }).then(setData).finally(() => setLoading(false)) }
+  useEffect(() => { Promise.resolve().then(run) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chartData = data ? data.times.map((t, i) => ({
+    time: new Date(t * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
+    ma: data.strategies[0].equity[i],
+    rsi: data.strategies[1].equity[i],
+    benchmark: data.benchmark[i],
+    benchmark_btc: data.benchmark_btc[i],
+  })) : []
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-md p-5 flex items-end gap-3">
+        <div>
+          <div className="text-xs text-gray-400 mb-1">종목</div>
+          <MarketSelect market={market} setMarket={setMarket} tickers={tickers} />
+        </div>
+        <button onClick={run} disabled={loading}
+          className="px-4 py-2 rounded-md bg-brand-500 text-white text-sm font-medium cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          {loading ? '실행 중…' : '비교 실행'}
+        </button>
+        <div className="text-xs text-gray-400 ml-auto">최근 200일 · 거래비용 5bps</div>
+      </div>
+
+      {loading && !data ? <PageLoading /> : data && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {data.strategies.map((s, i) => (
+              <MetricCard key={s.name} label={s.name}
+                value={(s.total_return >= 0 ? '+' : '') + s.total_return.toFixed(2) + '%'}
+                color={s.total_return >= 0 ? 'text-red-500' : 'text-blue-500'}
+                sub={i === 0 ? '추세추종' : '평균회귀'} />
+            ))}
+            <MetricCard label="매수보유" value={(data.benchmark.at(-1) - 100).toFixed(2) + '%'} sub="같은 종목" />
+            <MetricCard label="BTC 보유" value={(data.benchmark_btc.at(-1) - 100).toFixed(2) + '%'} sub="시장 대표" />
+          </div>
+          <div className="bg-white border border-gray-200 rounded-md p-5">
+            <div className="text-sm font-semibold text-gray-700 mb-0.5">전략별 자산 곡선</div>
+            <div className="text-xs text-gray-400 mb-4">초기 100 기준 · MA(파랑)·RSI(주황) vs 매수보유·BTC(점선)</div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(chartData.length / 8)} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                <Tooltip contentStyle={{ fontSize: 12 }}
+                  formatter={(v, n) => [v.toFixed(2), n === 'ma' ? 'MA 크로스' : n === 'rsi' ? 'RSI 역추세' : n === 'benchmark' ? '매수보유' : 'BTC 보유']} />
+                <ReferenceLine y={100} stroke="#e5e7eb" />
+                <Line type="monotone" dataKey="ma" stroke="#1763b6" strokeWidth={2} dot={false} name="ma" />
+                <Line type="monotone" dataKey="rsi" stroke="#e0913c" strokeWidth={2} dot={false} name="rsi" />
+                <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="benchmark" />
+                <Line type="monotone" dataKey="benchmark_btc" stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="2 2" dot={false} name="benchmark_btc" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// 워크포워드 — in-sample에서 MA 파라미터를 고른 뒤 out-of-sample 구간에서만 성과를 집계(과최적화 검증).
+function WalkForwardBody({ market, setMarket, tickers }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const run = () => { setLoading(true); runWalkForward({ market, count: 300, n_splits: 4 }).then(setData).finally(() => setLoading(false)) }
+  useEffect(() => { Promise.resolve().then(run) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chartData = data ? data.equity.map(e => ({
+    time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
+    value: e.value,
+  })) : []
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-md p-5 flex items-end gap-3">
+        <div>
+          <div className="text-xs text-gray-400 mb-1">종목</div>
+          <MarketSelect market={market} setMarket={setMarket} tickers={tickers} />
+        </div>
+        <button onClick={run} disabled={loading}
+          className="px-4 py-2 rounded-md bg-brand-500 text-white text-sm font-medium cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          {loading ? '실행 중…' : '워크포워드 실행'}
+        </button>
+        <div className="text-xs text-gray-400 ml-auto flex items-center gap-1">
+          최근 300일 · 4분할
+          <InfoTooltip width="w-80">전체 기간을 4구간으로 나눠, 각 구간 직전까지의 데이터(<b>in-sample</b>)에서 MA 파라미터를 그리드서치로 고르고, 그 다음 구간(<b>out-of-sample</b>)에서만 성과를 집계합니다. 인샘플 백테스트가 부풀려 보이는 <b>과최적화</b>를 걸러, 미래에도 통하는지를 봅니다.</InfoTooltip>
+        </div>
+      </div>
+
+      {loading && !data ? <PageLoading /> : data && (data.n_splits === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-md p-10 text-center text-sm text-gray-400">데이터가 부족합니다</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard label="OOS 누적 수익률"
+              value={(data.total_return >= 0 ? '+' : '') + data.total_return.toFixed(2) + '%'}
+              color={data.total_return >= 0 ? 'text-red-500' : 'text-blue-500'}
+              sub="out-of-sample만 집계" />
+            <MetricCard label="분할 수" value={data.n_splits + '개'} sub="롤링 윈도우" />
+            <MetricCard label="평균 OOS 수익"
+              value={(data.folds.reduce((s, f) => s + f.oos_return, 0) / data.folds.length).toFixed(2) + '%'}
+              sub="구간 평균" />
+            <MetricCard label="승 구간"
+              value={data.folds.filter(f => f.oos_return > 0).length + ' / ' + data.folds.length}
+              sub="OOS 수익 > 0" />
+          </div>
+          <div className="bg-white border border-gray-200 rounded-md p-5">
+            <div className="text-sm font-semibold text-gray-700 mb-0.5">Out-of-Sample 자산 곡선</div>
+            <div className="text-xs text-gray-400 mb-4">각 구간을 직전 데이터로 최적화한 파라미터로만 평가해 이어붙임 (초기 100)</div>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(chartData.length / 8)} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                <Tooltip contentStyle={{ fontSize: 12 }} formatter={v => [v.toFixed(2), 'OOS 자산']} />
+                <ReferenceLine y={100} stroke="#e5e7eb" />
+                <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="value" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-700">구간별 선택 파라미터 · OOS 성과</div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-400">
+                  <th className="px-4 py-2 text-left font-medium">구간</th>
+                  <th className="px-4 py-2 text-right font-medium">선택 MA (단기/장기)</th>
+                  <th className="px-4 py-2 text-right font-medium">OOS 종료일</th>
+                  <th className="px-4 py-2 text-right font-medium">OOS 수익률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.folds.map((f, i) => (
+                  <tr key={i} className="border-t border-gray-50">
+                    <td className="px-4 py-2 text-gray-600">#{i + 1}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-700">MA({f.fast}, {f.slow})</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-gray-500">{new Date(f.test_end * 1000).toLocaleDateString('ko-KR')}</td>
+                    <td className={`px-4 py-2 text-right tabular-nums font-medium ${f.oos_return >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                      {(f.oos_return >= 0 ? '+' : '') + f.oos_return.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ))}
     </div>
   )
 }
@@ -223,7 +396,7 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
           {(() => {
             const alpha = result.metrics.total_return - result.metrics.benchmark_return
             return (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <MetricCard
                   label="총 수익률"
                   value={(result.metrics.total_return >= 0 ? '+' : '') + result.metrics.total_return.toFixed(2) + '%'}
@@ -235,6 +408,12 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
                   value={(result.metrics.benchmark_return >= 0 ? '+' : '') + result.metrics.benchmark_return.toFixed(2) + '%'}
                   color={result.metrics.benchmark_return >= 0 ? 'text-red-500' : 'text-blue-500'}
                   sub="같은 종목 단순 보유"
+                />
+                <MetricCard
+                  label="BTC 보유"
+                  value={(result.metrics.benchmark_btc_return >= 0 ? '+' : '') + result.metrics.benchmark_btc_return.toFixed(2) + '%'}
+                  color={result.metrics.benchmark_btc_return >= 0 ? 'text-red-500' : 'text-blue-500'}
+                  sub="시장 대표 보유"
                 />
                 <MetricCard
                   label="초과수익 (알파)"
@@ -273,16 +452,17 @@ function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setP
           {/* 자산 곡선 — 전략 vs 매수보유 벤치마크 */}
           <div className="bg-white border border-gray-200 rounded-md p-5">
             <div className="text-sm font-semibold text-gray-700 mb-0.5">자산 곡선</div>
-            <div className="text-xs text-gray-400 mb-4">초기 자본 100 기준 · 전략(파랑) vs 매수보유 벤치마크(회색 점선)</div>
+            <div className="text-xs text-gray-400 mb-4">초기 자본 100 기준 · 전략(파랑) vs 매수보유(회색 점선) vs BTC 보유(주황 점선)</div>
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={equityData} margin={{ top: 4, right: 20, bottom: 0, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(equityData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'benchmark' ? '매수보유' : '전략']} contentStyle={{ fontSize: 12 }} />
+                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'benchmark' ? '매수보유' : n === 'benchmark_btc' ? 'BTC 보유' : '전략']} contentStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
                 <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="value" />
                 <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="benchmark" />
+                <Line type="monotone" dataKey="benchmark_btc" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="2 2" dot={false} name="benchmark_btc" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -360,10 +540,10 @@ const REBAL_OPTIONS = [
 // 포트폴리오 보유 백테스트 — 종목을 비중대로 들었을 때의 자산 곡선.
 // 종목·비중 출처 우선순위: preset(포트폴리오 최적화에서 넘어온 ★/◆ 비중) > 분석 카트 > 기본 3종.
 // (동선 통합 — 엔지니어링노트 §28)
-function PortfolioBacktest({ tickers, cart, preset }) {
+function PortfolioBacktest({ tickers, preset }) {
   const init = preset?.markets?.length
     ? preset.markets.slice(0, 10)
-    : cart.items.length >= 2 ? cart.items.slice(0, 10) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
+    : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
   const [markets, setMarkets] = useState(init)
   // 비중(%) — preset이 있으면 최적 비중, 없으면 균등(균등이면 동일가중 벤치마크와 곡선이 겹침·정상).
   const [wmap, setWmap] = useState(() =>

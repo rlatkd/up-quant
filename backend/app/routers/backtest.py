@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Query
 
-from app.schemas.backtest import BacktestResult, PortfolioBacktestResult
+from app.schemas.backtest import (
+    BacktestResult,
+    PortfolioBacktestResult,
+    StrategyCompareResult,
+    WalkForwardResult,
+)
 from app.services import backtest_service
 
 router = APIRouter(prefix="/api/backtest", tags=["backtest"])
@@ -27,6 +32,25 @@ def rsi_strategy(
     fee_bps: float  = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
 ):
     return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count, fee_bps)
+
+
+@router.get("/compare", response_model=StrategyCompareResult)
+def compare(
+    market: str = Query("KRW-BTC"),
+    count: int  = Query(200, ge=60, le=500),
+    fee_bps: float = Query(5.0, ge=0, le=100),
+):
+    return backtest_service.run_compare(market, count, fee_bps)
+
+
+@router.get("/walk-forward", response_model=WalkForwardResult)
+def walk_forward(
+    market: str = Query("KRW-BTC"),
+    count: int  = Query(300, ge=120, le=500),
+    n_splits: int = Query(4, ge=2, le=8),
+    fee_bps: float = Query(5.0, ge=0, le=100),
+):
+    return backtest_service.run_walk_forward(market, count, n_splits, fee_bps)
 
 
 @router.get("/portfolio", response_model=PortfolioBacktestResult)

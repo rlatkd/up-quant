@@ -10,7 +10,11 @@ from app.schemas.backtest import (
     EquityPoint,
     PortfolioBacktestPoint,
     PortfolioBacktestResult,
+    StrategyCompareResult,
+    StrategyCurve,
     TradeRecord,
+    WalkForwardFold,
+    WalkForwardResult,
 )
 from app.services import candle_service, market_service
 
@@ -80,6 +84,22 @@ def _compute_risk_adjusted(equity: list[float], mdd_pct: float) -> tuple[float, 
     return round(sharpe, 2), round(sortino, 2), round(calmar, 2)
 
 
+def _btc_benchmark(times: list[int], count: int):
+    """백테스트 times에 정렬된 BTC 매수보유 정규화 시리즈(시작=100) + 총수익률.
+    시장 대표 벤치마크 — 전략이 'BTC 그냥 보유'보다 나은지 비교용. BTC 일봉은 공용 캐시 재사용."""
+    btc = candle_service.get_candles("KRW-BTC", "days", count)
+    by_time = {int(c.timestamp // 1000): c.close for c in btc}
+    base = (by_time.get(times[0]) if times else None) or (btc[0].close if btc else 1.0)
+
+    def val_at(t: int) -> float:
+        c = by_time.get(t)
+        return round(100 * c / base, 2) if c and base else 100.0
+
+    last = by_time.get(times[-1]) if times else None
+    ret = round(100 * last / base - 100, 2) if (last and base) else 0.0
+    return val_at, ret
+
+
 def run_ma_cross(
     market: str,
     fast: int = 5,
@@ -104,9 +124,13 @@ def run_ma_cross(
     trades: list[TradeRecord] = []
     wins = 0
 
-    # 같은 종목 매수보유(buy&hold)를 벤치마크로 각 시점에 함께 기록 → 전략의 초과수익(알파) 가시화.
+    # 벤치마크 2종: 같은 종목 매수보유(buy&hold) + BTC 매수보유(시장 대표). 전략의 초과수익(알파) 가시화.
+    btc_val_at, btc_ret = _btc_benchmark(times, count)
+
     def _ep(i: int, val: float) -> EquityPoint:
-        return EquityPoint(time=times[i], value=round(val, 2), benchmark=round(100 * closes[i] / base, 2))
+        return EquityPoint(time=times[i], value=round(val, 2),
+                           benchmark=round(100 * closes[i] / base, 2),
+                           benchmark_btc=btc_val_at(times[i]))
 
     for i in range(len(closes)):
         if fast_ma[i] is None or slow_ma[i] is None:
@@ -154,6 +178,7 @@ def run_ma_cross(
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
             benchmark_return=bench_return,
+            benchmark_btc_return=btc_ret,
             mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
@@ -189,8 +214,12 @@ def run_rsi_strategy(
     trades: list[TradeRecord] = []
     wins = 0
 
+    btc_val_at, btc_ret = _btc_benchmark(times, count)
+
     def _ep(i: int, val: float) -> EquityPoint:
-        return EquityPoint(time=times[i], value=round(val, 2), benchmark=round(100 * closes[i] / base, 2))
+        return EquityPoint(time=times[i], value=round(val, 2),
+                           benchmark=round(100 * closes[i] / base, 2),
+                           benchmark_btc=btc_val_at(times[i]))
 
     for i in range(len(closes)):
         r = rsi_vals[i]
@@ -233,6 +262,7 @@ def run_rsi_strategy(
         metrics=BacktestMetrics(
             total_return=round(equity_val - 100, 2),
             benchmark_return=bench_return,
+            benchmark_btc_return=btc_ret,
             mdd=mdd,
             win_rate=win_rate,
             trade_count=len(trades),
@@ -323,3 +353,95 @@ def run_portfolio(markets: list[str], weights: list[float] | None = None,
         mdd=mdd, sharpe=round(sharpe, 2), volatility=round(vol, 2),
         contributions=contributions, rebalance_days=rebalance_days, n_obs=int(t_len),
     )
+
+
+# ── 다중 전략 겹쳐 비교 ────────────────────────────────────────
+def run_compare(market: str, count: int = 200, fee_bps: float = 5.0) -> StrategyCompareResult:
+    """한 종목에 MA 크로스·RSI 역추세를 동시에 돌려 자산 곡선을 함께 반환(전략 간 직접 비교)."""
+    ma = run_ma_cross(market, count=count, fee_bps=fee_bps)
+    rsi = run_rsi_strategy(market, count=count, fee_bps=fee_bps)
+    return StrategyCompareResult(
+        times=[e.time for e in ma.equity],
+        strategies=[
+            StrategyCurve(name="MA 크로스", equity=[e.value for e in ma.equity], total_return=ma.metrics.total_return),
+            StrategyCurve(name="RSI 역추세", equity=[e.value for e in rsi.equity], total_return=rsi.metrics.total_return),
+        ],
+        benchmark=[e.benchmark for e in ma.equity],
+        benchmark_btc=[e.benchmark_btc for e in ma.equity],
+    )
+
+
+# ── 워크포워드 (in-sample 그리드서치 → out-of-sample 검증) ─────
+# MA 파라미터를 과거(in-sample)에서 고른 뒤 그 다음 구간(out-of-sample)에서만 성과를 집계한다.
+# 인샘플 과최적화를 걸러, "미래에도 통하는지"를 보는 표준 검증법.
+_WF_GRID = [(5, 20), (10, 30), (10, 60), (20, 60), (5, 40)]
+
+
+def _ma_curve(closes: list[float], fast: int, slow: int, fee: float, start: int = 0):
+    """closes 전체로 MA를 계산하되 start 이후 구간만 매매·평가. (구간수익%, equity 시리즈[start..]) 반환.
+    start 이전은 MA 워밍업용으로만 쓴다(룩어헤드 없이 out-of-sample 평가)."""
+    fast_ma = _sma(closes, fast)
+    slow_ma = _sma(closes, slow)
+    pos = False
+    buy = 0.0
+    eq = 100.0
+    curve: list[float] = []
+    for i in range(start, len(closes)):
+        pf, ps = fast_ma[i - 1], slow_ma[i - 1]
+        if fast_ma[i] is None or slow_ma[i] is None or pf is None or ps is None:
+            curve.append(eq)
+            continue
+        if not pos and pf <= ps and fast_ma[i] > slow_ma[i]:
+            pos = True
+            buy = closes[i]
+            eq *= (1 - fee)
+        elif pos and pf >= ps and fast_ma[i] < slow_ma[i]:
+            eq *= (1 + (closes[i] - buy) / buy) * (1 - fee)
+            pos = False
+        curve.append(eq * (1 + (closes[i] - buy) / buy) if pos else eq)
+    ret = round((curve[-1] - 100), 2) if curve else 0.0
+    return ret, curve
+
+
+def run_walk_forward(market: str, count: int = 300, n_splits: int = 4, fee_bps: float = 5.0) -> WalkForwardResult:
+    candles = candle_service.get_candles(market, "days", count)
+    closes = [c.close for c in candles]
+    times = [int(c.timestamp // 1000) for c in candles]
+    fee = fee_bps / 10000.0
+    T = len(closes)
+    fold = T // (n_splits + 1)
+    if fold < 10:
+        return WalkForwardResult(folds=[], equity=[], total_return=0.0, n_splits=0)
+
+    folds: list[WalkForwardFold] = []
+    equity: list[EquityPoint] = []
+    eq_acc = 100.0
+    for k in range(1, n_splits + 1):
+        tr_end = fold * k
+        te_end = min(fold * (k + 1), T)
+        if te_end <= tr_end:
+            break
+        # in-sample: 0..tr_end 그리드서치로 best (fast, slow)
+        best = None
+        for f, s in _WF_GRID:
+            if s >= tr_end:
+                continue
+            r, _ = _ma_curve(closes[:tr_end], f, s, fee)
+            if best is None or r > best[0]:
+                best = (r, f, s)
+        if best is None:
+            continue
+        _, bf, bs = best
+        # out-of-sample: best 파라미터로 tr_end..te_end 구간만 평가(MA는 전체로 계산)
+        oos_ret, oos_curve = _ma_curve(closes[:te_end], bf, bs, fee, start=tr_end)
+        for j, v in enumerate(oos_curve):
+            equity.append(EquityPoint(time=times[tr_end + j], value=round(eq_acc * v / 100, 2)))
+        if oos_curve:
+            eq_acc = eq_acc * oos_curve[-1] / 100
+        folds.append(WalkForwardFold(
+            fast=bf, slow=bs, oos_return=oos_ret,
+            train_end=times[tr_end - 1], test_end=times[te_end - 1],
+        ))
+
+    total = round(equity[-1].value - 100, 2) if equity else 0.0
+    return WalkForwardResult(folds=folds, equity=equity, total_return=total, n_splits=len(folds))

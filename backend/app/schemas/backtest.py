@@ -4,7 +4,8 @@ from pydantic import BaseModel
 class EquityPoint(BaseModel):
     time: int          # unix timestamp (seconds)
     value: float       # 전략 자산 가치 (초기 100 기준, 거래비용 반영)
-    benchmark: float = 100.0  # 동일 종목 매수보유(buy&hold) 가치 (초기 100 기준)
+    benchmark: float = 100.0      # 동일 종목 매수보유(buy&hold) 가치 (초기 100 기준)
+    benchmark_btc: float = 100.0  # BTC 매수보유 가치 (시장 대표 벤치마크, 초기 100 기준)
 
 
 class TradeRecord(BaseModel):
@@ -16,7 +17,8 @@ class TradeRecord(BaseModel):
 
 class BacktestMetrics(BaseModel):
     total_return: float   # 총 수익률 (%, 거래비용 반영)
-    benchmark_return: float = 0.0  # 매수보유(buy&hold) 총 수익률 (%) — 전략의 초과수익(알파) 비교용
+    benchmark_return: float = 0.0      # 종목 매수보유(buy&hold) 총 수익률 (%) — 전략의 초과수익(알파) 비교용
+    benchmark_btc_return: float = 0.0  # BTC 매수보유 총 수익률 (%) — 시장 대표 대비 비교용
     mdd: float            # 최대 낙폭 (%)
     win_rate: float       # 승률 (%)
     trade_count: int
@@ -57,3 +59,33 @@ class PortfolioBacktestResult(BaseModel):
     contributions: list[AssetContribution]
     rebalance_days: int        # 리밸런스 주기(일), 0=매수보유(드리프트)
     n_obs: int
+
+
+# ── 다중 전략 겹쳐 비교 (한 종목에 여러 전략) ──────────────────
+class StrategyCurve(BaseModel):
+    name: str
+    equity: list[float]    # 자산 곡선 (100 시작)
+    total_return: float    # 총 수익률 (%)
+
+
+class StrategyCompareResult(BaseModel):
+    times: list[int]              # 공통 시간축 (unix seconds)
+    strategies: list[StrategyCurve]
+    benchmark: list[float]        # 종목 매수보유 (100 시작)
+    benchmark_btc: list[float]    # BTC 매수보유 (100 시작)
+
+
+# ── 워크포워드 (in-sample 최적화 → out-of-sample 검증) ─────────
+class WalkForwardFold(BaseModel):
+    fast: int           # in-sample에서 선택된 MA 단기
+    slow: int           # in-sample에서 선택된 MA 장기
+    oos_return: float   # 해당 out-of-sample 구간 수익률 (%)
+    train_end: int      # in-sample 종료 시점 (unix seconds)
+    test_end: int       # out-of-sample 종료 시점 (unix seconds)
+
+
+class WalkForwardResult(BaseModel):
+    folds: list[WalkForwardFold]
+    equity: list[EquityPoint]  # out-of-sample만 이어붙인 누적 자산 곡선
+    total_return: float        # out-of-sample 누적 총수익률 (%)
+    n_splits: int
