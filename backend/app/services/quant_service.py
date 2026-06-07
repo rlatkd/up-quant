@@ -31,6 +31,7 @@ from app.schemas.quant import (
     ClusterResult,
     CointPair,
     DendrogramResult,
+    FrontierPoint,
     GarchResult,
     MomentumEquityPoint,
     MomentumHolding,
@@ -107,6 +108,8 @@ def returns_matrix(markets: list[str], count: int = 120, kind: str = "simple",
 # 무위험수익률 0 가정. 연율화: 기대수익 ×365, 공분산 ×365 (변동성은 √365 효과).
 _N_SIM = 1000           # 무작위 가중 시뮬 개수
 _PORT_CANDLES = 120     # 공분산 추정 윈도우 (일봉 120개)
+_SIM_ALPHA = 0.3        # Dirichlet 농도 — α<1이면 심플렉스 꼭짓점(단일종목 집중)까지 퍼져 구름이 넓어짐
+_N_FRONTIER = 60        # 효율적 경계선 곡선 분할 수 (목표수익률 등분)
 
 
 def _spot(w: np.ndarray, mu: np.ndarray, cov: np.ndarray,
@@ -132,7 +135,8 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
     kept, r = returns_matrix(markets, count=_PORT_CANDLES, kind="simple")
     if len(kept) < 2:
         return PortfolioResult(
-            points=[], max_sharpe=_empty_spot(), min_vol=_empty_spot(), assets=[], n_obs=0,
+            points=[], frontier=[], max_sharpe=_empty_spot(), min_vol=_empty_spot(),
+            assets=[], n_obs=0,
         )
     nmap = name_map()
     n = len(kept)
@@ -140,9 +144,10 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
     cov = np.cov(r, rowvar=False) * TRADING_DAYS       # 연율 공분산 (n,n)
     cov = np.atleast_2d(cov)
 
-    # 무작위 가중 1000개 — Dirichlet(1,…,1) = 심플렉스 균등(long-only, 합=1).
+    # 무작위 가중 1000개 — Dirichlet(α,…,α). α<1이면 균등가중 중심이 아니라
+    # 단일종목 집중(심플렉스 꼭짓점)까지 퍼져 구름이 넓어진다(α=1은 중심 뭉침).
     rng = np.random.default_rng(abs(hash(tuple(kept))) % (2**32))
-    w_sim = rng.dirichlet(np.ones(n), size=_N_SIM)     # (N, n)
+    w_sim = rng.dirichlet(np.ones(n) * _SIM_ALPHA, size=_N_SIM)     # (N, n)
     sim_ret = w_sim @ mu                               # (N,)
     sim_var = np.einsum("ij,jk,ik->i", w_sim, cov, w_sim)
     sim_vol = np.sqrt(np.clip(sim_var, 0, None))
@@ -179,8 +184,25 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
         for i, m in enumerate(kept)
     ]
 
+    # 효율적 경계선 곡선: 목표수익률을 [min μ, max μ] 등분하고 각 타깃에서 분산 최소화.
+    # (w@mu=target, Σw=1, 0≤w≤1) → 타깃 ret 오름차순 곡선이 나와 프론트가 라인으로 잇는다.
+    frontier: list[FrontierPoint] = []
+    lo, hi = float(mu.min()), float(mu.max())
+    if hi > lo:
+        for target in np.linspace(lo, hi, _N_FRONTIER):
+            fcons = (
+                {"type": "eq", "fun": lambda w: w.sum() - 1.0},
+                {"type": "eq", "fun": lambda w, t=target: w @ mu - t},
+            )
+            res = minimize(variance, w0, method="SLSQP", bounds=bnds, constraints=fcons)
+            if res.success:
+                v = float(np.sqrt(max(res.x @ cov @ res.x, 0.0)))
+                frontier.append(FrontierPoint(vol=round(v * 100, 2),
+                                              ret=round(float(res.x @ mu) * 100, 2)))
+
     return PortfolioResult(
         points=points,
+        frontier=frontier,
         max_sharpe=_spot(w_ms, mu, cov, kept, nmap),
         min_vol=_spot(w_mv, mu, cov, kept, nmap),
         assets=assets,

@@ -101,8 +101,8 @@ export function PortfolioSection({ onSend }) {
   return (
     <Card>
       <CardHeader
-        title={<>효율적 경계선 (Markowitz)<InfoTooltip width="w-80">선택한 종목으로 만들 수 있는 1,000개 무작위 포트폴리오를 (변동성, 수익률) 평면에 흩뿌리고, scipy 최적화로 <b>샤프 최대(★)</b>·<b>최소 변동성(◆)</b> 포트폴리오를 찾습니다. 연율화 기준(×365). 무위험수익률 0 가정.</InfoTooltip></>}
-        subtitle="무작위 가중 1,000 시뮬 + 해석적 최적화 · 점 색 = 샤프 비율"
+        title={<>효율적 경계선 (Markowitz)<InfoTooltip width="w-80">선택한 종목으로 만들 수 있는 1,000개 무작위 포트폴리오를 (변동성, 수익률) 평면에 흩뿌리고, 목표수익률별 최소분산 최적화로 <b>효율적 경계선 곡선</b>을 그립니다. scipy 최적화로 <b>샤프 최대(★)</b>·<b>최소 변동성(◆)</b> 포트폴리오도 찾습니다. 곡선이 개별 종목보다 왼쪽(낮은 변동성)에 있으면 분산효과가 있는 것입니다. 연율화 기준(×365). 무위험수익률 0 가정.</InfoTooltip></>}
+        subtitle="효율적 경계선 곡선 + 무작위 가중 1,000 시뮬 · 점 색 = 샤프 비율"
         action={<NObs n={data.n_obs} />}
       />
       <div className="mb-3"><CoinPicker selected={selected} setSelected={setSelected} /></div>
@@ -126,6 +126,9 @@ export function PortfolioSection({ onSend }) {
                     return <Cell key={i} fill={lerpColor('#94a3b8', '#e0913c', t)} fillOpacity={0.5} r={2} />
                   })}
                 </Scatter>
+                {/* 효율적 경계선 곡선 (목표수익률별 최소분산) — 구름 위, 마커 아래 */}
+                <Scatter data={data.frontier} isAnimationActive={false}
+                  line={{ stroke: '#1763b6', strokeWidth: 2 }} shape={() => null} legendType="none" />
                 {/* 개별 종목 */}
                 <Scatter data={data.assets} isAnimationActive={false} shape="circle" fill="#1763b6">
                   {data.assets.map((a, i) => <Cell key={i} r={5} fill={SERIES[i % SERIES.length]} />)}
@@ -136,6 +139,7 @@ export function PortfolioSection({ onSend }) {
               </ScatterChart>
             </ResponsiveContainer>
             <div className="flex gap-4 justify-center text-[11px] text-gray-500 mt-1">
+              <span><span className="inline-block w-3 border-t-2 align-middle" style={{ borderColor: '#1763b6' }} /> 효율적 경계선</span>
               <span>★ 최대 샤프</span><span>◆ 최소 변동성</span><span>● 개별 종목</span>
             </div>
           </div>
@@ -392,7 +396,7 @@ function MomentumSection() {
   return (
     <Card>
       <CardHeader
-        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>, 하위 20%를 <b>숏</b>(달러중립). 동일가중 매수보유가 벤치마크입니다. 거래비용 <b>{data.fee_bps ?? 5}bps</b>(롱·숏 회전)를 차감했습니다. ⚠️ <b>인샘플·생존편향</b>(현재 상장 종목만)이 있어 실전 수익률은 더 낮습니다.</InfoTooltip></>}
+        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>, 하위 20%를 <b>숏</b>(달러중립). 동일가중 매수보유가 벤치마크입니다. 거래비용 <b>{data.fee_bps ?? 5}bps</b>(롱·숏 회전)를 차감했습니다.</InfoTooltip></>}
         subtitle="20일 모멘텀 · 5일 리밸런스 · 롱숏 달러중립"
         action={<span className="text-[11px] text-gray-400">{data.n}종</span>}
       />
@@ -635,8 +639,8 @@ function VarRankSection() {
   return (
     <Card>
       <CardHeader
-        title={<>리스크 랭킹 (1일 95% VaR)<InfoTooltip width="w-80"><b>VaR(Value at Risk)</b>은 "95% 확률로 하루 손실이 이 값을 넘지 않는다"는 위험 척도입니다. 정규분포를 가정해 <b>1.645 × 일변동성</b>으로 근사했습니다. 값이 클수록 하루에 크게 잃을 수 있는 고위험 종목. ※ 정규근사라 실제 꼬리위험(급락)은 과소평가될 수 있습니다.</InfoTooltip></>}
-        subtitle="정규근사 1일 95% VaR = 1.645 × 일변동성 · 상위 30종"
+        title={<>리스크 랭킹 (1일 95% VaR)<InfoTooltip width="w-80"><b>VaR(Value at Risk)</b>은 "95% 확률로 하루 손실이 이 값을 넘지 않는다"는 위험 척도입니다. 정규분포를 가정해 <b>1.645 × 일변동성</b>으로 근사했습니다. 값이 클수록 하루에 크게 잃을 수 있는 고위험 종목. <b>변동성 z</b>는 전종목 변동성 분포에서의 표준화 위치(평균 대비 ±σ)로, <b>+2σ 이상은 이상 고변동</b>입니다. ※ 정규근사라 실제 꼬리위험(급락)은 과소평가될 수 있습니다.</InfoTooltip></>}
+        subtitle="정규근사 1일 95% VaR = 1.645 × 일변동성 · 변동성 z = 분포 내 표준화 위치 · 상위 30종"
         action={<span className="text-[11px] text-gray-400">전 {rows.length}종 중</span>}
       />
       {loading ? <Spinner /> : (
@@ -647,6 +651,7 @@ function VarRankSection() {
                 <th className="px-3 py-2 text-left font-medium w-10">#</th>
                 <th className="px-3 py-2 text-left font-medium">종목</th>
                 <th className="px-3 py-2 text-right font-medium">일변동성</th>
+                <th className="px-3 py-2 text-right font-medium">변동성 z</th>
                 <th className="px-3 py-2 text-right font-medium">1일 95% VaR</th>
                 <th className="px-3 py-2 text-right font-medium">1개월 수익률</th>
                 <th className="px-3 py-2 text-right font-medium">24h 거래대금</th>
@@ -661,6 +666,9 @@ function VarRankSection() {
                     {sym(r.market)} <span className="text-gray-400 font-normal">{r.korean_name}</span>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-600">{r.volatility.toFixed(2)}%</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${r.vol_zscore >= 2 ? 'text-red-500' : 'text-gray-500'}`}>
+                    {r.vol_zscore >= 0 ? '+' : ''}{(r.vol_zscore ?? 0).toFixed(2)}σ
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium text-blue-500">−{r.var95.toFixed(2)}%</td>
                   <td className={`px-3 py-2 text-right tabular-nums font-medium ${up(r.return_1m)}`}>{pct(r.return_1m)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-500">{fmtKrwShort(r.acc_trade_price_24h)}</td>
@@ -723,10 +731,16 @@ function RiskReturnScatterSection() {
 // 탭 상태는 URL 쿼리(?tab=)가 단일 출처.
 const GROUPS = [
   {
+    // 종목 간 관계/구조 (미시) — 종목들이 어떻게 묶이고 누가 중심인가.
     label: '시장 구조', tabs: [
       { id: 'network', label: '상관 네트워크', Comp: NetworkSection },
-      { id: 'pca', label: 'PCA 요인', Comp: PcaSection },
       { id: 'cluster', label: '클러스터링', Comp: ClusterSection },
+    ],
+  },
+  {
+    // 시장 전체 상태 (거시) — 시장이 한 덩어리로 어떻게 움직이고 어떤 국면인가.
+    label: '시장 국면', tabs: [
+      { id: 'pca', label: 'PCA 요인', Comp: PcaSection },
       { id: 'regime', label: '시장 국면', Comp: RegimeSection },
     ],
   },
@@ -744,12 +758,17 @@ const GROUPS = [
     ],
   },
 ]
-// 경로(/structure · /factor)가 어떤 그룹을 보여줄지 결정. 헤더 탭 2개와 1:1.
+// 경로(/structure · /regime · /factor · /risk)가 어떤 그룹을 보여줄지 결정. 헤더 탭과 1:1.
 const PAGE_META = {
   structure: {
     group: '시장 구조',
     title: '시장 구조',
-    description: '시장 전체를 자동 분석해 보여주는 인사이트 — 상관 네트워크·PCA 요인·클러스터링·시장 국면',
+    description: '종목 간 관계와 구조 — 상관 네트워크(허브)·통계적 클러스터링',
+  },
+  regime: {
+    group: '시장 국면',
+    title: '시장 국면',
+    description: '시장 전체의 상태 — PCA 공통요인(동조도)·HMM 평온/격동 국면',
   },
   factor: {
     group: '팩터 분석',
@@ -765,16 +784,28 @@ const PAGE_META = {
 
 // 페이지 맨 위 "한눈 요약" 스트립 — 아래 상세 차트들의 핵심 결론만 먼저 보여준다(요약→상세).
 // 데이터는 아래 섹션과 같은 훅(캐시 공유)이라 추가 팬아웃 없음.
+// 시장 구조(관계) 요약: 네트워크 허브 + 군집 구성.
 function StructureSummary() {
-  const { data: pca } = usePCA(50)
   const { data: net } = useNetwork(50)
-  const { data: reg } = useRegime(2)
+  const { data: km } = useClusters(80, 4)
   const hub = net.nodes.length ? net.nodes.reduce((a, b) => (b.degree > a.degree ? b : a)) : null
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <StatCard label="시장 동조도 · PC1 설명비율" value={(pca.pc1_explained || 0) + '%'} color="text-brand-600" valueClass="text-2xl" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <StatCard label="네트워크 허브 (최다 연결)" value={hub ? sym(hub.market) : '—'}
         sub={hub ? `${hub.korean_name} · 연결 ${hub.degree}개` : ''} valueClass="text-2xl" />
+      <StatCard label="통계적 군집" value={km.k ? `${km.k}군집` : '—'}
+        sub={km.n ? `${km.n}종 분류` : ''} valueClass="text-2xl" />
+    </div>
+  )
+}
+
+// 시장 국면(거시) 요약: PC1 동조도 + 현재 HMM 국면.
+function RegimeSummary() {
+  const { data: pca } = usePCA(50)
+  const { data: reg } = useRegime(2)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <StatCard label="시장 동조도 · PC1 설명비율" value={(pca.pc1_explained || 0) + '%'} color="text-brand-600" valueClass="text-2xl" />
       <StatCard label="현재 시장 국면 (HMM)" value={reg.current_label || '—'} valueClass="text-2xl" />
     </div>
   )
@@ -813,10 +844,13 @@ function RiskSummary() {
 export default function Analysis() {
   const { pathname, hash } = useLocation()
   const seg = pathname.startsWith('/factor') ? 'factor'
-    : pathname.startsWith('/risk') ? 'risk' : 'structure'
+    : pathname.startsWith('/risk') ? 'risk'
+    : pathname.startsWith('/regime') ? 'regime' : 'structure'
   const meta = PAGE_META[seg]
   const group = GROUPS.find(g => g.label === meta.group) ?? GROUPS[0]
-  const Summary = seg === 'factor' ? FactorSummary : seg === 'risk' ? RiskSummary : StructureSummary
+  const Summary = seg === 'factor' ? FactorSummary
+    : seg === 'risk' ? RiskSummary
+    : seg === 'regime' ? RegimeSummary : StructureSummary
 
   // 크로스링크(/structure#cluster 등)로 진입 시 해당 섹션으로 스크롤.
   useEffect(() => {

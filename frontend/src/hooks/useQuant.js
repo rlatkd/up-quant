@@ -17,7 +17,7 @@ function useKeyed(fetcher, key, initial) {
   return { data: state.data, loading: state.loadedKey !== key }
 }
 
-const EMPTY_PORTFOLIO = { points: [], max_sharpe: { weights: [] }, min_vol: { weights: [] }, assets: [], n_obs: 0 }
+const EMPTY_PORTFOLIO = { points: [], frontier: [], max_sharpe: { weights: [] }, min_vol: { weights: [] }, assets: [], n_obs: 0 }
 const EMPTY_NETWORK = { nodes: [], edges: [], n_obs: 0 }
 const EMPTY_PCA = { components: [], loadings: [], pc1_explained: 0, n_obs: 0 }
 const EMPTY_CLUSTERS = { points: [], k: 0, n: 0 }

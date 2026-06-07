@@ -19,6 +19,7 @@ const NAV_COLUMNS = [
     title: '정량 분석',
     links: [
       { label: '시장 구조', to: '/structure' },
+      { label: '시장 국면', to: '/regime' },
       { label: '팩터 분석', to: '/factor' },
       { label: '리스크', to: '/risk' },
     ],

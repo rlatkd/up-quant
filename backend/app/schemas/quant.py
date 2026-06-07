@@ -37,8 +37,15 @@ class AssetPoint(BaseModel):
     ret: float
 
 
+class FrontierPoint(BaseModel):
+    """효율적 경계선 곡선 위 한 점 — 목표수익률별 최소분산 해."""
+    vol: float      # 연율 변동성 (%)
+    ret: float      # 연율 기대수익률 (%)
+
+
 class PortfolioResult(BaseModel):
     points: list[PortfolioPoint]   # 무작위 시뮬 구름
+    frontier: list[FrontierPoint]  # 효율적 경계선 곡선 (목표수익률별 최소분산, ret 오름차순)
     max_sharpe: PortfolioSpot      # ★ 샤프 최대 (탄젠시 포트폴리오)
     min_vol: PortfolioSpot         # 최소 변동성 포트폴리오
     assets: list[AssetPoint]       # 개별 종목 단독 보유점
