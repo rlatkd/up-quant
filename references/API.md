@@ -87,22 +87,17 @@ UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open 
 섹터별 월간 수익률 (최근 6개월). 섹터 소속 종목의 월봉 close 동일가중 평균.
 - **응답**: `CategoryReturns`
 
-### `GET /api/analysis/category/cumulative`
-섹터별 누적 수익률 (기간 첫 구간 대비 누적 %). 월봉 동일가중 평균을 period 단위로 리샘플 후 누적곱.
-- **쿼리 파라미터**:
-
-  | 이름 | 타입 | 기본값 | 설명 |
-  |------|------|--------|------|
-  | `period` | string | `월` | 집계 단위·구간 수: `월`(12개월) \| `분기`(12분기) \| `년`(5년) (그 외 값은 `월`로 처리) |
-
-- **응답**: `CategoryReturns` (`rows[].label`에 구간 라벨 — 예: `2026-05`, `2026Q2`, `2026`)
+### `GET /api/analysis/category/cumulative-daily`
+섹터별 **일간** 동일가중 지수의 누적 등락률 (최근 ~200일). 섹터 소속 종목의 일봉 close를 윈도우 첫날=1.0으로 정규화해 동일가중 평균한 지수의 누적%. 전 종목 공통 윈도우(`min_len=150`)로 모든 섹터가 같은 날짜축을 공유하며, 공용 일봉 캐시를 재사용해 추가 팬아웃이 없다.
+- **응답**: `CategoryReturns` (`rows[]`에 `label`=`MM-DD`, `t`=unix초, 섹터별 누적% 포함)
+- (과거 `GET /category/cumulative?period=월|분기|년`(월봉 리샘플)은 제거됨 — 일봉 누적으로 일원화)
 
 ### `GET /api/analysis/coins`
 종목별 통계 (변동성·1개월 수익률 등).
 - **응답**: `CoinStat[]`
 
 ### `GET /api/analysis/correlation/{market}`
-지정 종목과 다른 종목들 간 상관관계 (60일 일봉 종가 기준 피어슨 계수). 상관계수 내림차순 정렬.
+지정 종목과 다른 종목들 간 상관관계 (60일 일봉 종가 기준 피어슨 계수). 상관계수 내림차순 정렬. 공통 관측이 40일 미만인 종목(신규 상장 등)은 표본 부족으로 제외한다(노이즈 방지).
 - **경로 파라미터**: `market`
 - **응답**: `CorrelationItem[]`
 
@@ -137,6 +132,18 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 - **응답**: `BacktestResult`
 
+> `ma-cross`·`rsi` 응답에는 거래비용(`fee_bps`, 기본 5bps) 반영 자산곡선과 두 벤치마크(같은 종목 매수보유 `benchmark`/`benchmark_return`, BTC 매수보유 `benchmark_btc`/`benchmark_btc_return`)가 함께 포함된다.
+
+### `GET /api/backtest/compare`
+한 종목에 MA 크로스·RSI 역추세를 동시에 돌려 자산 곡선을 겹쳐 비교.
+- **쿼리**: `market`(기본 `KRW-BTC`), `count`(int 60~500, 기본 200), `fee_bps`(float 0~100, 기본 5)
+- **응답**: `StrategyCompareResult` — `times[]`(unix초) + `strategies[{name, equity[](100시작), total_return}]`(MA·RSI 2종) + `benchmark[]`(같은 종목 매수보유) + `benchmark_btc[]`(BTC 매수보유)
+
+### `GET /api/backtest/walk-forward`
+워크포워드 검증 — 전체 기간을 `n_splits`+1 구간으로 나눠, 각 구간 직전 데이터(in-sample)에서 MA 파라미터를 그리드서치로 고르고 그 다음 구간(out-of-sample)에서만 성과를 집계. 인샘플 과최적화를 거르는 표준 검증법.
+- **쿼리**: `market`(기본 `KRW-BTC`), `count`(int 120~500, 기본 300), `n_splits`(int 2~8, 기본 4), `fee_bps`(float 0~100, 기본 5)
+- **응답**: `WalkForwardResult` — `folds[{fast, slow, oos_return, train_end, test_end}]`(구간별 선택 파라미터·OOS 성과) + `equity[{time, value}]`(OOS만 이어붙인 누적, 100 시작) + `total_return`·`n_splits`
+
 ### `GET /api/backtest/portfolio`
 여러 종목을 목표 비중으로 보유했을 때의 자산 곡선(가중 매수보유 + 선택적 주기 리밸런스).
 - **쿼리**: `markets`(쉼표 구분, 2~10), `weights`(쉼표 구분, markets와 같은 개수·생략 시 동일가중·자동정규화), `count`(int 30~500, 기본 180), `rebalance_days`(int 0~90, 0=매수보유)
@@ -149,7 +156,7 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 | 엔드포인트 | 쿼리 | 응답 요지 |
 |---|---|---|
-| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]` + `max_sharpe`/`min_vol`(`PortfolioSpot`: 좌표 + `weights[]`) + `assets[]`(개별 종목점) (Markowitz, scipy SLSQP) |
+| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]`(Dirichlet α=0.3) + `frontier[{vol,ret}]`(효율적 경계선 곡선, 목표수익률별 최소분산 60점) + `max_sharpe`/`min_vol`(`PortfolioSpot`: 좌표 + `weights[]`) + `assets[]`(개별 종목점) (Markowitz, scipy SLSQP) |
 | `GET /network` | `top`(5~100, 50) | `NetworkResult` — `nodes[{market, category, value, degree}]` + `edges[{source,target,corr}]`(MST, networkx) |
 | `GET /pca` | `top`(5~100, 50) | `PCAResult` — `components[{index,explained}]` + `loadings[{market,category,pc1,pc2}]` + `pc1_explained`(시장요인 설명비율%) |
 | `GET /clusters` | `top`(10~150, 80), `k`(2~8, 4) | `ClusterResult` — `points[{market,category,cluster,volatility,return_1m,log_value}]` (K-means) |
@@ -166,6 +173,22 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 ### `GET /health`
 서버 상태 확인.
 - **응답**: `{ "status": "ok" }`
+
+---
+
+## 7. 실시간 WebSocket — `/ws` (업비트 WS 중계)
+
+REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업비트 WebSocket을 백엔드가 중계한다. 메시지는 모두 JSON 텍스트 프레임.
+
+### `WS /ws/tickers`
+전체 KRW 마켓 현재가 실시간 스트림. 백엔드는 업비트 ticker WS **1개**만 열어 모든 클라이언트에 fan-out하는 공유 허브(`TickerHub`)를 쓴다. 신규 연결 시 보유 중인 최신 스냅샷을 즉시 푸시한 뒤, 이후 변동분을 가격이 바뀔 때마다 푸시.
+- **서버→클라이언트 메시지**: `{ market, trade_price, change(RISE|FALL|EVEN), change_rate(부호 있음), change_price, acc_trade_price_24h }`
+- 클라이언트→서버 전송 없음(연결 종료 감지용으로만 수신 대기). 끊기면 프론트가 3초 후 재연결.
+
+### `WS /ws/market/{market}`
+코인 상세용 — 한 종목의 호가(orderbook)·체결(trade) 실시간 스트림. 종목별 on-demand 연결(공유 허브 불필요).
+- **호가 메시지**: `{ type: "orderbook", asks[{price, size}], bids[{price, size}] }`
+- **체결 메시지**: `{ type: "trade", timestamp(초), price, volume, side(ASK|BID) }`
 
 ---
 
@@ -253,11 +276,11 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 | `trades` | TradeRecord[] | 매매 기록 |
 | `metrics` | BacktestMetrics | 성과 지표 |
 
-**EquityPoint**: `{ time: int(s), value: float }` — `value`는 초기 자본 100 기준
+**EquityPoint**: `{ time: int(s), value: float, benchmark: float, benchmark_btc: float }` — 모두 초기 자본 100 기준. `value`=전략, `benchmark`=같은 종목 매수보유, `benchmark_btc`=BTC 매수보유
 
 **TradeRecord**: `{ time: int(s), side: "BUY"|"SELL", price: float, pnl: float }` — `pnl`은 손익률(%), `SELL`일 때만 의미 있음
 
-**BacktestMetrics**: `{ total_return: float(%), mdd: float(%), win_rate: float(%), trade_count: int, sharpe: float, sortino: float, calmar: float }`
+**BacktestMetrics**: `{ total_return: float(%), benchmark_return: float(%), benchmark_btc_return: float(%), fee_bps: float, mdd: float(%), win_rate: float(%), trade_count: int, sharpe: float, sortino: float, calmar: float }`
 
 리스크 조정 수익률(일별 equity 수익률 기반, 암호화폐 365일 거래 → √365 연율화):
 - `sharpe`  = (평균 수익률 / 표준편차) × √365 — 변동성 단위당 수익. > 1 우수.
@@ -272,11 +295,15 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 | 화면 | 사용 엔드포인트 |
 |------|-----------------|
-| 대시보드 | `/api/markets/tickers`, `/api/analysis/category/monthly`, `/api/analysis/category/cumulative`, `/api/analysis/coins` |
+| 대시보드 | `/api/markets/tickers`, `/api/analysis/category/monthly`, `/api/analysis/coins`, `/api/quant/regime`, `WS /ws/tickers`(시세표 실시간) |
 | 마켓 현황 | `/api/markets/tickers` |
-| 코인 목록 | `/api/markets/tickers`, `/api/markets/summary` |
-| 탐색(마켓·섹터·스크리너 통합 `/explore`) | `/api/markets/tickers`, `/api/analysis/coins`, `/api/analysis/category/*` |
-| 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}`, `/api/analysis/coins`, `/api/quant/garch/{market}` |
+| 코인 목록 | `/api/markets/tickers`, `/api/markets/summary`, `WS /ws/tickers`(현재가 실시간) |
+| 탐색(마켓·섹터·스크리너 통합 `/explore`) | `/api/markets/tickers`, `/api/analysis/coins`, `/api/analysis/category/monthly`, `/api/analysis/category/cumulative-daily` |
+| 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}`, `/api/analysis/coins`, `/api/quant/garch/{market}`, `WS /ws/tickers`·`WS /ws/market/{market}`(현재가·호가·체결 실시간) |
 | 비교 분석 | `/api/candles/{market}` (선택 종목별) |
-| 백테스트 | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/portfolio` |
-| 퀀트 랩 (`/quant`) | `/api/quant/*` (portfolio·network·pca·clusters·dendrogram·garch·momentum·pairs·regime) |
+| 백테스트 | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/compare`, `/api/backtest/walk-forward`, `/api/backtest/portfolio` |
+| 시장 구조 (`/structure`) | `/api/quant/network`, `/api/quant/clusters`, `/api/quant/dendrogram` |
+| 시장 국면 (`/regime`) | `/api/quant/pca`, `/api/quant/regime` |
+| 팩터 분석 (`/factor`) | `/api/quant/momentum`, `/api/quant/pairs` |
+| 리스크 (`/risk`) | `/api/analysis/coins` (변동성·VaR 재사용, 추가 호출 0) |
+| 포트폴리오 최적화 (`/tools/portfolio`) | `/api/quant/portfolio` |
