@@ -7,9 +7,13 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
     <title>UPquant</title>
+    <!-- 다크모드 FOUC 방지 — 첫 페인트 전에 저장된 테마를 html에 적용 -->
+    <script>
+      try { if (localStorage.getItem('upquant_theme') === 'dark') document.documentElement.classList.add('dark') } catch (e) { /* ignore */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
