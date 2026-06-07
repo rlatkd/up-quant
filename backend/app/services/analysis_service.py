@@ -7,7 +7,13 @@ import numpy as np
 from app.core import config
 from app.core.cache import cached
 from app.core.config import MARKET_CATEGORIES
-from app.schemas.analysis import CategoryReturns, CoinStat, CorrelationItem
+from app.schemas.analysis import (
+    AdvanceDeclinePoint,
+    AdvanceDeclineResult,
+    CategoryReturns,
+    CoinStat,
+    CorrelationItem,
+)
 from app.services import candle_service, market_service
 
 # 카테고리(섹터) 분류는 config로 중앙화 — 업비트 데이터랩 '코인 분류' 스냅샷 기반.
@@ -270,3 +276,44 @@ def _compute_coin_stats() -> list[CoinStat]:
 def get_coin_stats() -> list[CoinStat]:
     # 전체 유니버스면 코인 수가 많아 계산 비용이 커지므로 짧게 캐시한다.
     return cached("coin_stats", config.TTL_TICKER, _compute_coin_stats)
+
+
+# ── Advance-Decline 라인 (시장 폭의 추세) ──────────────────────
+# 거래대금 상위 N종으로 매일 (상승−하락) 종목 수를 누적. 일봉은 공용 캐시 재사용 → 팬아웃 0.
+_AD_TOP = 100        # 메이저+준메이저. 전 종목은 유동성 낮은 잡코인 노이즈가 큼
+_AD_CANDLES = 100    # 공용 일봉 캐시(200) 범위 내
+_AD_MIN_LEN = 60     # 히스토리 짧은 신규 상장 제외 → 공통 윈도우 보존
+
+
+def get_advance_decline() -> AdvanceDeclineResult:
+    from app.services import quant_service  # 순환 import 방지(지연 로드)
+
+    def build() -> AdvanceDeclineResult:
+        tickers = market_service.get_tickers()[:_AD_TOP]
+        markets = [t.market for t in tickers]
+        kept, closes = quant_service.closes_matrix(markets, count=_AD_CANDLES, min_len=_AD_MIN_LEN)
+        if len(kept) < 5:
+            return AdvanceDeclineResult(points=[], n=0, n_obs=0)
+
+        r = closes[1:] / closes[:-1] - 1.0          # (T-1, n) 일간 단순수익률
+        advancers = (r > 0).sum(axis=1)             # 그날 상승 종목 수
+        decliners = (r < 0).sum(axis=1)             # 그날 하락 종목 수
+        ad_line = np.cumsum(advancers - decliners)  # 누적 시장 폭
+        index = 100 * np.cumprod(1 + r.mean(axis=1))  # 동일가중 시장지수(첫날 100 대비)
+
+        # 날짜축 — 수익률은 첫 캔들을 잃으므로 [1:]. 일봉은 연속이라 종목 무관 동일 날짜.
+        T = closes.shape[0]
+        ref = "KRW-BTC" if "KRW-BTC" in kept else kept[0]
+        ref_candles = candle_service.get_candles(ref, "days", count=_AD_CANDLES)[-T:]
+        times = [int(c.timestamp // 1000) for c in ref_candles][1:]
+
+        points = [
+            AdvanceDeclinePoint(
+                time=t, ad_line=int(ad), advancers=int(a), decliners=int(d),
+                index=round(float(ix), 2),
+            )
+            for t, ad, a, d, ix in zip(times, ad_line, advancers, decliners, index)
+        ]
+        return AdvanceDeclineResult(points=points, n=len(kept), n_obs=int(r.shape[0]))
+
+    return cached("advance_decline", config.TTL_CANDLE_DAYS, build)

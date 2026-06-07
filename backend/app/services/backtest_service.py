@@ -8,11 +8,16 @@ from app.schemas.backtest import (
     BacktestMetrics,
     BacktestResult,
     EquityPoint,
+    MonteCarloPoint,
+    MonteCarloResult,
     PortfolioBacktestPoint,
     PortfolioBacktestResult,
     StrategyCompareResult,
     StrategyCurve,
     TradeRecord,
+    TsmomEquityPoint,
+    TsmomHolding,
+    TsmomResult,
     WalkForwardFold,
     WalkForwardResult,
 )
@@ -100,6 +105,28 @@ def _btc_benchmark(times: list[int], count: int):
     return val_at, ret
 
 
+def _liquidity_slippage_bps(market: str) -> float:
+    """24h 거래대금 기준 유동성 슬리피지 추정(편도 bps). 과거 호가 스프레드는 없으므로 거래대금 프록시로
+    근사 — close 체결 가정이 저유동 알트 수익을 과대평가하는 것을 보정한다. 1조≈2bps, 1000억≈6bps,
+    100억≈20bps, 10억≈63bps (대략 1/√유동성, 상한 100bps)."""
+    t = next((x for x in market_service.get_tickers() if x.market == market), None)
+    vol = t.acc_trade_price_24h if t else 0.0
+    if vol <= 0:
+        return 50.0
+    slip = 2.0 * math.sqrt(1e12 / vol)               # 1조원 기준 2bps
+    return float(min(100.0, max(2.0, round(slip, 1))))
+
+
+def _overfit_pvalue(best_sharpe_pp: float, n_obs: int, n_trials: int, n_sim: int = 4000) -> float:
+    """다중검정 보정 — 귀무가설(평균수익 0) 하에서 N회 시도의 최대 per-period 샤프가 관측 최고치 이상일
+    확률. 귀무 하 샤프 추정치 ≈ N(0, 1/√T) → N개 중 최댓값 분포와 비교. 낮을수록 과최적화가 아님."""
+    if n_obs < 5 or n_trials < 1 or best_sharpe_pp <= 0:
+        return 1.0
+    rng = np.random.default_rng(0)
+    maxes = (rng.standard_normal((n_sim, n_trials)) / math.sqrt(n_obs)).max(axis=1)
+    return round(float((maxes >= best_sharpe_pp).mean()), 4)
+
+
 def run_ma_cross(
     market: str,
     fast: int = 5,
@@ -111,7 +138,8 @@ def run_ma_cross(
     closes = [c.close for c in candles]
     times  = [c.timestamp // 1000 for c in candles]
 
-    fee = fee_bps / 10000.0
+    slip_bps = _liquidity_slippage_bps(market)            # 유동성 기반 추정 슬리피지(편도)
+    fee = (fee_bps + slip_bps) / 10000.0                  # 거래비용 = 수수료 + 슬리피지
     base = closes[0] if closes and closes[0] > 0 else 1.0
 
     fast_ma = _sma(closes, fast)
@@ -186,6 +214,7 @@ def run_ma_cross(
             sortino=sortino,
             calmar=calmar,
             fee_bps=fee_bps,
+            slippage_bps=slip_bps,
         ),
     )
 
@@ -202,7 +231,8 @@ def run_rsi_strategy(
     closes = [c.close for c in candles]
     times  = [c.timestamp // 1000 for c in candles]
 
-    fee = fee_bps / 10000.0
+    slip_bps = _liquidity_slippage_bps(market)            # 유동성 기반 추정 슬리피지(편도)
+    fee = (fee_bps + slip_bps) / 10000.0                  # 거래비용 = 수수료 + 슬리피지
     base = closes[0] if closes and closes[0] > 0 else 1.0
 
     rsi_vals = _rsi(closes, period)
@@ -270,6 +300,7 @@ def run_rsi_strategy(
             sortino=sortino,
             calmar=calmar,
             fee_bps=fee_bps,
+            slippage_bps=slip_bps,
         ),
     )
 
@@ -444,4 +475,180 @@ def run_walk_forward(market: str, count: int = 300, n_splits: int = 4, fee_bps: 
         ))
 
     total = round(equity[-1].value - 100, 2) if equity else 0.0
-    return WalkForwardResult(folds=folds, equity=equity, total_return=total, n_splits=len(folds))
+    # 다중검정 보정 — 전체 인샘플에서 그리드 각 파라미터의 per-period 샤프 중 최고치가 우연일 확률
+    best_pp = 0.0
+    for f, s in _WF_GRID:
+        if s >= T:
+            continue
+        _, curve = _ma_curve(closes, f, s, fee)
+        c = np.array(curve)
+        pr = c[1:] / c[:-1] - 1.0
+        if pr.size > 1 and pr.std() > 0:
+            best_pp = max(best_pp, float(pr.mean() / pr.std()))
+    pval = _overfit_pvalue(best_pp, len(closes) - 1, len(_WF_GRID))
+    return WalkForwardResult(folds=folds, equity=equity, total_return=total, n_splits=len(folds),
+                             overfit_pvalue=pval, n_trials=len(_WF_GRID))
+
+
+# ── 몬테카를로 시뮬레이션 (부트스트랩 가격 경로) ───────────────
+# 과거 일간수익률 분포에서 복원추출(부트스트랩)로 향후 horizon일 경로를 n_paths개 생성.
+# 정규근사 대신 부트스트랩이라 실제 분포의 팻테일(급등락 빈도)이 보존된다. 각 시점의 백분위
+# 밴드(부채꼴)와 최종 수익률 분포·손실확률을 반환한다. (과거 수익률이 미래에도 유효하다는 가정)
+def run_montecarlo(market: str, horizon: int = 30, n_paths: int = 1000,
+                   count: int = 180) -> MonteCarloResult:
+    candles = candle_service.get_candles(market, "days", count)
+    closes = np.array([c.close for c in candles], dtype=float)
+    nmap = {t.market: t.korean_name for t in market_service.get_tickers()}
+    name = nmap.get(market, market)
+
+    empty = MonteCarloResult(
+        market=market, korean_name=name, bands=[], horizon=horizon, n_paths=n_paths,
+        final_p5=0.0, final_p50=0.0, final_p95=0.0, expected_return=0.0, prob_loss=0.0,
+        daily_mean=0.0, daily_vol=0.0, n_obs=0,
+    )
+    if closes.size < 30 or np.any(closes <= 0):
+        return empty
+
+    rets = closes[1:] / closes[:-1] - 1.0
+    rng = np.random.default_rng(abs(hash(market)) % (2**32))
+    # 부트스트랩: 과거 일간수익률에서 (n_paths, horizon) 복원추출 → 누적곱으로 가격 경로(100 시작).
+    sampled = rng.choice(rets, size=(n_paths, horizon), replace=True)
+    paths = np.cumprod(1.0 + sampled, axis=1) * 100.0          # (n_paths, horizon)
+    paths = np.hstack([np.full((n_paths, 1), 100.0), paths])   # day 0 = 100 추가 → (n_paths, horizon+1)
+
+    qs = np.percentile(paths, [5, 25, 50, 75, 95], axis=0)     # (5, horizon+1)
+    bands = [
+        MonteCarloPoint(day=d, p5=round(float(qs[0, d]), 2), p25=round(float(qs[1, d]), 2),
+                        p50=round(float(qs[2, d]), 2), p75=round(float(qs[3, d]), 2),
+                        p95=round(float(qs[4, d]), 2))
+        for d in range(horizon + 1)
+    ]
+    final = paths[:, -1]
+    return MonteCarloResult(
+        market=market, korean_name=name, bands=bands, horizon=horizon, n_paths=n_paths,
+        final_p5=round(float(np.percentile(final, 5)) - 100, 2),
+        final_p50=round(float(np.percentile(final, 50)) - 100, 2),
+        final_p95=round(float(np.percentile(final, 95)) - 100, 2),
+        expected_return=round(float(final.mean()) - 100, 2),
+        prob_loss=round(float((final < 100).mean()) * 100, 2),
+        daily_mean=round(float(rets.mean()) * 100, 3),
+        daily_vol=round(float(rets.std()) * 100, 3),
+        n_obs=int(rets.size),
+    )
+
+
+# ── 시계열 모멘텀(추세추종) + 변동성 타게팅 ────────────────────
+# 횡단면 모멘텀(종목끼리 순위, quant_service)과 달리, 각 종목이 '자기 과거' 대비 오르는지로
+# 롱/현금을 결정한다(time-series momentum, Moskowitz·Ooi·Pedersen 2012). 비중은 변동성 역가중
+# (변동성 큰 종목 작게 — 모멘텀 크래시 완화, Barroso·Santa-Clara 2015). 업비트 현물이라 숏 없이
+# 롱/현금만. 거래비용(fee_bps, 편도)을 리밸런스 회전(turnover)에 부과해 과대평가를 막는다.
+_TSMOM_TOP = 30
+_TSMOM_CANDLES = 200
+_TSMOM_LOOKBACK = 60
+_TSMOM_HOLDING = 5
+_TSMOM_CAP = 0.25         # 종목당 비중 상한(한 종목 독식 방지)
+_TSMOM_SKIP = 5           # 12-1 모멘텀: 추세 측정에서 최근 N일 제외(단기 반전 오염 차단)
+_TSMOM_TARGET_VOL = 0.60  # 연율 목표 변동성 — 포트폴리오 변동성 타게팅(Moreira·Muir 2017)
+_TSMOM_BEAR_SCALE = 0.30  # 시장이 자기 추세 아래(약세)면 익스포저 축소(모멘텀 크래시 방지, Daniel·Moskowitz 2016)
+_TSMOM_BAND = 0.03        # 무거래 밴드 — 목표 비중이 직전과 이만큼 미만 차이면 유지(턴오버 히스테리시스)
+# 스테이블코인 — KRW-USDT는 환율 변동으로 변동성 필터를 통과하지만 추세추종 대상이 아니므로 제외.
+_STABLECOINS = {"KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD"}
+
+
+def run_tsmom(top: int = _TSMOM_TOP, lookback: int = _TSMOM_LOOKBACK,
+              holding: int = _TSMOM_HOLDING, count: int = _TSMOM_CANDLES,
+              fee_bps: float = 5.0, skip: int = _TSMOM_SKIP) -> TsmomResult:
+    """시계열 모멘텀 + 변동성 역가중 + 국면/크래시 필터 + 변동성 타게팅 + 턴오버 히스테리시스.
+    개선점: ①12-1 skip(추세 측정에서 최근 skip일 제외 — 단기 반전 오염 차단) ②시장이 약세(자기 추세
+    아래)거나 고변동이면 총 익스포저를 동적 축소(모멘텀 크래시 방지·변동성 타게팅) ③무거래 밴드로
+    불필요 회전 절감. (학술: Moskowitz·Ooi·Pedersen 2012, Barroso·Santa-Clara 2015, Daniel·Moskowitz 2016, Moreira·Muir 2017)"""
+    from app.services import quant_service  # 지연 import(순환 방지) — 공용 일봉 캐시 재사용
+    tickers = [t for t in market_service.get_tickers() if t.market not in _STABLECOINS][:top]
+    markets = [t.market for t in tickers]
+    # 공통 윈도우 — 신규 상장(짧은 히스토리)이 윈도우를 잘라 리밸런스 수가 줄지 않게 최소 120일 보장.
+    kept, closes = quant_service.closes_matrix(markets, count=count, min_len=max(lookback + holding + 20, 120))
+    empty = TsmomResult(equity=[], total_return=0.0, benchmark_return=0.0, sharpe=0.0, mdd=0.0,
+                        avg_exposure=0.0, holdings=[], lookback=lookback, holding=holding, n=0, fee_bps=fee_bps)
+    if len(kept) < 5:
+        return empty
+    T, n = closes.shape
+    skip = max(0, min(skip, lookback - 5))   # skip은 lookback 안쪽으로 제한
+    if T <= lookback + holding:
+        return empty
+
+    rets = closes[1:] / closes[:-1] - 1.0                  # (T-1, n) 일간수익률
+    mkt_ret = rets.mean(axis=1)                            # 동일가중 시장 일간수익률 (T-1,)
+    nmap = {t.market: t.korean_name for t in tickers}
+    base_candles = candle_service.get_candles(kept[0], "days", count)
+    times = [int(c.timestamp // 1000) for c in base_candles][-T:]
+    fee = fee_bps / 10000.0
+    ann = math.sqrt(_ANNUALIZE_DAYS)
+
+    def _base_weights(t_idx: int):
+        """종목별 시계열 모멘텀 신호 × 변동성 역가중 비중(합=1). 추세는 12-1(최근 skip일 제외)로 측정."""
+        trailing = closes[t_idx - skip] / closes[t_idx - lookback] - 1.0  # 최근 skip일 반전 제외
+        signal = (trailing > 0).astype(float)                            # 롱(추세 +) / 현금
+        vol = rets[t_idx - lookback:t_idx].std(axis=0)                   # 최근 변동성
+        tradeable = vol > 0.005                                          # 스테이블/극저변동 제외
+        inv_vol = np.where(tradeable, 1.0 / vol, 0.0)                    # 변동성 역가중
+        raw = signal * inv_vol
+        s = raw.sum()
+        w = raw / s if s > 0 else np.zeros(n)
+        for _ in range(5):                                              # 비중 상한 클립→재정규화 수렴
+            if w.sum() <= 0 or w.max() <= _TSMOM_CAP + 1e-9:
+                break
+            w = np.minimum(w, _TSMOM_CAP)
+            w = w / w.sum()
+        return w, signal
+
+    def _exposure(t_idx: int) -> float:
+        """총 익스포저 배수 ∈ [0,1] — 시장 약세면 축소(크래시 필터), 고변동이면 축소(변동성 타게팅)."""
+        trend_f = 1.0 if closes[t_idx].mean() > closes[t_idx - lookback].mean() else _TSMOM_BEAR_SCALE
+        mvol = mkt_ret[t_idx - lookback:t_idx].std() * ann               # 시장 연율 변동성
+        vol_f = min(1.0, _TSMOM_TARGET_VOL / mvol) if mvol > 0 else 1.0
+        return float(max(0.0, min(1.0, trend_f * vol_f)))
+
+    eq, bench, eq_t, exposures = [100.0], [100.0], [times[lookback]], []
+    prev_w = np.zeros(n)
+    t = lookback
+    while t + holding < T:
+        target = _base_weights(t)[0] * _exposure(t)                      # 투자비중=exp, 나머지 현금
+        # 무거래 밴드: 직전과 차이가 작은 종목은 그대로 유지(불필요 회전 절감)
+        w_eff = np.where(np.abs(target - prev_w) < _TSMOM_BAND, prev_w, target)
+        turnover = float(np.abs(w_eff - prev_w).sum())
+        fwd = closes[t + holding] / closes[t] - 1.0
+        port_r = float((w_eff * fwd).sum()) - turnover * fee
+        eq.append(eq[-1] * (1 + port_r))
+        bench.append(bench[-1] * (1 + float(fwd.mean())))               # 동일가중 매수보유
+        eq_t.append(times[t + holding])
+        exposures.append(float(w_eff.sum()))                            # 실제 투자비중(현금 제외)
+        prev_w = w_eff
+        t += holding
+
+    eq_arr = np.array(eq)
+    rebal_r = eq_arr[1:] / eq_arr[:-1] - 1.0
+    ppy = _ANNUALIZE_DAYS / holding
+    sharpe = float(rebal_r.mean() / rebal_r.std() * math.sqrt(ppy)) if rebal_r.size > 1 and rebal_r.std() > 0 else 0.0
+
+    # 현재(최신) 보유 — 마지막 시점 목표(익스포저 반영).
+    trailing_now = closes[-1 - skip] / closes[-1 - lookback] - 1.0
+    w_now = _base_weights(T - 1)[0] * _exposure(T - 1)
+    holdings = [
+        TsmomHolding(market=kept[i], korean_name=nmap.get(kept[i], kept[i]),
+                     momentum=round(float(trailing_now[i]) * 100, 2), weight=round(float(w_now[i]) * 100, 2))
+        for i in np.argsort(-w_now) if w_now[i] > 0.001
+    ][:15]
+
+    equity = [
+        TsmomEquityPoint(time=tt, value=round(e, 2), benchmark=round(b, 2))
+        for tt, e, b in zip(eq_t, eq, bench)
+    ]
+    return TsmomResult(
+        equity=equity,
+        total_return=round(eq[-1] - 100, 2),
+        benchmark_return=round(bench[-1] - 100, 2),
+        sharpe=round(sharpe, 2),
+        mdd=_compute_mdd(eq),
+        avg_exposure=round(float(np.mean(exposures)) * 100, 1) if exposures else 0.0,
+        holdings=holdings, lookback=lookback, holding=holding, n=n, fee_bps=fee_bps,
+    )

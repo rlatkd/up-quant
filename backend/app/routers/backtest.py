@@ -2,8 +2,10 @@ from fastapi import APIRouter, Query
 
 from app.schemas.backtest import (
     BacktestResult,
+    MonteCarloResult,
     PortfolioBacktestResult,
     StrategyCompareResult,
+    TsmomResult,
     WalkForwardResult,
 )
 from app.services import backtest_service
@@ -51,6 +53,27 @@ def walk_forward(
     fee_bps: float = Query(5.0, ge=0, le=100),
 ):
     return backtest_service.run_walk_forward(market, count, n_splits, fee_bps)
+
+
+@router.get("/tsmom", response_model=TsmomResult)
+def tsmom(
+    top: int = Query(30, ge=10, le=100, description="유니버스 종목 수(거래대금 상위)"),
+    lookback: int = Query(60, ge=10, le=180, description="추세 판단 룩백(일)"),
+    holding: int = Query(5, ge=1, le=30, description="리밸런스 주기(일)"),
+    count: int = Query(200, ge=120, le=500),
+    fee_bps: float = Query(5.0, ge=0, le=100),
+):
+    return backtest_service.run_tsmom(top, lookback, holding, count, fee_bps)
+
+
+@router.get("/montecarlo", response_model=MonteCarloResult)
+def montecarlo(
+    market: str = Query("KRW-BTC"),
+    horizon: int = Query(30, ge=5, le=120, description="시뮬레이션 일수"),
+    n_paths: int = Query(1000, ge=200, le=5000, description="경로 수"),
+    count: int = Query(180, ge=60, le=500, description="과거 수익률 추정 윈도우(일봉)"),
+):
+    return backtest_service.run_montecarlo(market, horizon, n_paths, count)
 
 
 @router.get("/portfolio", response_model=PortfolioBacktestResult)

@@ -19,6 +19,7 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.optimize import minimize
 from scipy.spatial.distance import squareform
 from sklearn.cluster import KMeans
+from sklearn.covariance import LedoitWolf
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.stattools import coint
@@ -136,13 +137,20 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
     if len(kept) < 2:
         return PortfolioResult(
             points=[], frontier=[], max_sharpe=_empty_spot(), min_vol=_empty_spot(),
-            assets=[], n_obs=0,
+            risk_parity=_empty_spot(), assets=[], n_obs=0, shrinkage=0.0,
         )
     nmap = name_map()
     n = len(kept)
     mu = r.mean(axis=0) * TRADING_DAYS                 # 연율 기대수익 (소수)
-    cov = np.cov(r, rowvar=False) * TRADING_DAYS       # 연율 공분산 (n,n)
-    cov = np.atleast_2d(cov)
+    # 공분산 추정: 표본공분산은 추정오차가 커서 최적해가 코너(몰빵)로 튄다. Ledoit-Wolf 수축으로
+    # 구조화 타깃 쪽으로 당겨 OOS에서 더 안정적인 해를 얻는다(Ledoit & Wolf 2004).
+    lw = LedoitWolf().fit(r)
+    shrinkage = float(getattr(lw, "shrinkage_", 0.0))
+    cov = np.atleast_2d(lw.covariance_ * TRADING_DAYS)  # 연율 공분산 (n,n)
+    # 리스크 패리티(역변동성) — 기대수익(mu) 추정에 의존하지 않아 추정오차에 견고. min_vol·max_sharpe의 대안.
+    asset_vol = np.sqrt(np.clip(np.diag(cov), 1e-12, None))
+    rp = 1.0 / asset_vol
+    w_rp = rp / rp.sum()
 
     # 무작위 가중 1000개 — Dirichlet(α,…,α). α<1이면 균등가중 중심이 아니라
     # 단일종목 집중(심플렉스 꼭짓점)까지 퍼져 구름이 넓어진다(α=1은 중심 뭉침).
@@ -205,8 +213,10 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
         frontier=frontier,
         max_sharpe=_spot(w_ms, mu, cov, kept, nmap),
         min_vol=_spot(w_mv, mu, cov, kept, nmap),
+        risk_parity=_spot(w_rp, mu, cov, kept, nmap),
         assets=assets,
         n_obs=int(r.shape[0]),
+        shrinkage=round(shrinkage, 3),
     )
 
 
@@ -423,7 +433,14 @@ def _compute_garch(market: str) -> GarchResult:
 
     mu = float(res.params.get("mu", 0.0))
     sigma1 = float(fc_vol[0])                      # 1일 예측 변동성(%)
-    var_95 = round(max(_Z_95 * sigma1 - mu, 0.0), 3)  # 1일 95% VaR(손실 %)
+    var_95 = round(max(_Z_95 * sigma1 - mu, 0.0), 3)  # 1일 95% VaR(정규근사, 손실 %)
+
+    # 경험분위 VaR/CVaR — 정규근사는 크립토 팻테일을 과소평가하므로 실제 일간수익률 분포에서 직접 산출.
+    simple = (closes[1:] / closes[:-1] - 1.0) * 100.0    # 일간 단순수익률(%)
+    q5 = float(np.percentile(simple, 5))
+    hist_var_95 = round(max(-q5, 0.0), 3)                 # 5% 분위 손실
+    tail = simple[simple <= q5]
+    cvar_95 = round(max(-float(tail.mean()), 0.0), 3) if tail.size else hist_var_95  # 꼬리 평균손실(기대손실)
 
     p = res.params
     persistence = round(float(p.get("alpha[1]", 0.0)) + float(p.get("beta[1]", 0.0)), 4)
@@ -433,6 +450,7 @@ def _compute_garch(market: str) -> GarchResult:
         market=market, korean_name=name,
         cond_vol=cond_vol, forecast_vol=forecast_vol,
         current_vol_annual=current_vol_annual, var_95=var_95,
+        hist_var_95=hist_var_95, cvar_95=cvar_95,
         persistence=persistence, n_obs=int(ret.size),
     )
 

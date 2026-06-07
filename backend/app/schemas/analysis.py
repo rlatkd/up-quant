@@ -24,3 +24,22 @@ class CorrelationItem(BaseModel):
     market: str
     korean_name: str
     correlation: float  # -1.0 ~ 1.0
+
+
+class AdvanceDeclinePoint(BaseModel):
+    time: int          # unix seconds (KST 일봉)
+    ad_line: int       # 누적 (상승 종목 수 − 하락 종목 수)
+    advancers: int     # 그날 상승 종목 수
+    decliners: int     # 그날 하락 종목 수
+    index: float       # 동일가중 시장지수 (윈도우 첫날=100)
+
+
+class AdvanceDeclineResult(BaseModel):
+    """Advance-Decline 라인 — 시장 폭(breadth)의 추세.
+
+    매일 (상승−하락) 종목 수를 누적한 라인. 시장지수는 오르는데 A-D 라인이 안 오르면
+    소수 대형주만 끌어올린 것(divergence). 동일가중 시장지수를 함께 줘 비교한다.
+    """
+    points: list[AdvanceDeclinePoint]
+    n: int             # 집계 종목 수 (거래대금 상위 N 중 유효)
+    n_obs: int         # 일수

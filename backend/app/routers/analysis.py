@@ -1,9 +1,20 @@
 from fastapi import APIRouter
 
-from app.schemas.analysis import CategoryReturns, CoinStat, CorrelationItem
+from app.schemas.analysis import (
+    AdvanceDeclineResult,
+    CategoryReturns,
+    CoinStat,
+    CorrelationItem,
+)
 from app.services import analysis_service
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
+
+
+@router.get("/advance-decline", response_model=AdvanceDeclineResult)
+def get_advance_decline():
+    """Advance-Decline 라인 — 시장 폭의 추세(거래대금 상위 100종)."""
+    return analysis_service.get_advance_decline()
 
 
 @router.get("/category/monthly", response_model=CategoryReturns)

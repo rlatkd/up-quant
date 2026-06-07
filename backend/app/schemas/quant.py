@@ -48,8 +48,10 @@ class PortfolioResult(BaseModel):
     frontier: list[FrontierPoint]  # 효율적 경계선 곡선 (목표수익률별 최소분산, ret 오름차순)
     max_sharpe: PortfolioSpot      # ★ 샤프 최대 (탄젠시 포트폴리오)
     min_vol: PortfolioSpot         # 최소 변동성 포트폴리오
+    risk_parity: PortfolioSpot     # ◆ 리스크 패리티(역변동성) — 기대수익 추정에 안 의존, OOS 견고
     assets: list[AssetPoint]       # 개별 종목 단독 보유점
     n_obs: int                     # 공분산 추정에 쓴 일간 수익률 관측 수
+    shrinkage: float = 0.0         # Ledoit-Wolf 수축 강도(0~1, 표본공분산↔구조화 타깃)
 
 
 # ── 2) 상관 네트워크 (Mantegna 최소신장트리) ───────────────────
@@ -133,7 +135,9 @@ class GarchResult(BaseModel):
     cond_vol: list[VolPoint]      # 인샘플 조건부 변동성 시계열(일간 %)
     forecast_vol: list[float]     # 향후 N일 일간 변동성 예측(%)
     current_vol_annual: float     # 최신 조건부 변동성 연율화(%) — 헤드라인
-    var_95: float                 # 1일 95% VaR (%, 양수=예상 최대손실)
+    var_95: float                 # 1일 95% VaR (%, 정규근사 — GARCH σ 기반)
+    hist_var_95: float = 0.0      # 1일 95% VaR (%, 경험분위 — 실제 분포 5% 분위, 팻테일 반영)
+    cvar_95: float = 0.0          # 1일 95% CVaR/기대손실 (%, 5% 꼬리 구간 평균손실 — VaR보다 보수적)
     persistence: float            # α+β (변동성 충격의 지속성, 1에 가까울수록 오래감)
     n_obs: int
 

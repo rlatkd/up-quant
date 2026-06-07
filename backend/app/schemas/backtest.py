@@ -22,7 +22,8 @@ class BacktestMetrics(BaseModel):
     mdd: float            # 최대 낙폭 (%)
     win_rate: float       # 승률 (%)
     trade_count: int
-    fee_bps: float = 0.0  # 적용한 편도 거래비용 (bps, 1bps=0.01%)
+    fee_bps: float = 0.0       # 적용한 편도 거래비용 (bps, 1bps=0.01%)
+    slippage_bps: float = 0.0  # 유동성 기반 추정 슬리피지 (편도 bps) — 거래대금 낮을수록 큼
     # 리스크 조정 수익률 (일별 equity 수익률 기반, 암호화폐는 365일 거래 → √365 연율화)
     sharpe: float         # 샤프 = (평균/표준편차) × √365 — 변동성 단위당 수익
     sortino: float        # 소르티노 = (평균/하방표준편차) × √365 — 손실 변동성만 패널티
@@ -89,3 +90,61 @@ class WalkForwardResult(BaseModel):
     equity: list[EquityPoint]  # out-of-sample만 이어붙인 누적 자산 곡선
     total_return: float        # out-of-sample 누적 총수익률 (%)
     n_splits: int
+    # 다중검정 보정 — 그리드(N개 파라미터)에서 고른 '최고 인샘플 샤프'가 순전히 우연일 확률.
+    # 귀무가설(수익률 평균 0) 하 N회 시도의 최대 샤프 분포와 비교. 낮을수록 과최적화 아님(예: <0.1 양호).
+    overfit_pvalue: float = 1.0
+    n_trials: int = 0          # 시도한 파라미터 조합 수
+
+
+# ── 몬테카를로 시뮬레이션 (미래 가격 경로 N개) ─────────────────
+class MonteCarloPoint(BaseModel):
+    day: int     # 0(현재)..horizon
+    p5: float    # 하위 5% 시나리오 가치 (100 시작)
+    p25: float
+    p50: float   # 중앙값
+    p75: float
+    p95: float   # 상위 5% 시나리오
+
+
+class MonteCarloResult(BaseModel):
+    market: str
+    korean_name: str
+    bands: list[MonteCarloPoint]   # 시점별 백분위 밴드 (부채꼴 차트용)
+    horizon: int                   # 시뮬레이션 일수
+    n_paths: int                   # 경로 수
+    final_p5: float                # horizon 후 하위 5% 수익률 (%)
+    final_p50: float               # 중앙값 수익률 (%)
+    final_p95: float               # 상위 5% 수익률 (%)
+    expected_return: float         # 평균 최종 수익률 (%)
+    prob_loss: float               # 손실 확률 (%) — 최종가 < 시작가 비율
+    daily_mean: float              # 과거 일평균 수익률 (%)
+    daily_vol: float               # 과거 일변동성 (%)
+    n_obs: int
+
+
+# ── 시계열 모멘텀(추세추종) + 변동성 타게팅 ────────────────────
+class TsmomEquityPoint(BaseModel):
+    time: int          # unix seconds
+    value: float       # 전략 자산 가치 (100 시작)
+    benchmark: float   # 동일가중 매수보유 (100 시작)
+
+
+class TsmomHolding(BaseModel):
+    market: str
+    korean_name: str
+    momentum: float    # 최신 시계열 모멘텀 = 룩백 기간 수익률 (%)
+    weight: float      # 현재 목표 비중 (%, 변동성 역가중)
+
+
+class TsmomResult(BaseModel):
+    equity: list[TsmomEquityPoint]
+    total_return: float        # 전략 총수익률 (%)
+    benchmark_return: float    # 동일가중 매수보유 총수익률 (%)
+    sharpe: float              # 연율화 샤프
+    mdd: float                 # 최대 낙폭 (%)
+    avg_exposure: float        # 평균 투자 비중 (%, 추세 양(+)인 종목 비율 — 100이면 항상 풀투자)
+    holdings: list[TsmomHolding]  # 현재(최신) 보유 종목
+    lookback: int              # 추세 판단 룩백(일)
+    holding: int               # 리밸런스 주기(일)
+    n: int                     # 유니버스 종목 수
+    fee_bps: float
