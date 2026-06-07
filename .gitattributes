@@ -1,2 +1,2 @@
 # GitHub Linguist — frontend를 vendored 처리해서 Python을 주 언어로 표시
-# frontend/** linguist-vendored=true
+frontend/** linguist-vendored=true
