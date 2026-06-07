@@ -2,7 +2,8 @@ import { useState, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { CoinDetailView } from './CoinDetail'
-import CartButton from '../components/CartButton'
+import PageLoading from '../components/ui/PageLoading'
+import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 
 // master-detail 레이아웃 — 좌측 메인은 CoinDetailView, 우측은 슬림 코인 리스트.
 // /coins는 디폴트로 KRW-BTC, /coins/:market은 해당 코인을 선택 상태로 표시.
@@ -36,11 +37,6 @@ function fmtVolume(v) {
   return v.toLocaleString()
 }
 
-function changeColor(change) {
-  if (change === 'RISE') return 'text-red-500'
-  if (change === 'FALL') return 'text-blue-500'
-  return 'text-gray-600'
-}
 
 function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthClass = '' }) {
   const active = sortKey === col
@@ -119,16 +115,25 @@ export default function CoinList() {
     return r
   }, [tickers, filter, favorites, search, sortKey, sortDir])
 
+  // 첫 진입(코인 목록 로딩) 동안은 통짜 로딩. 이후 종목 전환은 좌측 상세가 자체 로딩(master-detail).
+  if (tLoading) return <PageLoading />
+
   // 좌: 메인 상세 (17/24, ~71%) │ 우: 코인 리스트 (7/24, ~29%, sticky) — 8.5:3.5 비율
+  // items-start를 두지 않음(기본 stretch) → 우측 사이드바 높이가 좌측 상세 높이에 맞춰진다.
+  // (items-start면 우측이 자기 콘텐츠 높이로 grid row를 밀어, 줌 아웃 시 좌측보다 길어져 페이지가 끝없이 늘어남)
   return (
-    <div className="grid grid-cols-[repeat(24,minmax(0,1fr))] gap-4 items-start">
+    <div className="grid grid-cols-[repeat(24,minmax(0,1fr))] gap-4">
       {/* 좌측 메인 — 코인 상세 */}
       <div className="col-span-[17] min-w-0">
         <CoinDetailView market={selectedMarket} />
       </div>
 
-      {/* 우측 사이드바 — 코인 리스트 */}
-      <aside className="col-span-[7] bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col sticky top-[68px] max-h-[calc(100vh-84px)]">
+      {/* 우측 사이드바 — 코인 리스트.
+          wrapper(grid 셀)는 stretch로 좌측 상세 높이가 되고, 그 안 aside를 absolute inset-0로 채운다.
+          absolute 자식은 정상 흐름에서 빠져 부모(wrapper) 높이에 기여하지 않으므로, wrapper 높이는 오직
+          좌측 상세가 정한다 → 261행 리스트가 페이지를 늘리지 않고 aside 내부에서만 스크롤(줌 배율 무관). */}
+      <div className="col-span-[7] relative">
+      <aside className="absolute inset-0 bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col">
         {/* 검색 */}
         <div className="p-3 border-b border-gray-100 shrink-0">
           <input
@@ -167,7 +172,6 @@ export default function CoinList() {
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 text-gray-400 z-10">
               <tr>
                 <th className="px-2 py-2 w-6"></th>
-                <th className="px-2 py-2 w-6"></th>
                 <SortTh label="한글명"   col="korean_name"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" widthClass="w-20" />
                 <SortTh label="현재가"   col="trade_price"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh label="전일대비" col="change_rate"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
@@ -176,10 +180,10 @@ export default function CoinList() {
             </thead>
             <tbody>
               {tLoading ? (
-                <tr><td colSpan={6} className="px-3 py-10 text-center text-gray-400">로딩 중...</td></tr>
+                <tr><td colSpan={5} className="px-3 py-10 text-center text-gray-400">로딩 중...</td></tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
                     {filter === '관심' ? '관심 종목이 없습니다' : '검색 결과가 없습니다'}
                   </td>
                 </tr>
@@ -196,18 +200,15 @@ export default function CoinList() {
                     <td className="px-2 py-1.5 text-center" onClick={e => toggleFavorite(t.market, e)}>
                       <StarIcon filled={favorites.has(t.market)} />
                     </td>
-                    <td className="px-1 py-1.5 text-center">
-                      <CartButton market={t.market} />
-                    </td>
                     <td className="px-2 py-1.5 w-20 max-w-20">
                       <div className="font-medium text-gray-800 truncate">{t.korean_name}</div>
                       <div className="text-[10px] text-gray-400 mt-0.5 truncate">{t.market.replace('KRW-', '')}/KRW</div>
                     </td>
-                    <td className={`px-2 py-1.5 text-right font-medium tabular-nums ${changeColor(t.change)}`}>
-                      {t.trade_price.toLocaleString()}
+                    <td className="px-2 py-1.5 text-right">
+                      <LivePrice ticker={t} />
                     </td>
-                    <td className={`px-2 py-1.5 text-right tabular-nums ${changeColor(t.change)}`}>
-                      {(t.change_rate > 0 ? '+' : '')}{(t.change_rate * 100).toFixed(2)}%
+                    <td className="px-2 py-1.5 text-right">
+                      <LiveChangeRate ticker={t} />
                     </td>
                     <td className="px-2 py-1.5 text-right text-gray-600 tabular-nums">
                       {fmtVolume(t.acc_trade_price_24h)}
@@ -219,6 +220,7 @@ export default function CoinList() {
           </table>
         </div>
       </aside>
+      </div>
     </div>
   )
 }

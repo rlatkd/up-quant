@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AnalysisCartProvider } from './contexts/AnalysisCart'
+import { RealtimeProvider } from './contexts/Realtime'
 import Layout from './components/layout/Layout'
 import Dashboard from './pages/Dashboard'
 import Explore from './pages/Explore'
@@ -12,7 +12,7 @@ import Guide from './pages/Guide'
 function App() {
   return (
     <BrowserRouter>
-      <AnalysisCartProvider>
+      <RealtimeProvider>
       <Routes>
         <Route element={<Layout />}>
           {/* 코인 목록이 메인('/'·로고 클릭 시 진입). master-detail — market 없으면 디폴트 KRW-BTC */}
@@ -26,8 +26,9 @@ function App() {
           <Route path="/market" element={<Explore />} />
           <Route path="/sectors" element={<Explore />} />
           <Route path="/screener" element={<Explore />} />
-          {/* 시장 분석(관찰형) — 시장 구조 / 팩터 분석 (top-level 경로로 정리) */}
+          {/* 시장 분석(관찰형) — 시장 구조(관계) / 시장 국면(거시) / 팩터 분석 (top-level 경로로 정리) */}
           <Route path="/structure" element={<Analysis />} />
+          <Route path="/regime" element={<Analysis />} />
           <Route path="/factor" element={<Analysis />} />
           <Route path="/risk" element={<Analysis />} />
           {/* 전략 도구 = "서비스 더보기" 드롭다운의 독립 페이지 3종 */}
@@ -47,7 +48,7 @@ function App() {
         <Route path="/help" element={<Help />} />
         <Route path="/guide" element={<Guide />} />
       </Routes>
-      </AnalysisCartProvider>
+      </RealtimeProvider>
     </BrowserRouter>
   )
 }

@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts'
 import { useTicker, useTickers, useOrderbook, useTrades } from '../hooks/useTickers'
 import { useCandles } from '../hooks/useCandles'
 import { useCorrelation, useCoinStats } from '../hooks/useAnalysis'
 import { useGarch } from '../hooks/useQuant'
+import { useMarketStream } from '../hooks/useMarketStream'
+import { useLivePrice, usePulse } from '../contexts/useRealtime'
+import PageLoading from '../components/ui/PageLoading'
 
 // ── 기술적 지표 계산 ──────────────────────────────────────
 function calcMA(closes, period) {
@@ -35,6 +38,41 @@ function calcRSI(closes, period = 14) {
   })
 }
 
+// 누적 VWAP(거래량가중평균가) — 표시 구간 시작부터 누적. typical=(고+저+종)/3.
+// 현재가가 VWAP 위면 그 구간 평균 매수단가보다 비싸게 거래되는 중(매수 우위).
+function calcVWAP(candles) {
+  let pv = 0, vv = 0
+  return candles.map(c => {
+    const typical = (c.high + c.low + c.close) / 3
+    pv += typical * c.volume
+    vv += c.volume
+    return vv > 0 ? pv / vv : null
+  })
+}
+
+// 가격대별 거래량(Volume Profile) — 표시 구간 가격범위를 bins칸으로 나눠 각 캔들 거래량을
+// (고+저+종)/3 가격대 칸에 누적. 어느 가격대에 거래가 몰렸는지(지지/저항 후보)를 보여준다.
+function calcVolumeProfile(candles, bins = 24) {
+  if (!candles.length) return { rows: [], lo: 0, hi: 0 }
+  const prices = candles.flatMap(c => [c.high, c.low])
+  const lo = Math.min(...prices), hi = Math.max(...prices)
+  const span = hi - lo || 1
+  const buckets = Array.from({ length: bins }, () => 0)
+  candles.forEach(c => {
+    const typical = (c.high + c.low + c.close) / 3
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor((typical - lo) / span * bins)))
+    buckets[idx] += c.volume
+  })
+  const maxV = Math.max(...buckets, 1e-9)
+  // 위(고가)→아래(저가) 순서로, 각 칸의 가격 중앙값과 상대 거래량(0~1)
+  const rows = buckets.map((v, i) => ({
+    price: lo + (i + 0.5) / bins * span,
+    vol: v,
+    ratio: v / maxV,
+  })).reverse()
+  return { rows, lo, hi }
+}
+
 // ── 상관관계 색상 ──
 function corrColor(v) {
   if (v >= 0.7)  return 'text-red-600 bg-red-50'
@@ -44,8 +82,27 @@ function corrColor(v) {
   return 'text-blue-600 bg-blue-50'
 }
 
+// 가격대별 거래량 패널 — 차트 우측에 수평 막대(위=고가). 차트 가격축과 근사 정렬(scaleMargins 미보정).
+function VolumeProfilePanel({ candles }) {
+  const { rows } = calcVolumeProfile(candles)
+  if (!rows.length) return null
+  const slotH = 100 / rows.length
+  return (
+    <div className="w-16 h-full border-l border-gray-100 shrink-0 relative">
+      <svg width="100%" height="100%" preserveAspectRatio="none" className="block">
+        {rows.map((r, i) => (
+          <rect key={i} x="0" y={`${i * slotH}%`}
+            width={`${Math.max(2, r.ratio * 100)}%`} height={`${slotH * 0.8}%`}
+            fill="#64748b" opacity={0.35} />
+        ))}
+      </svg>
+      <span className="absolute top-0.5 right-1 text-[9px] text-gray-400">거래량대</span>
+    </div>
+  )
+}
+
 // ── 차트 컴포넌트 ──────────────────────────────────────────
-function CandlestickChart({ candles, indicators }) {
+function CandlestickChart({ candles, indicators, livePrice }) {
   const containerRef = useRef(null)
   const chartRef     = useRef(null)
   const seriesRef    = useRef({})
@@ -85,17 +142,39 @@ function CandlestickChart({ candles, indicators }) {
     chart.timeScale().fitContent()
   }, [candles])
 
+  // 실시간 가격 — 마지막 봉의 종가를 livePrice로 갱신(고/저는 넘으면 확장). 줌/스크롤은 건드리지 않음.
+  // 간단 버전: 새 봉 생성·거래량 누적은 안 함(다음 인터벌 조회 때 REST 공식값으로 재동기화).
+  useEffect(() => {
+    const { candle } = seriesRef.current
+    if (!candle || !candles.length || livePrice == null) return
+    const last = candles[candles.length - 1]
+    candle.update({
+      time: Math.floor(last.timestamp / 1000),
+      open: last.open,
+      high: Math.max(last.high, livePrice),
+      low: Math.min(last.low, livePrice),
+      close: livePrice,
+    })
+  }, [livePrice, candles])
+
   // 오버레이 지표(MA·Bollinger) — candles 또는 토글 변경 시 제거 후 재생성. fitContent 없음 → 줌 유지.
   useEffect(() => {
     const { chart } = seriesRef.current
     if (!chart || !candles.length) return
 
-    ;['ma20', 'ma60', 'bbUpper', 'bbLower'].forEach(k => {
+    ;['ma20', 'ma60', 'bbUpper', 'bbLower', 'vwap'].forEach(k => {
       if (seriesRef.current[k]) { chart.removeSeries(seriesRef.current[k]); seriesRef.current[k] = null }
     })
 
     const closes = candles.map(c => c.close)
     const times  = candles.map(c => Math.floor(c.timestamp / 1000))
+
+    if (indicators.vwap) {
+      const vwap = calcVWAP(candles)
+      const sv = chart.addSeries(LineSeries, { color: '#0891b2', lineWidth: 2, priceLineVisible: false, lastValueVisible: true })
+      sv.setData(times.map((t, i) => vwap[i] !== null ? { time: t, value: vwap[i] } : null).filter(Boolean))
+      seriesRef.current.vwap = sv
+    }
 
     if (indicators.ma) {
       const ma20 = calcMA(closes, 20)
@@ -119,7 +198,12 @@ function CandlestickChart({ candles, indicators }) {
     }
   }, [candles, indicators])
 
-  return <div ref={containerRef} className="w-full h-full" />
+  return (
+    <div className="flex w-full h-full">
+      <div ref={containerRef} className="flex-1 h-full min-w-0" />
+      {indicators.volprofile && <VolumeProfilePanel candles={candles} />}
+    </div>
+  )
 }
 
 function RSIChart({ candles }) {
@@ -216,38 +300,66 @@ function Metric({ label, value, color = 'text-gray-800', hint }) {
 // market을 prop으로 받아 라우터 의존을 없앴고, 단독 라우트는 default export wrapper가 useParams로 넘긴다.
 export function CoinDetailView({ market }) {
   const [intervalIdx, setIntervalIdx] = useState(7)
-  const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false })
+  const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false, vwap: false, volprofile: false })
 
   const { ticker, loading }   = useTicker(market)
-  const { orderbook }         = useOrderbook(market)
-  const { trades }            = useTrades(market)
+  const { orderbook: restOb } = useOrderbook(market)
+  const { trades: restTrades } = useTrades(market)
+  // 실시간 호가·체결(WS). 연결 전/초기엔 비어 있으니 REST 값으로 폴백.
+  const { orderbook: liveOb, trades: liveTrades } = useMarketStream(market)
+  const orderbook = liveOb ?? restOb
+  const trades = useMemo(() => {
+    const seen = new Set()
+    const merged = []
+    for (const t of [...liveTrades, ...restTrades]) {
+      const key = `${t.timestamp}-${t.price}-${t.volume}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push({ ...t, _key: key })
+    }
+    // 항상 최신이 맨 위(시각 내림차순) — WS 새 체결이 정확히 맨 위에서 깜빡이도록.
+    merged.sort((a, b) => b.timestamp - a.timestamp)
+    return merged.slice(0, 30)
+  }, [liveTrades, restTrades])
   const { candles }           = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
   const { data: corrData }    = useCorrelation(market)
   // 추가 지표용 — 전체 티커(시장 점유율), 코인 통계(변동성·수익률), GARCH(리스크)
   const { tickers }           = useTickers()
   const { data: coinStats }   = useCoinStats()
   const { data: garch }       = useGarch(market)
+  const liveTicker            = useLivePrice(market)  // 상단 가격 헤더 실시간
+  const priceFlash            = usePulse(liveTicker?.trade_price ?? ticker?.trade_price)
 
-  if (loading || !ticker) return (
-    <div className="py-24 flex justify-center">
-      <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-    </div>
-  )
+  if (loading || !ticker) return <PageLoading message="시세를 불러오는 중입니다…" />
 
-  const isRise = ticker.change === 'RISE'
-  const isFall = ticker.change === 'FALL'
+  // 실시간 시세(WS) 우선, 없으면 REST(ticker) 폴백 — 상단 가격 헤더가 라이브로 갱신된다.
+  const live = liveTicker
+  const price = live?.trade_price ?? ticker.trade_price
+  const chg = live?.change ?? ticker.change
+  const changePrice = live?.change_price ?? ticker.change_price
+  const changeRate = live?.change_rate ?? ticker.change_rate
+  const isRise = chg === 'RISE'
+  const isFall = chg === 'FALL'
   const priceColor = isRise ? 'text-red-500' : isFall ? 'text-blue-500' : 'text-gray-700'
 
   // 추가 지표
   const stat = coinStats.find(s => s.market === market)
   const totalVol = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
   const share = totalVol ? (ticker.acc_trade_price_24h / totalVol) * 100 : 0
+  // 거래대금 순위 — tickers는 거래대금 desc 정렬이라 인덱스가 곧 순위(추가 호출 0)
+  const volRankIdx = tickers.findIndex(t => t.market === market)
+  const volRank = volRankIdx >= 0 ? volRankIdx + 1 : null
   const w52span = ticker.w52_high - ticker.w52_low
   const w52pos = w52span > 0 ? Math.max(0, Math.min(100, (ticker.trade_price - ticker.w52_low) / w52span * 100)) : 0
   // 호가 막대폭은 표시된 호가의 최대 잔량 대비 상대 스케일 (임의 배율 대신 깊이 비교가 의미 있게)
   const maxDepth = orderbook
     ? Math.max(...orderbook.asks.map(a => a.size), ...orderbook.bids.map(b => b.size), 1e-9)
     : 1
+  // 호가 매수/매도 압력 — 표시된 호가의 매수(bid)·매도(ask) 총잔량 비율(체결강도 풍 단순화, 추가 호출 0)
+  const bidDepth = orderbook ? orderbook.bids.reduce((s, b) => s + b.size, 0) : 0
+  const askDepth = orderbook ? orderbook.asks.reduce((s, a) => s + a.size, 0) : 0
+  const depthSum = bidDepth + askDepth
+  const bidPct = depthSum > 0 ? (bidDepth / depthSum) * 100 : 50
 
   function toggleIndicator(key) {
     setIndicators(prev => ({ ...prev, [key]: !prev[key] }))
@@ -263,13 +375,15 @@ export function CoinDetailView({ market }) {
             <div className="text-base font-semibold text-gray-800">{ticker.korean_name}</div>
           </div>
           <div>
-            <div className={`text-3xl font-bold tracking-tight ${priceColor}`}>
-              {ticker.trade_price.toLocaleString()}
+            <div className="text-3xl font-bold tracking-tight">
+              <span className={`inline-block rounded px-1 ${priceColor} ${priceFlash ? `flash-${priceFlash}` : ''}`}>
+                {price.toLocaleString()}
+              </span>
               <span className="text-sm font-normal ml-1 text-gray-400">KRW</span>
             </div>
             <div className={`text-sm mt-1 ${priceColor}`}>
               {isRise ? '▲' : isFall ? '▼' : ''}{' '}
-              {ticker.change_price.toLocaleString()} ({isRise ? '+' : ''}{(ticker.change_rate * 100).toFixed(2)}%)
+              {changePrice.toLocaleString()} ({isRise ? '+' : ''}{(changeRate * 100).toFixed(2)}%)
             </div>
           </div>
           <div className="flex gap-7 ml-4 text-sm border-l border-gray-100 pl-8">
@@ -292,11 +406,14 @@ export function CoinDetailView({ market }) {
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-md p-4">
           <div className="text-sm font-semibold text-gray-700 mb-3">주요 지표</div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <Metric label="거래대금 순위" value={volRank ? `#${volRank}` : '—'} hint={`전체 ${tickers.length}종`} />
             <Metric label="30일 변동성" value={stat ? stat.volatility.toFixed(2) + '%' : '—'} hint="일간 표준편차" />
             <Metric label="1개월 수익률" value={stat ? pctSigned(stat.return_1m) : '—'}
               color={stat ? (stat.return_1m >= 0 ? 'text-red-500' : 'text-blue-500') : 'text-gray-800'} />
             <Metric label="시장 점유율" value={share.toFixed(2) + '%'} hint="24h 거래대금 비중" />
+            <Metric label="BTC 베타" value={stat ? stat.btc_beta.toFixed(2) : '—'}
+              hint={stat ? (stat.btc_beta > 1 ? 'BTC보다 민감' : stat.btc_beta < 0 ? '역행' : 'BTC보다 둔감') : 'BTC 민감도'} />
             <Metric label="GARCH 연변동성" value={garch.current_vol_annual ? garch.current_vol_annual.toFixed(1) + '%' : '—'}
               hint={garch.persistence ? `지속성 ${garch.persistence.toFixed(2)}` : '예측 중'} />
             <Metric label="1일 95% VaR" value={garch.var_95 ? '-' + garch.var_95.toFixed(2) + '%' : '—'}
@@ -343,9 +460,11 @@ export function CoinDetailView({ market }) {
             </div>
             <div className="flex gap-1 pr-2">
               {[
-                { key: 'ma',        label: 'MA',        hex: '#6366f1' },
-                { key: 'bollinger', label: 'Bollinger', hex: '#10b981' },
-                { key: 'rsi',       label: 'RSI',       hex: '#8b5cf6' },
+                { key: 'ma',         label: 'MA',        hex: '#6366f1' },
+                { key: 'bollinger',  label: 'Bollinger', hex: '#10b981' },
+                { key: 'vwap',       label: 'VWAP',      hex: '#0891b2' },
+                { key: 'volprofile', label: '거래량대',   hex: '#64748b' },
+                { key: 'rsi',        label: 'RSI',       hex: '#8b5cf6' },
               ].map(({ key, label, hex }) => (
                 <button
                   key={key}
@@ -362,7 +481,7 @@ export function CoinDetailView({ market }) {
           </div>
           <div className="px-4 pb-3 pt-2 flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0">
-              <CandlestickChart candles={candles} indicators={indicators} />
+              <CandlestickChart candles={candles} indicators={indicators} livePrice={live?.trade_price} />
             </div>
             {indicators.rsi && (
               <div className="mt-1 border-t border-gray-100 pt-1 shrink-0">
@@ -376,6 +495,19 @@ export function CoinDetailView({ market }) {
         {/* 호가창 (차트와 같은 높이, 현재가 중심 스크롤) */}
         <div className="col-span-3 bg-white border border-gray-200 rounded-md overflow-hidden flex flex-col">
           <div className="px-3 py-2.5 border-b border-gray-100 text-xs font-semibold text-gray-600 shrink-0">호가</div>
+          {orderbook && (
+            <div className="px-3 py-2 border-b border-gray-100 shrink-0">
+              <div className="flex items-center justify-between text-[10px] mb-1">
+                <span className="text-red-500 font-medium">매수 {bidPct.toFixed(0)}%</span>
+                <span className="text-gray-400">매수/매도 잔량</span>
+                <span className="text-blue-500 font-medium">매도 {(100 - bidPct).toFixed(0)}%</span>
+              </div>
+              <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100">
+                <div className="bg-red-400" style={{ width: `${bidPct}%` }} />
+                <div className="bg-blue-400" style={{ width: `${100 - bidPct}%` }} />
+              </div>
+            </div>
+          )}
           {orderbook ? (
             <div className="text-xs flex-1 min-h-0 overflow-y-auto">
               {[...orderbook.asks].reverse().map((ask, i) => (
@@ -417,7 +549,7 @@ export function CoinDetailView({ market }) {
             </thead>
             <tbody>
               {trades.map((tr, i) => (
-                <tr key={i} className="border-t border-gray-50 text-xs">
+                <tr key={tr._key ?? i} className={`border-t border-gray-50 text-xs ${i === 0 && tr._id ? (tr.side === 'BID' ? 'flash-up' : 'flash-down') : ''}`}>
                   <td className="px-3 py-1.5 text-gray-400">{fmtTime(tr.timestamp)}</td>
                   <td className={`px-3 py-1.5 text-right font-medium ${tr.side === 'BID' ? 'text-red-500' : 'text-blue-500'}`}>
                     {tr.price.toLocaleString()}

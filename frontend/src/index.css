@@ -38,3 +38,9 @@ body {
 table, .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* 실시간 가격 펄스 — WebSocket으로 가격이 바뀌는 순간 셀이 잠깐 빨강(상승)/파랑(하락)으로 깜빡 */
+@keyframes flashUp   { 0% { background-color: rgba(239, 68, 68, 0.28); } 100% { background-color: transparent; } }
+@keyframes flashDown { 0% { background-color: rgba(59, 130, 246, 0.28); } 100% { background-color: transparent; } }
+.flash-up   { animation: flashUp 0.5s ease-out; }
+.flash-down { animation: flashDown 0.5s ease-out; }

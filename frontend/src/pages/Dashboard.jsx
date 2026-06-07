@@ -8,13 +8,12 @@ import { useTickers } from '../hooks/useTickers'
 import { useCategoryMonthly, useCoinStats } from '../hooks/useAnalysis'
 import { useRegime } from '../hooks/useQuant'
 import { DOM_COLORS, SERIES } from '../theme'
-import CartButton from '../components/CartButton'
+import PageLoading from '../components/ui/PageLoading'
+import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
 const PRICE_TABLE_N = 10     // 시세 요약 미니표 행 수 (상세 전체는 코인목록 — 여기는 요약)
 
-const fmtRate = r => (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
-const changeColor = c => (c === 'RISE' ? 'text-red-500' : c === 'FALL' ? 'text-blue-500' : 'text-gray-600')
 
 // 시장 국면 색 (약세→강세): 파랑→회색→빨강 (Analysis RegimeSection과 동일 팔레트)
 const REGIME_COLORS = ['#3b82f6', '#94a3b8', '#fca5a5', '#ef4444']
@@ -40,20 +39,15 @@ const OPPORTUNITY_MAJORS_N = 30  // 52주·급등급락 시그널 대상 = 거�
 // 종목 칩 — 클릭은 상세 이동, 옆 + 버튼은 카트 담기
 function StockChip({ market, korean_name, value, valueColor, navigate }) {
   return (
-    <div className="inline-flex items-stretch border border-gray-200 rounded-md overflow-hidden hover:border-brand-300 transition-colors">
-      <button
-        type="button"
-        onClick={() => navigate(`/coins/${market}`)}
-        className="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer hover:bg-gray-50 transition-colors"
-        title={korean_name}
-      >
-        <span className="font-semibold text-gray-700">{market.replace('KRW-', '')}</span>
-        {value != null && <span className={`tabular-nums font-medium ${valueColor || ''}`}>{value}</span>}
-      </button>
-      <div className="flex items-center border-l border-gray-200 bg-gray-50">
-        <CartButton market={market} />
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={() => navigate(`/coins/${market}`)}
+      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded-md border border-gray-200 cursor-pointer hover:border-brand-300 hover:bg-gray-50 transition-colors"
+      title={korean_name}
+    >
+      <span className="font-semibold text-gray-700">{market.replace('KRW-', '')}</span>
+      {value != null && <span className={`tabular-nums font-medium ${valueColor || ''}`}>{value}</span>}
+    </button>
   )
 }
 
@@ -92,6 +86,12 @@ function OpportunityFeed({ tickers, coinStats, monthly }) {
     .sort((a, b) => b.change_rate - a.change_rate)
     .slice(0, 6)
 
+  // 2b. 거래량 급증 — 최신 일봉 거래량이 직전 7일 평균의 3배 이상(이벤트·관심 급증)
+  const surge = [...coinStats]
+    .filter(s => s.vol_surge >= 3)
+    .sort((a, b) => b.vol_surge - a.vol_surge)
+    .slice(0, 6)
+
   // 3. 안정 상승 모멘텀 — 1개월 수익률 양수 + 변동성 적당히 낮음 (수익/변동성 비율 상위)
   //    "변동성 1단위당 수익이 좋은" 종목 — 리스크 조정 수익률(샤프 풍) 단순화 버전
   const stable = [...coinStats]
@@ -117,7 +117,7 @@ function OpportunityFeed({ tickers, coinStats, monthly }) {
           <div className="text-xs text-gray-400 mt-0.5">{todayStr} · 시장에 새로 생긴 변화 — 종목 칩 클릭으로 상세, + 버튼으로 분석 카트에 담기</div>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
 
         {/* 1. 52주 새 경신 */}
         <SignalCard
@@ -172,6 +172,26 @@ function OpportunityFeed({ tickers, coinStats, monthly }) {
               {gainers.map(t => (
                 <StockChip key={t.market} market={t.market} korean_name={t.korean_name}
                   value={`+${(t.change_rate * 100).toFixed(1)}%`} valueColor="text-red-500" navigate={navigate} />
+              ))}
+            </div>
+          )}
+        </SignalCard>
+
+        {/* 2b. 거래량 급증 */}
+        <SignalCard
+          title="거래량 급증"
+          hint="최신 거래량 ≥ 7일 평균 3배"
+          accent="bg-amber-500"
+          count={surge.length}
+          link="/screener" linkLabel="조건 스크리닝"
+        >
+          {surge.length === 0 ? (
+            <div className="text-xs text-gray-400 py-3">거래량 급증 종목 없음</div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {surge.map(s => (
+                <StockChip key={s.market} market={s.market} korean_name={s.korean_name}
+                  value={`${s.vol_surge.toFixed(1)}배`} valueColor="text-amber-600" navigate={navigate} />
               ))}
             </div>
           )}
@@ -349,8 +369,8 @@ function SectorPerf({ monthly }) {
 }
 
 // 시장 종합 추세 (focal) — 동일가중 시장지수 + HMM 평온/격동 국면 밴드. get_regime 재활용(추가 호출 0).
-function MarketTrendChart() {
-  const { data, loading } = useRegime(2)
+// data는 페이지(Dashboard)가 통짜 로딩으로 보장해 prop으로 내려준다(요소별 스피너 없음).
+function MarketTrendChart({ data }) {
   const segments = useMemo(() => {
     const segs = []
     let start = 0
@@ -375,14 +395,9 @@ function MarketTrendChart() {
         )}
       </div>
       <div className="text-xs text-gray-400 mb-3">
-        전 종목 동일가중 시장지수 · 배경 = 평온/격동 국면(HMM) · <Link to="/structure#regime" className="text-brand-600 hover:underline">자세히 →</Link>
+        전 종목 동일가중 시장지수 · 배경 = 평온/격동 국면(HMM) · <Link to="/regime#regime" className="text-brand-600 hover:underline">자세히 →</Link>
       </div>
-      {loading ? (
-        <div className="h-[340px] flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={340}>
+      <ResponsiveContainer width="100%" height={340}>
           <ComposedChart data={data.points} margin={{ top: 4, right: 16, bottom: 0, left: -8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
             {segments.map((s, i) => (
@@ -396,8 +411,7 @@ function MarketTrendChart() {
               formatter={v => [v.toFixed(1), '시장지수']} />
             <Area dataKey="index" stroke="#1763b6" strokeWidth={1.5} fill="#1763b6" fillOpacity={0.06} dot={false} isAnimationActive={false} />
           </ComposedChart>
-        </ResponsiveContainer>
-      )}
+      </ResponsiveContainer>
     </div>
   )
 }
@@ -438,7 +452,6 @@ function PriceTable({ tickers }) {
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400">
             <th className="px-3 py-2 text-right font-medium w-9">#</th>
-            <th className="w-6"></th>
             <th className="px-3 py-2 text-left font-medium">코인</th>
             <th className="px-3 py-2 text-right font-medium">현재가</th>
             <th className="px-3 py-2 text-right font-medium">24h</th>
@@ -450,18 +463,17 @@ function PriceTable({ tickers }) {
             <tr key={t.market} onClick={() => navigate(`/coins/${t.market}`)}
               className="border-t border-gray-50 hover:bg-gray-50 cursor-pointer">
               <td className="px-3 py-2 text-right text-xs text-gray-400 tabular-nums">{i + 1}</td>
-              <td className="pl-1 pr-1 py-2 text-center"><CartButton market={t.market} /></td>
               <td className="px-3 py-2">
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-gray-800">{t.korean_name}</span>
                   <span className="text-[11px] text-gray-400">{t.market.replace('KRW-', '')}</span>
                 </div>
               </td>
-              <td className={`px-3 py-2 text-right text-sm font-medium ${changeColor(t.change)}`}>
-                {t.trade_price.toLocaleString()}
+              <td className="px-3 py-2 text-right text-sm">
+                <LivePrice ticker={t} />
               </td>
-              <td className={`px-3 py-2 text-right text-sm font-medium ${changeColor(t.change)}`}>
-                {fmtRate(t.change_rate)}
+              <td className="px-3 py-2 text-right text-sm">
+                <LiveChangeRate ticker={t} />
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-center"><MiniSpark ticker={t} /></div>
@@ -507,14 +519,12 @@ function MarketBreadth({ tickers }) {
 export default function Dashboard() {
   const { tickers, loading: tickersLoading } = useTickers()
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
-  const { data: coinStats } = useCoinStats()  // Opportunity Feed의 "안정 상승 모멘텀"용
+  const { data: coinStats, loading: statsLoading } = useCoinStats()  // Opportunity Feed의 "안정 상승 모멘텀"용
+  const { data: regime, loading: regimeLoading } = useRegime(2)       // 시장 종합 추세(focal)
 
-  if (tickersLoading || monthlyLoading) {
-    return (
-      <div className="py-24 flex justify-center">
-        <div className="w-8 h-8 border-2 border-gray-200 border-t-brand-500 rounded-full animate-spin" />
-      </div>
-    )
+  // 페이지가 쓰는 데이터가 모두 준비될 때까지 통짜 로딩(요소별 스피너 없음)
+  if (tickersLoading || monthlyLoading || statsLoading || regimeLoading) {
+    return <PageLoading />
   }
 
   // KPI — 다른 위젯과 겹치지 않는 지표만. (도미넌스→지배력 도넛, 상승비율→시장 폭 위젯과 중복이라 제외)
@@ -559,7 +569,7 @@ export default function Dashboard() {
       </div>
 
       {/* ② 히어로 focal — 시장 종합 추세 (전폭·확대, 명확한 주인공) */}
-      <MarketTrendChart />
+      <MarketTrendChart data={regime} />
 
       {/* ③ 오늘의 시그널 — 액션 트리거 (전폭) */}
       <OpportunityFeed tickers={tickers} coinStats={coinStats} monthly={monthly} />

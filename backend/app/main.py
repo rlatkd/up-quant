@@ -1,10 +1,12 @@
 import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+import websockets
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.logging import request_id, setup_logging
@@ -99,3 +101,120 @@ app.include_router(quant.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── 실시간 시세 중계 (업비트 WebSocket → 프론트) ────────────────
+# 성능 원칙: 클라이언트가 몇이 붙든 업비트 WS는 "단 1개"만 유지하고, 받은 메시지를 모든
+# 클라이언트에 fan-out한다(클라이언트당 업비트 연결을 새로 열면 다중 탭/인스턴스에서 연결이
+# N개로 늘어 비효율). 신규 클라이언트엔 최신 스냅샷(latest)을 먼저 보내 즉시 화면이 채워지게 한다.
+_UPBIT_WS = "wss://api.upbit.com/websocket/v1"
+
+
+class TickerHub:
+    """업비트 ticker WS 1개를 구독자(클라이언트) 전체에 중계하는 공유 허브."""
+
+    def __init__(self) -> None:
+        self.clients: set[WebSocket] = set()
+        self.latest: dict[str, dict] = {}   # market → 최신 메시지 (신규 클라이언트 스냅샷용)
+        self.task: asyncio.Task | None = None
+
+    async def add(self, ws: WebSocket) -> None:
+        self.clients.add(ws)
+        # 최신 스냅샷 즉시 푸시 — REST 응답을 기다리지 않고 바로 시세가 채워진다.
+        for msg in list(self.latest.values()):
+            try:
+                await ws.send_json(msg)
+            except Exception:  # noqa: BLE001
+                break
+        if self.task is None or self.task.done():
+            self.task = asyncio.create_task(self._run())
+
+    def remove(self, ws: WebSocket) -> None:
+        self.clients.discard(ws)
+
+    async def _run(self) -> None:
+        """구독자가 있는 동안 업비트 WS를 유지하며 fan-out. 끊기면 재연결."""
+        from app.services import market_service
+        markets = await asyncio.to_thread(market_service.valid_markets)
+        req = json.dumps([{"ticket": "upquant"}, {"type": "ticker", "codes": markets}])
+        while self.clients:
+            try:
+                async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None) as upbit:
+                    await upbit.send(req)
+                    api_log.info("ticker hub: 업비트 WS 연결 (구독자 %d)", len(self.clients))
+                    async for raw in upbit:
+                        if not self.clients:
+                            break
+                        d = json.loads(raw)  # 업비트는 binary frame(JSON)
+                        msg = {
+                            "market": d["code"],
+                            "trade_price": d["trade_price"],
+                            "change": d["change"],                  # RISE | FALL | EVEN
+                            "change_rate": d["signed_change_rate"],  # 부호 있음
+                            "change_price": d["change_price"],
+                            "acc_trade_price_24h": d["acc_trade_price_24h"],
+                        }
+                        self.latest[d["code"]] = msg
+                        for c in list(self.clients):
+                            try:
+                                await c.send_json(msg)
+                            except Exception:  # noqa: BLE001 — 끊긴 클라이언트 정리
+                                self.clients.discard(c)
+            except Exception as e:  # noqa: BLE001 — 업비트 끊김 → 잠시 후 재연결
+                api_log.warning("ticker hub: 업비트 WS 재연결 (%s)", e)
+                await asyncio.sleep(2)
+        api_log.info("ticker hub: 구독자 0 → 업비트 WS 중단")
+
+
+_ticker_hub = TickerHub()
+
+
+@app.websocket("/ws/tickers")
+async def ws_tickers(client: WebSocket):
+    await client.accept()
+    await _ticker_hub.add(client)
+    try:
+        # 클라이언트가 보내는 건 없지만, 연결 종료를 감지하려면 수신 대기해야 한다.
+        while True:
+            await client.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _ticker_hub.remove(client)
+
+
+@app.websocket("/ws/market/{market}")
+async def ws_market(client: WebSocket, market: str):
+    """코인 상세용 — 한 종목의 호가(orderbook)·체결(trade)을 실시간 중계.
+    종목별 on-demand(상세를 열 때만)라 클라이언트당 1연결. ticker(전체)와 달리 공유 허브가 불필요."""
+    await client.accept()
+    req = json.dumps([
+        {"ticket": "upquant"},
+        {"type": "orderbook", "codes": [market]},
+        {"type": "trade", "codes": [market]},
+    ])
+    try:
+        async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None) as upbit:
+            await upbit.send(req)
+            async for raw in upbit:
+                d = json.loads(raw)
+                typ = d.get("type")
+                if typ == "orderbook":
+                    units = d.get("orderbook_units", [])
+                    await client.send_json({
+                        "type": "orderbook",
+                        "asks": [{"price": u["ask_price"], "size": u["ask_size"]} for u in units],
+                        "bids": [{"price": u["bid_price"], "size": u["bid_size"]} for u in units],
+                    })
+                elif typ == "trade":
+                    await client.send_json({
+                        "type": "trade",
+                        "timestamp": int(d["trade_timestamp"] // 1000),
+                        "price": d["trade_price"],
+                        "volume": d["trade_volume"],
+                        "side": d["ask_bid"],  # ASK | BID
+                    })
+    except (WebSocketDisconnect, websockets.ConnectionClosed):
+        pass
+    except Exception as e:  # noqa: BLE001
+        api_log.warning("ws_market(%s) 종료: %s", market, e)
