@@ -1,12 +1,11 @@
 # UPquant
 
-> 업비트(Upbit) KRW 마켓 암호화폐 **퀀트 분석 대시보드**
+> **퀀트 분석 대시보드**
 
 UPquant는 업비트 KRW 마켓에 상장된 암호화폐 **약 260종 전체**를, 업비트 Open API와 데이터랩 웹스크래핑으로 수집해 **퀀트 트레이딩의 의사결정 흐름**(① 시장 국면 → ② 자산 구조·리스크 → ③ 팩터·전략 → ④ 포트폴리오 → ⑤ 백테스트 검증)대로 한 화면에서 정량 분석하는 웹 대시보드입니다.
 
 단순 시세 조회를 넘어 **상관분석·PCA·군집·GARCH·HMM·공적분·평균-분산 최적화·모멘텀 팩터·VaR** 등 9가지 정량 기법을, 각 기법의 고전 선행연구(Markowitz, Engle, Hamilton, Mantegna, Jegadeesh-Titman 등)에 기반해 구현하고 하나의 의사결정 흐름으로 연결한 것이 핵심입니다.
 
-> 성균관대학교 퀀트응용경제학과 '경제데이터분석입문' 기말 프로젝트로 출발했으며, "Web Scraping & Dashboard"를 주제로 공개 API와 웹스크래핑을 결합했습니다.
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python_3.11+-3776AB?logo=python&logoColor=white">
@@ -21,11 +20,11 @@ UPquant는 업비트 KRW 마켓에 상장된 암호화폐 **약 260종 전체**�
 
 ## 목차
 
-- [무엇을 답하는가](#무엇을-답하는가) — 왜 만들었나 (일반·금융)
-- [분석 프레임워크](#분석-프레임워크) — 퀀트 의사결정 흐름 · 9기법 · 선행연구 (금융)
+- [무엇을 답하는가](#무엇을-답하는가)
+- [분석 프레임워크](#분석-프레임워크)
 - [화면 구성](#화면-구성)
-- [기술 스택](#기술-스택) — (개발)
-- [아키텍처](#아키텍처) — (개발)
+- [기술 스택](#기술-스택)
+- [아키텍처](#아키텍처)
 - [데이터 소스](#데이터-소스)
 - [프로젝트 구조](#프로젝트-구조)
 - [시작하기](#시작하기)
@@ -172,7 +171,7 @@ flowchart LR
     hub -- "업비트 WS 1개" --> upbitws["Upbit WebSocket"]
 ```
 
-**Backend 레이어** — Spring과 유사한 계층 구조
+**Backend 레이어**
 
 ```
 routers/   ← HTTP/WS 진입점        (≈ @RestController)
@@ -185,7 +184,7 @@ clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재
 - **정량 분석**(`quant_service.py`)은 별도 데이터를 받지 않고 **공용 일봉 캐시를 재사용**합니다(`returns_matrix` 헬퍼 → 추가 팬아웃 0, 계산만).
 - **실시간 중계**(`main.py:TickerHub`)는 업비트 ticker WebSocket을 **단 1개**만 열어 모든 클라이언트에 fan-out합니다. REST 캐시의 "대량 팬아웃은 1회만, 이후 공유" 원칙을 WebSocket으로 옮긴 것입니다.
 
-**관측성(Observability)** — 프론트 axios 인터셉터 → 백엔드 미들웨어 → 업비트 `event_hook`이 모두 동일한 **요청 ID(rid)** 로 로깅됩니다. 백엔드가 `X-Request-Id` 헤더로 rid를 내려주며, Spring의 MDC처럼 한 요청의 전 구간을 grep 한 번으로 추적할 수 있습니다.
+**관측성(Observability)** — 프론트 axios 인터셉터 → 백엔드 미들웨어 → 업비트 `event_hook`이 모두 동일한 **요청 ID(rid)** 로 로깅됩니다. 백엔드가 `X-Request-Id` 헤더로 rid를 내려주며, 한 요청의 전 구간을 grep 한 번으로 추적할 수 있습니다.
 
 ---
 
@@ -221,32 +220,60 @@ up-quant/
 │   │   │   └── upbit_rest.py         # 업비트 REST 클라이언트 (httpx · 스로틀 · 429 재시도 · event_hook 로깅)
 │   │   ├── data/
 │   │   │   └── upbit_sectors.json    # 데이터랩 '코인 분류' 스크랩 스냅샷 (섹터)
-│   │   ├── schemas/                  # Pydantic 응답 모델 (market · candle · analysis · backtest · quant)
-│   │   ├── services/                 # 비즈니스 로직 (업비트 응답 가공 + 캐싱)
+│   │   ├── routers/                  # HTTP 엔드포인트 (≈ @RestController)
+│   │   │   ├── markets.py            # /api/markets/*  현재가·요약·호가·체결
+│   │   │   ├── candles.py            # /api/candles/*  캔들
+│   │   │   ├── analysis.py           # /api/analysis/* 카테고리·코인통계·상관관계
+│   │   │   ├── backtest.py           # /api/backtest/* MA·RSI·전략비교·워크포워드·포트폴리오
+│   │   │   └── quant.py              # /api/quant/*    정량/ML 9종
+│   │   ├── services/                 # 비즈니스 로직 + 캐싱 (≈ @Service)
 │   │   │   ├── market_service.py     # 현재가·한글명·호가·체결·요약·52주·스파크라인
 │   │   │   ├── candle_service.py     # 캔들 (일봉 200개 캐시 후 슬라이스 공유)
 │   │   │   ├── analysis_service.py   # 변동성·1개월수익률·상관관계·섹터 수익률 (실데이터)
-│   │   │   ├── backtest_service.py   # MA크로스·RSI·전략비교·워크포워드·포트폴리오 보유
-│   │   │   └── quant_service.py      # 정량/ML 9종 (공용 returns_matrix + Markowitz·PCA·군집·GARCH·HMM·공적분·모멘텀…)
-│   │   └── routers/                  # HTTP 엔드포인트 (markets · candles · analysis · backtest · quant)
+│   │   │   ├── backtest_service.py   # MA크로스·RSI·전략비교·워크포워드·포트폴리오 보유 (거래비용·벤치마크)
+│   │   │   └── quant_service.py      # 공용 returns_matrix + Markowitz·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR
+│   │   └── schemas/                  # Pydantic 응답 모델(DTO)
+│   │       ├── market.py             # Ticker · MarketSummary · Orderbook · Trade
+│   │       ├── candle.py             # CandleItem
+│   │       ├── analysis.py           # CategoryReturns · CoinStat · CorrelationItem
+│   │       ├── backtest.py           # BacktestResult · StrategyCompareResult · WalkForwardResult · PortfolioBacktestResult
+│   │       └── quant.py              # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
 │   └── requirements.txt
 ├── frontend/                         # React + Vite SPA
 │   ├── src/
+│   │   ├── main.jsx                  # 앱 진입점 (ReactDOM)
 │   │   ├── App.jsx                   # 라우트 정의 · RealtimeProvider
 │   │   ├── index.css                 # Tailwind 엔트리 + @theme 색 토큰(업비트 블루) · 실시간 펄스 애니메이션
 │   │   ├── theme.js                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
-│   │   ├── api/                      # axios 호출 래퍼 (+ 요청 ID 인터셉터)
-│   │   ├── hooks/                    # 데이터 페칭 훅 (useTickers · useCandles · useAnalysis · useQuant · useMarketStream …)
-│   │   ├── contexts/                 # 실시간 시세 (Realtime · realtimeStore · useRealtime — 외부 store + selector)
+│   │   ├── api/                      # axios 호출 래퍼
+│   │   │   ├── client.js             # axios 인스턴스 + 요청/응답 로깅 인터셉터(rid)
+│   │   │   └── markets.js · candles.js · analysis.js · backtest.js · quant.js
+│   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 패턴)
+│   │   │   ├── useTickers.js · useCandles.js · useAnalysis.js · useQuant.js
+│   │   │   └── useMarketStream.js    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
+│   │   ├── contexts/                 # 실시간 시세 (외부 store + 종목별 selector)
+│   │   │   ├── Realtime.jsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
+│   │   │   ├── realtimeStore.js      # 외부 store (종목별 리스너 — useSyncExternalStore)
+│   │   │   └── useRealtime.js        # useLivePrice · useWsConnected · usePulse
 │   │   ├── components/
 │   │   │   ├── ui/                   # 공용 UI (Spinner · Card · StatCard · PageLoading)
+│   │   │   ├── layout/               # Header · Footer · Layout(+ErrorBoundary)
 │   │   │   ├── LiveCells.jsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
 │   │   │   ├── ErrorBoundary.jsx     # 페이지 단위 에러 경계
-│   │   │   ├── InfoTooltip.jsx       # 제목 옆 ? 호버 안내
-│   │   │   └── layout/               # Header · Footer · Layout
-│   │   └── pages/                    # 라우트별 페이지 (Dashboard · Explore · Analysis · CoinList · CoinDetail · Tools …)
-│   └── package.json
-├── references/                       # 기획서 · API 명세 · 엔지니어링 노트 · 발표 자료(pt/)
+│   │   │   └── InfoTooltip.jsx       # 제목 옆 ? 호버 안내
+│   │   └── pages/                    # 라우트별 페이지
+│   │       ├── CoinList.jsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
+│   │       ├── CoinDetail.jsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
+│   │       ├── Dashboard.jsx         # '/dashboard' — 관제탑(시그널·KPI·시장추세·시세표)
+│   │       ├── Explore.jsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
+│   │       ├── Market.jsx · Sectors.jsx · Screener.jsx   # 탐색 본문(Explore가 재사용)
+│   │       ├── Analysis.jsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
+│   │       ├── Tools.jsx             # '/tools/*' 래퍼 (PortfolioPage·BacktestPage·ComparePage)
+│   │       ├── Backtest.jsx · Compare.jsx   # 전략도구 본문(Tools가 재사용)
+│   │       └── Guide.jsx · Help.jsx  # '/guide' · '/help' (별도 창)
+│   └── index.html · vite.config.js · eslint.config.js · package.json
+├── references/                       # 기획서 · API 명세(API.md) · 엔지니어링 노트 · 발표 자료(pt/)
+├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~25)
 └── pages.md                          # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 (보조 작업 문서)
 ```
 
@@ -342,27 +369,6 @@ npm run dev
 | 마켓목록 · 한글명 | 3600s | 1콜 |
 
 각 키는 **신선**(TTL 내, 캐시 즉시 반환) / **stale**(만료, 옛 값 즉시 반환 + 백그라운드 1스레드 갱신) / **콜드**(키 없음, 동기 fetch) 3가지 상태로 동작하며, 재검증은 **요청이 들어와 stale을 발견했을 때만**(lazy) 수행합니다.
-
----
-
-## 현재 상태 & 로드맵
-
-> ✅ 업비트 시세 Open API + WebSocket 실연동, 데이터랩 '코인 분류' 스크랩, 정량 분석 9종, 실시간 시세까지 완료. 작업 이력 전체는 [`CLAUDE.md`](CLAUDE.md) 작업 이력(Phase 0~25)을 참고하세요.
-
-**완료 (핵심)**
-- [x] **데이터 연동** — 업비트 시세 REST(현재가·캔들·호가·체결·52주, 약 261종) + **실시간 WebSocket 중계**(`/ws/tickers`·`/ws/market`) + 데이터랩 '코인 분류' 웹스크래핑(5섹터)
-- [x] **성능/관측성** — 인메모리 TTL 캐시(SWR·single-flight) · 부팅 동기 프리페치 · 스로틀 · 429 재시도 · rid 3계층 통합 로깅 · WS 공유 허브
-- [x] **정량 분석 9종** — 상관 네트워크(MST) · PCA · K-means/계층 군집 · GARCH+VaR · HMM 국면 · 공적분 페어 · Markowitz 효율적 경계선 · 횡단면 모멘텀 팩터 · VaR (공용 일봉 캐시 재사용)
-- [x] **백테스트** — MA크로스 · RSI · 전략 비교 · 워크포워드(in/out-of-sample) · 포트폴리오 보유 / 거래비용(5bps) · buy&hold/BTC 벤치마크 · 알파 · Sharpe/Sortino/Calmar
-- [x] **IA** — 코인 목록(메인, master-detail) · 대시보드(관제탑) · 탐색(마켓·섹터·스크리너) · 정량분석 4탭(시장 구조·국면·팩터·리스크) · 전략 도구 3종(`/tools/*`) · 공통 푸터 · 에러 바운더리
-- [x] **UI** — 업비트 톤(블루 액센트·Pretendard) · 실시간 가격 펄스 · 통합 로딩 컴포넌트
-
-**다음 작업**
-1. [ ] **브라우저 육안 검증** — 효율적 경계선 곡선 · 시장 구조/국면 분리 · 실시간 펄스/연결 인디케이터 · 전략 비교 · 워크포워드
-2. [ ] **실시간 확장** — 코인목록/마켓 순위 실시간 정렬·갱신, WS 재연결 백오프 튜닝, 체결 스트림 시각화
-3. [ ] **표시 종수 일관성** — 요약(10) vs 분석(VaR 30·산점도 120) 구분 명문화
-
-**의도적으로 보류**: Redis(분산 캐시) · TypeScript 마이그레이션 · 테스트 코드 · 다크모드 · 배포 설정
 
 ---
 
