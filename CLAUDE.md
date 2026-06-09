@@ -12,10 +12,12 @@
 ```bash
 # 백엔드 (venv: backend/.venv)
 cd backend && .venv/bin/fastapi dev app/main.py     # → :8000, /docs
+cd backend && SKIP_PREFETCH=1 .venv/bin/fastapi dev app/main.py  # dev: 부팅 워밍 건너뜀(리로드마다 1~2분 대기 제거, 첫 요청만 콜드)
 # 프론트
 cd frontend && npm run dev                          # → :5173
 ```
 Node는 22.x(nvm) 사용. 두 서버를 함께 실행해야 함(프론트가 `http://localhost:8000` 호출, CORS는 `:5173` 허용).
+- **환경변수(배포·이식)**: 프론트 `VITE_API_BASE`/`VITE_WS_BASE`(미지정 시 localhost:8000, `frontend/.env.example` 참고), 백엔드 `CORS_ORIGINS`(콤마 또는 JSON 리스트)·`SKIP_PREFETCH`. 로컬은 전부 기본값으로 동작.
 
 ## 아키텍처 (Spring 유사 계층, 단방향)
 
@@ -107,14 +109,15 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **효율적 경계선 곡선 + 시장구조 2분리 + 신뢰성 경고 정비 + 성능/죽은코드 정리 + 분석 카트 제거 + 에러 바운더리 + 코인상세 보강(2026-06-06)** — Phase 24. 상세는 작업 이력 Phase 24.
 - **실시간 WebSocket 시세 중계 + 백테스트 강화(전략 비교·워크포워드·BTC 벤치마크) + 통합 로딩 컴포넌트(2026-06-07)** — Phase 25. 상세는 작업 이력 Phase 25.
 - **수익률/위험조정 레버 4종 + AI 리포트 + UX·운영 묶음 + 전면 TypeScript(2026-06-07)** — Phase 26. **신규 기능**: A-D(시장 폭) 라인·몬테카를로 백테스트·추세추종(TSMOM)·가격 알림(🔔 토스트)·다크모드·차트 PNG export·비교 공유 링크·시스템 모니터링(`/system` 자체 메트릭). **수익률 레버**: TSMOM 고도화(12-1 skip·국면/크래시 필터·변동성 타게팅·히스테리시스 → 하락장 MDD 35→12%)·Ledoit-Wolf 수축 공분산+리스크 패리티·Historical VaR/CVaR·유동성 슬리피지·다중검정 과최적화 p값. **AI 전략 리포트**(Gemini, 호출부 주석·종류별 차등 캐시). **엔지니어링**: requirements 정리·수치 pytest 9개·라우트 코드 스플리팅·CI·cache 재검증 메트릭·**전 프론트 `.tsx` 전환(tsc 그린)**·Backtest 파일 분리. (이미 구현돼 있던 것 발견: BTC베타·z-score·거래량급증·VWAP/Volume Profile.) 상세는 작업 이력 Phase 26.
+- **운영 견고화: WS SSL 픽스 + 환경변수화 + 프론트 에러 UX + 테스트 확대(2026-06-09)** — Phase 27. macOS 프레임워크 Python의 깨진 CA 심링크로 업비트 `wss://`가 전부 실패하던 것을 certifi 컨텍스트 명시로 수정, 프론트 `VITE_API_BASE`/`WS_BASE`·백엔드 `CORS_ORIGINS`/`SKIP_PREFETCH` 환경변수화(하드코딩 제거), `/health` readiness, 조용한 fetch 실패→`useFetch`+`PageError` 재시도 UI(훅 error/retry + 페이지 7곳), pytest 9→20개. 상세는 작업 이력 Phase 27.
 
 **다음 작업 (우선순위 순)**
-1. **브라우저 육안 검증** — Phase 24~26 변경분(다크모드·가격알림 토스트·AI 리포트 모달·몬테카를로 부채꼴·추세추종·A-D 라인·시스템 모니터링·효율적 경계선 곡선·실시간 펄스) 전부 미검증. **신규 백엔드 라우트는 서버 재기동 필요**.
+1. **브라우저 육안 검증** — Phase 24~27 변경분(다크모드·가격알림 토스트·AI 리포트 모달·몬테카를로 부채꼴·추세추종·A-D 라인·시스템 모니터링·효율적 경계선 곡선·실시간 펄스·**Phase 27 에러 재시도 UI·실시간 WS 복구**) 전부 미검증. **신규 백엔드 라우트는 서버 재기동 필요**.
 2. **TS strict 점진 강화** — 현재 `strict:false`로 전환 완료(빌드·lint·`tsc --noEmit` 그린). `any` 캐스팅·`useState` 제네릭을 실제 타입(API 응답 인터페이스)으로 좁히기.
 3. **수익률 레버 후속(선택)** — 인트라데이(분봉) 백테스트·김치프리미엄·멀티팩터 컴포지트 스코어.
 4. **AI 리포트 LLM 연동** — `GEMINI_API_KEY` + `report_service.py` Gemini 호출부 주석 해제.
 
-**의도적으로 보류**: Redis(분산 캐시, 나중 작업) · LLM 종목 한 줄 요약(나중 작업) · async httpx(병목=업비트 레이트리밋이라 실익 음) · 배포 설정. (※ TypeScript·다크모드·테스트 코드는 Phase 26에서 완료돼 보류 해제.)
+**의도적으로 보류**: **Docker화(Dockerfile·docker-compose, 나중 작업)** · Redis(분산 캐시, 나중 작업) · LLM 종목 한 줄 요약(나중 작업) · async httpx(병목=업비트 레이트리밋이라 실익 음). (※ TypeScript·다크모드·테스트 코드는 Phase 26~27에서 완료돼 보류 해제. 환경변수화로 배포 설정 일부 진척.)
 
 ## 작업 이력
 
@@ -340,3 +343,13 @@ P2-1~P2-3 묶음.
 - **정직하게 제외**: async httpx(병목=업비트 레이트리밋이라 실익 음, 동기 전계층 비동기화는 리스크만), Redis·LLM 종목 한줄요약은 나중 작업 보류. (의사결정 엔지니어링노트 참조)
 - 검증: 단계마다 백엔드 `compileall`·`pytest 9/9`·라우트 36, 프론트 `build`·`lint`·`tsc` 그린. 신규 기능은 직접 실데이터 호출로 산출 확인. **브라우저 육안 미검증**(서버 재기동 필요).
 - 검증: `py_compile`·`vite build`·ESLint 통과, 라우트 27개 + WS 2개. **브라우저 육안 미검증**(실시간 펄스·연결 인디케이터·전략 비교·워크포워드).
+
+### Phase 27 — 운영 견고화: SSL 픽스 + 환경변수화 + 프론트 에러 UX + 테스트 확대 (2026-06-09)
+"전체 점검 후 개선점" 요청에서 출발. 배포·다른 PC 이식·실패 시 UX 등 **운영 견고화** 묶음(새 기능 아님).
+- **WS SSL 인증서 버그 수정**(맥 발견): 업비트 `wss://` 연결이 `CERTIFICATE_VERIFY_FAILED`로 전부 실패(호가·체결·시세 허브 죽음). 원인 = macOS 프레임워크 Python(3.13)의 기본 CA 번들 `cert.pem`이 프레임워크 site-packages의 certifi를 가리키는 **깨진 심링크**(거기엔 certifi 미설치) → `ssl.create_default_context()`가 CA 0개 로드. REST(httpx)는 자체 certifi라 무사했음. **수정**: `main.py`에 `_SSL_CTX = ssl.create_default_context(cafile=certifi.where())` 만들어 `websockets.connect` 2곳(시세 허브 + 종목별 호가/체결)에 `ssl=_SSL_CTX` 명시. 환경 비의존(맥/윈/리눅스 공통). certifi는 이미 requirements에 핀.
+- **환경변수화(배포·이식 가능화)**: ⑴프론트 — `src/config.ts` 신설(`API_BASE`=`VITE_API_BASE`||localhost:8000, `WS_BASE`=`VITE_WS_BASE`||API_BASE의 http→ws 치환). `api/client.ts`(baseURL)·`contexts/Realtime.tsx`·`hooks/useMarketStream.ts`(`ws://...:8000` 하드코딩 제거)가 사용. `vite-env.d.ts`에 env 타입 + `.env.example`. ⑵백엔드 — `config.py`가 `CORS_ORIGINS` 환경변수를 읽음(CSV·JSON 리스트 둘 다, `NoDecode`+`field_validator`. pydantic-settings가 list를 JSON 선파싱하는 걸 `NoDecode`로 끄고 validator가 콤마분리). `main.py`가 하드코딩 대신 `settings.cors_origins` 사용(이전엔 설정만 있고 안 썼음 — 불일치 해소).
+- **dev 프리페치 스킵 + /health readiness**: `SKIP_PREFETCH=1`이면 lifespan이 워밍을 건너뜀(dev 리로드마다 1~2분 대기 제거, 첫 요청만 콜드). `/health`가 `{status, ready}` 반환(`ready`=프리페치 완료 플래그, 오케스트레이터 readiness용).
+- **프론트 에러 UX(조용한 실패 → 재시도 UI)**: 기존 훅이 `.catch` 없이 실패를 삼켜 빈 화면만 보였음(ErrorBoundary는 렌더 예외만 잡음). 공용 `hooks/useFetch.ts`(파라미터 없는 fetch용, `{data,loading,error,retry}` — loading은 doneNonce 파생이라 effect 안 setState 없음) + 공용 `components/ui/PageError.tsx`(다시 시도 버튼). `useTickers`·`useMarketSummary`·`useAnalysis`(coinStats·category·AD·correlation)·`useCandles`·`useTicker`·`useQuant`(useKeyed) 전부 error/retry 노출. 페이지 7곳(Dashboard·Market·CoinList·Screener·Sectors·Compare·CoinDetail) 로딩 게이트 옆에 에러 게이트 추가. Analysis(퀀트)는 섹션별 Spinner라 에러 시 빈 상태로 안전 degrade(기존 동작 유지).
+  - ⚠️ **회귀 1건 자체발생·수정**: `useTickers`를 useFetch로 바꾸며 반환 키가 `{tickers}`→`{data}`로 바뀌어 `PriceAlertMenu`에서 `tickers.map` 크래시(화면 안 뜸) → 훅에서 `{tickers: data, ...}`로 키 보존해 해결. (전 호출부 계약 유지 확인)
+- **테스트 확대**: `tests/test_cache.py`(SWR 콜드/신선/stale 갱신/single-flight 3개)·`test_config.py`(CORS CSV·JSON·기본값·SKIP_PREFETCH 5개)·`test_routes.py`(TestClient 비-with로 lifespan 미실행=네트워크0, /health·메트릭·라우트 등록 3개). 기존 9 + 신규 11 = **20 passed**. (pytest는 로컬 venv 미설치였음 — CI만 설치. 로컬 실행 위해 설치)
+- 검증: 프론트 `build`·`lint`·`tsc --noEmit` 그린, 백엔드 `py_compile`·`pytest 20/20` 그린, CORS env 3형식 파싱 확인, **WS certifi 핸드셰이크 실연결 성공**(KRW-BTC 시세 수신). **Docker화는 보류(나중 작업)**.
