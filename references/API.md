@@ -177,7 +177,7 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 | `GET /dendrogram` | `top`(5~60, 40) | `DendrogramResult` — scipy 플롯 좌표 `icoord/dcoord` + `labels/markets/categories`(잎 순서) |
 | `GET /garch/{market}` | — | `GarchResult` — `cond_vol[{time,vol}]` + `forecast_vol[]` + `current_vol_annual`·`var_95`(정규근사)·**`hist_var_95`·`cvar_95`**(경험분위 VaR/기대손실 — 팻테일 반영)·`persistence`(arch GARCH(1,1)) |
 | `GET /momentum` | `top`(10~100,40), `lookback`(5~60,20), `holding`(1~20,5) | `MomentumResult` — `equity[{time,factor,benchmark}]` + `total_return`·`benchmark_return`·`sharpe`·`mdd` + `long[]`/`short[]` (횡단면 롱숏) |
-| `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal}]` + `tested`·`found` (statsmodels 공적분) |
+| `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal, bt_return,bt_trades,bt_winrate}]`(사후검증 요약 포함) + `tested`·`found` + **`best`**(최저 p값 페어 상세: `points[{time,z,equity}]`·`entry`·`exit` — 스프레드 z+자산곡선 차트용) (statsmodels 공적분 + 롤링 z 평균회귀 백테스트) |
 | `GET /regime` | `n_states`(2~4, 2) | `RegimeResult` — `points[{time,regime,index}]` + `stats[{regime,label,mean_return,volatility,days,share}]` + `current_regime`·`current_label` (hmmlearn HMM) |
 
 ---

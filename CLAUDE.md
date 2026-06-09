@@ -50,7 +50,7 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 ## 성능/관측성 (직접 구현, 외부 의존성 없음)
 
-- **캐시** `core/cache.py`: 인메모리 TTL + **stale-while-revalidate + single-flight**. 만료돼도 옛 값 즉시 반환, 갱신은 백그라운드 1스레드. 일봉은 종목별 200개 1회 fetch 후 슬라이스 공유(상관관계 ~1800ms→~5ms). TTL은 config. 유니버스 전체 확장에 따라 일봉/스파크라인 TTL은 장기화해 팬아웃 부하 억제. **스파크라인(1시간봉)은 대시보드 시세표·마켓 상단 카드만 쓰는 시각 요소라 거래대금 상위 30종만 채운다**(`market_service._SPARK_LIMIT`, Phase 24 — 261종 전부 받던 팬아웃 제거).
+- **캐시** `core/cache.py`: 인메모리 TTL + **stale-while-revalidate + single-flight** + **LRU 상한**(`_MAX_KEYS`, Phase 28 — 사용자 파라미터로 생성되는 키(포트폴리오 종목 조합 등)가 무한 증가하지 않게 초과 시 가장 오래전 갱신 키부터 축출. 읽기 핫패스는 락-프리 유지, 쓰기 시에만 `_store_lock`으로 축출). 만료돼도 옛 값 즉시 반환, 갱신은 백그라운드 1스레드. 일봉은 종목별 200개 1회 fetch 후 슬라이스 공유(상관관계 ~1800ms→~5ms). TTL은 config(코인통계 `TTL_COIN_STATS=300` — 일봉 파생이라 거의 안 변하는데 261종 루프가 비싸 길게). 유니버스 전체 확장에 따라 일봉/스파크라인 TTL은 장기화해 팬아웃 부하 억제. **스파크라인(1시간봉)은 대시보드 시세표·마켓 상단 카드만 쓰는 시각 요소라 거래대금 상위 30종만 채운다**(`market_service._SPARK_LIMIT`, Phase 24 — 261종 전부 받던 팬아웃 제거).
 - **레이트리밋**: `clients/upbit_rest.py`에 전역 스로틀(~초당 8회) + 429 백오프 재시도. 캐싱 없으면 캔들 팬아웃으로 429 발생함(실증됨).
 - **성능 원칙 (중요)**: 클라우드/멀티 인스턴스 전제 — **대량 팬아웃(수백 콜)은 서버 기동 시 1회만** 하고, 이후엔 어떤 클라이언트가 접속하든 캐시 히트로 빨라야 한다. 클라이언트가 매 요청마다 수십~수백 콜을 떠안으면 안 됨. (새 무거운 집계를 추가하면 **프리페치 워밍 범위도 반드시 함께 갱신** — 안 그러면 첫 방문자가 콜드 비용을 떠안음)
 - **부팅 프리페치(동기 워밍)**: `main.py` lifespan이 `_prefetch()`를 **동기로 워밍한 뒤 기동**(`await asyncio.to_thread(_prefetch)`). 워밍 대상: `get_tickers()`(현재가+거래대금 상위 30종 스파크라인) + `get_coin_stats()`(변동성·수익률, 일봉 팬아웃) + `get_category_monthly()`(섹터 월봉 261종 팬아웃, 콜드 ~1분, 히트맵용) + `get_category_daily_cumulative()`(일봉 누적, 공용 캐시 재사용→팬아웃0) + **퀀트 9종**(network·pca·clusters·dendrogram·momentum·pairs·regime·portfolio·garch — 일봉 캐시 재사용이라 계산만). 기동이 느려지는(스로틀 초당 8회) 대신 첫 사용자도 콜드 없이 즉시 응답. 대시보드·마켓·코인목록·카테고리·정량분석 전반을 커버. 종목별 호가·체결·캔들(10 interval)·상관관계는 호출 수(수천)·실시간성(짧은 TTL) 때문에 프리페치 제외 → 해당 종목 첫 방문 시 fetch.
@@ -353,3 +353,13 @@ P2-1~P2-3 묶음.
   - ⚠️ **회귀 1건 자체발생·수정**: `useTickers`를 useFetch로 바꾸며 반환 키가 `{tickers}`→`{data}`로 바뀌어 `PriceAlertMenu`에서 `tickers.map` 크래시(화면 안 뜸) → 훅에서 `{tickers: data, ...}`로 키 보존해 해결. (전 호출부 계약 유지 확인)
 - **테스트 확대**: `tests/test_cache.py`(SWR 콜드/신선/stale 갱신/single-flight 3개)·`test_config.py`(CORS CSV·JSON·기본값·SKIP_PREFETCH 5개)·`test_routes.py`(TestClient 비-with로 lifespan 미실행=네트워크0, /health·메트릭·라우트 등록 3개). 기존 9 + 신규 11 = **20 passed**. (pytest는 로컬 venv 미설치였음 — CI만 설치. 로컬 실행 위해 설치)
 - 검증: 프론트 `build`·`lint`·`tsc --noEmit` 그린, 백엔드 `py_compile`·`pytest 20/20` 그린, CORS env 3형식 파싱 확인, **WS certifi 핸드셰이크 실연결 성공**(KRW-BTC 시세 수신). **Docker화는 보류(나중 작업)**.
+
+### Phase 28 — 전수 코드 리뷰 후속: 캐시·정밀도·페어 사후검증 (2026-06-09)
+"전체 코드 정독 후 개선점" 리뷰에서 나온 항목을 구현(LLM 리포트 실연동·생존편향 Caveat은 사용자가 제외). 의사결정은 엔지니어링노트 §43.
+- **coin_stats 캐시 정상화**: `get_coin_stats` TTL을 `TTL_TICKER`(5s)→**`TTL_COIN_STATS`(300s)**. 일봉 파생이라 거의 안 변하는데 5s면 SWR이 261종 루프를 5초마다 백그라운드 재계산(낭비)했음. 추가로 `_compute_coin_stats`가 종목당 일봉을 3번(메인+`_volatility`+`_return_1m`) 받던 걸 1번 받은 데이터로 인라인 계산(`_volatility_from_returns`)하도록 정리(전용 헬퍼 2개 제거).
+- **캐시 LRU 상한**: `core/cache.py`에 `_MAX_KEYS=5000` + `_set()`(쓰기 시 `move_to_end`/초과분 `popitem(last=False)` 축출, 축출 키의 single-flight 락도 동반 정리). 읽기는 락-프리 유지, 쓰기만 `_store_lock`. `_store`를 `OrderedDict`로. 포트폴리오 종목 조합 등 파라미터 키의 무한 증가 차단. 테스트 2개 추가(`test_cache` 5개).
+- **RNG 시드 결정화**: `quant_service` 포트폴리오 시뮬·`backtest_service` 몬테카를로의 시드를 내장 `hash()`(PYTHONHASHSEED로 프로세스마다 난수화 → 재시작 시 구름·부채꼴이 달라짐)에서 `hashlib.md5` 기반 `_stable_seed`로 → 재현 가능.
+- **MA 백테스트 익일(next-bar) 체결**: `run_ma_cross`·`_ma_curve`(워크포워드)가 당일 종가로 크로스를 판정하고 그 종가에 체결하던 동봉 룩어헤드를, **직전 완결봉(i-2→i-1) 크로스 → 당일(i) 종가 체결**로 변경. (RSI는 `rsi_vals[i]`가 직전봉까지만 써 이미 룩어헤드 없음 → 그대로.)
+- **페어 사후검증(forward test)**: 공적분 페어 화면이 "현재 z·신호"만 보여주던 것에 **과거 검증**을 추가. `quant_service._pair_backtest`(롤링 z 진입 |z|>2·청산 |z|<0.5, 스프레드 변화를 손익 프록시로 누적) → 각 페어에 `bt_return·bt_trades·bt_winrate`(표 컬럼), 최우수(최저 p값) 페어엔 `best`(스프레드 z + 자산곡선 시계열)로 프론트 `PairBacktestChart`(z 우축+진입선, 자산곡선 좌축). 스키마 `CointPair` 3필드 + `PairBacktestPoint`·`PairBacktestDetail`·`PairsResult.best` 추가. (실데이터: LAYER↔SUI p=0.0003 검증수익 +64% 승률 86%)
+- **잡정리**: `report_service`의 미사용 `import os`를 LLM 주석 블록 안으로 이동.
+- 검증: 백엔드 `pytest 22/22`·`compileall`, 프론트 `build`·`lint`·`tsc` 그린, 페어 백테스트 실데이터 산출 확인. **브라우저 육안 미검증**(페어 차트·표 신규 컬럼, 서버 재기동 필요).
