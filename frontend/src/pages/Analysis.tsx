@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect, type ComponentType } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ScatterChart, Scatter, BarChart, Bar, LineChart, Line, ComposedChart, Area,
@@ -9,6 +9,8 @@ import { forceSimulation, forceManyBody, forceLink, forceCenter, forceCollide } 
 import { Card, CardHeader } from '../components/ui/Card'
 import StatCard from '../components/ui/StatCard'
 import Spinner from '../components/ui/Spinner'
+import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 import InfoTooltip from '../components/InfoTooltip'
 import { useTickers } from '../hooks/useTickers'
 import { useCoinStats } from '../hooks/useAnalysis'
@@ -91,6 +93,7 @@ function CoinPicker({ selected, setSelected, max = 6 }) {
 export function PortfolioSection({ onSend }) {
   const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const { data, loading } = usePortfolio(selected)
+  const [fIdx, setFIdx] = useState(-1)   // 목표수익률 슬라이더 인덱스 (-1=기본=최대샤프 근처)
 
   const sharpeRange = useMemo(() => {
     if (!data.points.length) return [0, 1]
@@ -98,17 +101,39 @@ export function PortfolioSection({ onSend }) {
     return [Math.min(...ss), Math.max(...ss)]
   }, [data.points])
 
+  // 슬라이더 기본 인덱스 — 최대샤프에 가장 가까운 경계선 점.
+  const defaultIdx = useMemo(() => {
+    if (!data.frontier.length) return -1
+    const t = data.max_sharpe?.ret
+    if (t == null) return Math.floor(data.frontier.length / 2)
+    let best = 0, bd = Infinity
+    data.frontier.forEach((p, i) => { const d = Math.abs(p.ret - t); if (d < bd) { bd = d; best = i } })
+    return best
+  }, [data])
+  const idx = (fIdx >= 0 && fIdx < data.frontier.length) ? fIdx : defaultIdx
+  const fp = idx >= 0 ? data.frontier[idx] : null
+
+  // 자본배분선(CAL) — 무위험수익률 0에서 최대샤프(접점) 포트폴리오로 긋는 직선. 기울기=샤프.
+  const cal = useMemo(() => {
+    const ms = data.max_sharpe
+    if (!ms || !ms.vol) return []
+    const maxVol = Math.max(ms.vol, ...data.assets.map(a => a.vol)) * 1.05
+    const slope = ms.ret / ms.vol
+    return [{ vol: 0, ret: 0 }, { vol: maxVol, ret: slope * maxVol }]
+  }, [data])
+
   return (
     <Card>
       <CardHeader
-        title={<>효율적 경계선 (Markowitz)<InfoTooltip width="w-80">선택한 종목으로 만들 수 있는 1,000개 무작위 포트폴리오를 (변동성, 수익률) 평면에 흩뿌리고, 목표수익률별 최소분산 최적화로 <b>효율적 경계선 곡선</b>을 그립니다. scipy 최적화로 <b>샤프 최대(★)</b>·<b>최소 변동성(◆)</b> 포트폴리오도 찾습니다. 곡선이 개별 종목보다 왼쪽(낮은 변동성)에 있으면 분산효과가 있는 것입니다. 연율화 기준(×365). 무위험수익률 0 가정.</InfoTooltip></>}
-        subtitle="효율적 경계선 곡선 + 무작위 가중 1,000 시뮬 · 점 색 = 샤프 비율"
+        title={<>효율적 경계선 (Markowitz)<InfoTooltip width="w-80">선택한 종목으로 만들 수 있는 1,000개 무작위 포트폴리오를 (변동성, 수익률) 평면에 흩뿌리고, 목표수익률별 최소분산 최적화로 <b>효율적 경계선 곡선</b>을 그립니다. <b>자본배분선(CAL)</b>은 무위험수익률 0에서 <b>접점(최대샤프★) 포트폴리오</b>로 긋는 직선입니다. 곡선이 개별 종목보다 왼쪽(낮은 변동성)에 있으면 분산효과가 있는 것입니다. 연율화 기준(×365).</InfoTooltip></>}
+        subtitle="효율적 경계선 + 자본배분선(CAL) · 무작위 1,000 시뮬 · 점 색 = 샤프"
         action={<NObs n={data.n_obs} />}
       />
       <div className="mb-3"><CoinPicker selected={selected} setSelected={setSelected} /></div>
       {selected.length < 2 ? (
         <div className="h-72 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">종목을 2개 이상 선택하세요</div>
       ) : loading ? <Spinner /> : (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={360}>
@@ -126,6 +151,11 @@ export function PortfolioSection({ onSend }) {
                     return <Cell key={i} fill={lerpColor('#94a3b8', '#e0913c', t)} fillOpacity={0.5} r={2} />
                   })}
                 </Scatter>
+                {/* 자본배분선(CAL) — 원점(rf=0)→접점, 점선 */}
+                {cal.length === 2 && (
+                  <Scatter data={cal} isAnimationActive={false}
+                    line={{ stroke: '#7c3aed', strokeWidth: 1, strokeDasharray: '5 4' }} shape={() => null} legendType="none" />
+                )}
                 {/* 효율적 경계선 곡선 (목표수익률별 최소분산) — 구름 위, 마커 아래 */}
                 <Scatter data={data.frontier} isAnimationActive={false}
                   line={{ stroke: '#1763b6', strokeWidth: 2 }} shape={() => null} legendType="none" />
@@ -133,6 +163,8 @@ export function PortfolioSection({ onSend }) {
                 <Scatter data={data.assets} isAnimationActive={false} shape="circle" fill="#1763b6">
                   {data.assets.map((a, i) => <Cell key={i} r={5} fill={SERIES[i % SERIES.length]} />)}
                 </Scatter>
+                {/* 슬라이더로 선택한 경계선 점 */}
+                {fp && <Scatter data={[fp]} isAnimationActive={false} shape="cross" fill="#7c3aed" />}
                 {/* 최대샤프 ★ / 최소분산 ◆ / 리스크패리티 ▲ */}
                 <Scatter data={[data.max_sharpe]} isAnimationActive={false} shape="star" fill="#ef4444" />
                 <Scatter data={[data.min_vol]} isAnimationActive={false} shape="diamond" fill="#3b82f6" />
@@ -141,10 +173,30 @@ export function PortfolioSection({ onSend }) {
             </ResponsiveContainer>
             <div className="flex gap-4 justify-center flex-wrap text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               <span><span className="inline-block w-3 border-t-2 align-middle" style={{ borderColor: '#1763b6' }} /> 효율적 경계선</span>
-              <span>★ 최대 샤프</span><span>◆ 최소 변동성</span><span className="text-green-600">▲ 리스크 패리티</span><span>● 개별 종목</span>
+              <span className="text-violet-500"><span className="inline-block w-3 border-t border-dashed align-middle border-violet-500" /> 자본배분선</span>
+              <span>★ 최대 샤프</span><span>◆ 최소 변동성</span><span className="text-green-600">▲ 리스크 패리티</span><span>✕ 선택</span><span>● 개별 종목</span>
             </div>
+            {/* 목표수익률 슬라이더 — 경계선 위를 움직이며 그 점의 비중 구성을 본다 */}
+            {data.frontier.length > 1 && fp && (
+              <div className="mt-3 border border-gray-100 dark:border-[#232d40] rounded-md p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">목표수익률 선택 (경계선)</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">수익률 <b className={up(fp.ret)}>{pct(fp.ret)}</b> · 변동성 <b className="text-gray-700 dark:text-gray-200">{fp.vol.toFixed(1)}%</b></span>
+                </div>
+                <input type="range" min={0} max={data.frontier.length - 1} value={idx}
+                  onChange={e => setFIdx(+e.target.value)}
+                  className="w-full cursor-pointer accent-brand-500" />
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                  {fp.weights.map((wv, i) => wv > 0.001 && (
+                    <span key={i} className="text-[11px] text-gray-500 dark:text-gray-400">
+                      <span className="font-medium text-gray-700 dark:text-gray-200">{sym(data.assets[i]?.market)}</span> {(wv * 100).toFixed(0)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {data.shrinkage > 0 && (
-              <div className="text-[11px] text-center text-gray-400 dark:text-gray-500 mt-1">
+              <div className="text-[11px] text-center text-gray-400 dark:text-gray-500 mt-2">
                 공분산: Ledoit-Wolf 수축(강도 {data.shrinkage.toFixed(2)}) — 표본공분산 추정오차로 인한 코너해 완화
               </div>
             )}
@@ -155,8 +207,74 @@ export function PortfolioSection({ onSend }) {
             {data.risk_parity && <WeightCard title="▲ 리스크 패리티 (기대수익 추정 비의존·OOS 견고)" spot={data.risk_parity} onSend={onSend} />}
           </div>
         </div>
+
+        {/* 입력·진단 — 상관행렬(분산효과의 근원) + 자산 통계 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+          <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">자산 간 상관행렬<InfoTooltip width="w-72">상관이 낮을수록(파랑) 분산효과가 커져 경계선이 더 왼쪽으로 휩니다. 1에 가까울수록(빨강) 함께 움직여 분산이 잘 안 됩니다.</InfoTooltip></div>
+            <CorrMatrix labels={data.corr_labels} matrix={data.corr_matrix} />
+          </div>
+          <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">개별 종목 통계 (연율)</div>
+            <AssetStatsTable assets={data.assets} />
+          </div>
+        </div>
+        </>
       )}
     </Card>
+  )
+}
+
+// 자산 간 상관행렬 히트맵 — 파랑(음의 상관)·흰(무상관)·빨강(높은 양의 상관).
+function CorrMatrix({ labels, matrix }) {
+  if (!matrix?.length) return <div className="text-xs text-gray-400 py-6 text-center">데이터 없음</div>
+  const bg = (v) => v >= 0 ? lerpColor('#f8fafc', '#ef4444', Math.min(1, v)) : lerpColor('#f8fafc', '#3b82f6', Math.min(1, -v))
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-[11px] border-collapse mx-auto">
+        <thead>
+          <tr><th className="w-10" />{labels.map(l => <th key={l} className="px-1 py-0.5 font-medium text-gray-400 dark:text-gray-500">{sym(l)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {matrix.map((row, i) => (
+            <tr key={i}>
+              <td className="pr-1.5 text-right font-medium text-gray-400 dark:text-gray-500">{sym(labels[i])}</td>
+              {row.map((v, j) => (
+                <td key={j} className="text-center tabular-nums text-gray-700"
+                  style={{ backgroundColor: bg(v), width: 38, height: 26 }}>{v.toFixed(2)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// 개별 종목 연율 통계 표 — 수익률·변동성·샤프.
+function AssetStatsTable({ assets }) {
+  if (!assets?.length) return <div className="text-xs text-gray-400 py-6 text-center">데이터 없음</div>
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
+          <th className="px-2 py-1.5 text-left font-medium">종목</th>
+          <th className="px-2 py-1.5 text-right font-medium">수익률</th>
+          <th className="px-2 py-1.5 text-right font-medium">변동성</th>
+          <th className="px-2 py-1.5 text-right font-medium">샤프</th>
+        </tr>
+      </thead>
+      <tbody>
+        {assets.map((a, i) => (
+          <tr key={a.market} className="border-b border-gray-50 dark:border-[#232d40]/50">
+            <td className="px-2 py-1.5"><span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: SERIES[i % SERIES.length] }} /><span className="font-medium text-gray-700 dark:text-gray-200">{sym(a.market)}</span> <span className="text-gray-400 dark:text-gray-500">{a.korean_name}</span></td>
+            <td className={`px-2 py-1.5 text-right tabular-nums ${up(a.ret)}`}>{pct(a.ret)}</td>
+            <td className="px-2 py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.vol.toFixed(1)}%</td>
+            <td className="px-2 py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{(a.sharpe ?? 0).toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -168,20 +286,35 @@ function WeightCard({ title, spot, onSend }) {
   })
   return (
     <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
-      <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">{title}</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">{title}</div>
+        {spot.diversification > 0 && (
+          <span className="text-[10px] text-gray-400 dark:text-gray-500" title="분산효과 비율 — 클수록 분산으로 위험을 더 줄임">분산 {spot.diversification.toFixed(2)}</span>
+        )}
+      </div>
       <div className="flex gap-3 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
         <span>수익률 <b className={up(spot.ret)}>{pct(spot.ret)}</b></span>
         <span>변동성 <b className="text-gray-700 dark:text-gray-200">{spot.vol?.toFixed(1)}%</b></span>
         <span>샤프 <b className="text-gray-700 dark:text-gray-200">{spot.sharpe?.toFixed(2)}</b></span>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {spot.weights.map((w, i) => (
-          <div key={w.market} className="flex items-center gap-2">
-            <span className="w-9 text-[11px] text-gray-600 dark:text-gray-300">{sym(w.market)}</span>
-            <div className="flex-1 h-2 bg-gray-100 dark:bg-[#222c3e] rounded-full overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${w.weight * 100}%`, backgroundColor: SERIES[i % SERIES.length] }} />
+          <div key={w.market}>
+            <div className="flex items-center gap-2">
+              <span className="w-9 text-[11px] text-gray-600 dark:text-gray-300">{sym(w.market)}</span>
+              <div className="flex-1 h-2 bg-gray-100 dark:bg-[#222c3e] rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${w.weight * 100}%`, backgroundColor: SERIES[i % SERIES.length] }} />
+              </div>
+              <span className="w-10 text-right text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">{(w.weight * 100).toFixed(1)}%</span>
             </div>
-            <span className="w-10 text-right text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">{(w.weight * 100).toFixed(1)}%</span>
+            {/* 리스크 기여도(%) — 비중과 다를 수 있음. 얇은 회색 막대. */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="w-9 text-[9px] text-gray-300 dark:text-gray-600">리스크</span>
+              <div className="flex-1 h-1 bg-gray-50 dark:bg-[#161e2e] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-gray-400/70" style={{ width: `${spot.risk_contrib?.[i] ?? 0}%` }} />
+              </div>
+              <span className="w-10 text-right text-[9px] text-gray-400 dark:text-gray-500 tabular-nums">{(spot.risk_contrib?.[i] ?? 0).toFixed(0)}%</span>
+            </div>
           </div>
         ))}
       </div>
@@ -198,8 +331,8 @@ function WeightCard({ title, spot, onSend }) {
 // ── 2) 상관 네트워크 (MST) ────────────────────────────────────
 function NetworkSection() {
   const { data, loading } = useNetwork(50)
-  const W = 760, H = 480   // 그래프 레이아웃 좌표(원래 비율 — 노드 배치는 이 안에서)
-  const VH = 600           // 그래프를 담는 영역(캔버스) 높이 — 그래프는 이 안에서 세로 중앙 배치
+  const W = 1000, H = 1000   // 그래프 레이아웃 좌표(원래 비율 — 노드 배치는 이 안에서)
+  const VH = 1000           // 캔버스 높이 — 흰 여백은 줄이되 상하 노드 라벨이 잘리지 않게 여유((VH−H)/2=40px)
 
   // d3-force 정적 레이아웃(애니메이션 없이 N틱 수렴 후 좌표 고정).
   const laid = useMemo(() => {
@@ -236,7 +369,7 @@ function NetworkSection() {
       {loading ? <Spinner /> : (
         <>
           <div className="w-full overflow-hidden">
-            <svg viewBox={`0 0 ${W} ${VH}`} className="w-full" style={{ height: VH }}>
+            <svg viewBox={`0 0 ${W} ${VH}`} preserveAspectRatio="xMidYMid meet" className="w-full" style={{ height: VH }}>
               {/* 그래프(W×H)를 더 큰 영역(W×VH) 안에서 세로 중앙에 배치 */}
               <g transform={`translate(0, ${(VH - H) / 2})`}>
                 {laid.edges.map((e, i) => (
@@ -399,18 +532,30 @@ function Dendrogram({ dn }) {
 
 // ── 5) 모멘텀 팩터 백테스트 ───────────────────────────────────
 function MomentumSection() {
-  const { data, loading } = useMomentum(40, 20, 5)
+  // 롱숏(학술 달러중립, 공매도 가정) ↔ 롱온리(상위분위 매수만 — 업비트 현물 실행 가능) 토글.
+  const [longOnly, setLongOnly] = useState(false)
+  const { data, loading } = useMomentum(40, 20, 5, longOnly)
   return (
     <Card>
       <CardHeader
-        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>, 하위 20%를 <b>숏</b>(달러중립). 동일가중 매수보유가 벤치마크입니다. 거래비용 <b>{data.fee_bps ?? 5}bps</b>(롱·숏 회전)를 차감했습니다.</InfoTooltip></>}
-        subtitle="20일 모멘텀 · 5일 리밸런스 · 롱숏 달러중립"
-        action={<span className="text-[11px] text-gray-400 dark:text-gray-500">{data.n}종</span>}
+        title={<>횡단면 모멘텀 팩터<InfoTooltip width="w-80">"최근 많이 오른 종목이 계속 오른다"는 모멘텀을 검증합니다. 매 5일마다 과거 20일 수익률 상위 20%를 <b>롱</b>{longOnly ? ' 매수합니다(공매도 없이 현물 실행 가능).' : <>, 하위 20%를 <b>숏</b>하는 달러중립 팩터입니다(공매도 가정 — 업비트 현물에선 실행 불가, 학술적 팩터 검증용).</>} 동일가중 매수보유가 벤치마크이며 거래비용 <b>{data.fee_bps ?? 5}bps</b>를 차감했습니다.</InfoTooltip></>}
+        subtitle={longOnly ? '20일 모멘텀 · 5일 리밸런스 · 롱온리(현물)' : '20일 모멘텀 · 5일 리밸런스 · 롱숏 달러중립'}
+        action={
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {[['ls', '롱숏'], ['lo', '롱온리']].map(([k, l]) => (
+                <button key={k} onClick={() => setLongOnly(k === 'lo')}
+                  className={`px-2.5 py-1 text-xs rounded font-medium cursor-pointer ${(k === 'lo') === longOnly ? 'bg-brand-500 text-white' : 'bg-gray-100 dark:bg-[#222c3e] text-gray-500'}`}>{l}</button>
+              ))}
+            </div>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">{data.n}종</span>
+          </div>
+        }
       />
       {loading ? <Spinner /> : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <StatCard label="팩터 총수익률" value={pct(data.total_return)} color={up(data.total_return)} valueClass="text-xl" />
+            <StatCard label={longOnly ? '전략 총수익률' : '팩터 총수익률'} value={pct(data.total_return)} color={up(data.total_return)} valueClass="text-xl" />
             <StatCard label="벤치마크(동일가중)" value={pct(data.benchmark_return)} color={up(data.benchmark_return)} valueClass="text-xl" />
             <StatCard label="샤프" value={data.sharpe?.toFixed(2)} valueClass="text-xl" />
             <StatCard label="최대낙폭(MDD)" value={data.mdd + '%'} color="text-blue-500" valueClass="text-xl" />
@@ -423,19 +568,29 @@ function MomentumSection() {
                 tick={{ fontSize: 10, fill: '#9ca3af' }} />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <Tooltip contentStyle={{ fontSize: 12 }} labelFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR')}
-                formatter={(v, n) => [v.toFixed(1), n === 'factor' ? '모멘텀 팩터' : '벤치마크']} />
+                formatter={(v, n) => [v.toFixed(1), n === 'factor' ? (longOnly ? '롱온리 전략' : '모멘텀 팩터') : '벤치마크']} />
               <ReferenceLine y={100} stroke="#e5e7eb" />
               <Line dataKey="factor" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
               <Line dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className={`grid ${longOnly ? 'grid-cols-1' : 'grid-cols-2'} gap-4 mt-4`}>
             <HoldingList title="현재 롱 (모멘텀 상위)" rows={data.long} color="text-red-500" />
-            <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />
+            {!longOnly && <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />}
           </div>
+          <SurvivorshipNote />
         </>
       )}
     </Card>
+  )
+}
+
+// 생존편향 등 백테스트 한계 — 과거 amber 경고박스가 거슬린다는 피드백을 반영해, 작은 회색 한 줄 주석으로만.
+function SurvivorshipNote() {
+  return (
+    <p className="mt-3 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+      ※ 현재 상장 종목만 대상이라 생존편향이 있으며, 인샘플·거래비용·슬리피지 가정에 따라 실제 성과와 다를 수 있습니다. 과거 성과가 미래를 보장하지 않습니다.
+    </p>
   )
 }
 
@@ -511,6 +666,7 @@ function PairsSection() {
               </tbody>
             </table>
           </div>
+          <SurvivorshipNote />
         </>
       )}
     </Card>
@@ -545,12 +701,17 @@ function PairBacktestChart({ best }) {
           <ReferenceLine yAxisId="z" y={best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
           <ReferenceLine yAxisId="z" y={-best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
           <ReferenceLine yAxisId="z" y={0} stroke="#e5e7eb" />
+          {/* 형성기간/거래기간 경계 — 이 왼쪽은 헤지비율 β 추정용(거래 없음), 오른쪽이 out-of-sample 거래기간. */}
+          {best.formation_end > 0 && (
+            <ReferenceLine yAxisId="eq" x={best.formation_end} stroke="#94a3b8" strokeDasharray="2 2"
+              label={{ value: '거래기간 시작', position: 'insideTopRight', fontSize: 9, fill: '#94a3b8' }} />
+          )}
           <Area yAxisId="eq" type="monotone" dataKey="equity" stroke="#1763b6" fill="#1763b6" fillOpacity={0.10} strokeWidth={1.6} isAnimationActive={false} />
           <Line yAxisId="z" type="monotone" dataKey="z" stroke="#9b7fc7" dot={false} strokeWidth={1.2} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
       <div className="text-[10px] text-gray-400 dark:text-gray-500 pb-1">
-        보라=스프레드 z(우축, |z|&gt;{best.entry} 진입·|z|&lt;{best.exit} 청산) · 파랑=전략 자산곡선(좌축). 롤링 z·스프레드 변화 기반 단순 검증.
+        보라=스프레드 z(우축, |z|&gt;{best.entry} 진입·|z|&lt;{best.exit} 청산) · 파랑=전략 자산곡선(좌축). 헤지비율 β는 형성기간(앞 절반)으로 추정하고 점선 오른쪽(거래기간)만 매매한 <b>out-of-sample</b> 검증.
       </div>
     </div>
   )
@@ -809,29 +970,7 @@ const GROUPS = [
     ],
   },
 ]
-// 경로(/structure · /regime · /factor · /risk)가 어떤 그룹을 보여줄지 결정. 헤더 탭과 1:1.
-const PAGE_META = {
-  structure: {
-    group: '시장 구조',
-    title: '시장 구조',
-    description: '종목 간 관계와 구조 — 상관 네트워크(허브)·통계적 클러스터링',
-  },
-  regime: {
-    group: '시장 국면',
-    title: '시장 국면',
-    description: '시장 전체의 상태 — PCA 공통요인(동조도)·HMM 평온/격동 국면',
-  },
-  factor: {
-    group: '팩터 분석',
-    title: '팩터 분석',
-    description: '시장 전체에서 팩터가 실재하는지 관찰 — 횡단면 모멘텀·공적분 페어 (고정 파라미터의 관찰형. 종목을 골라 돌리는 것은 \'전략 도구\'에서)',
-  },
-  risk: {
-    group: '리스크',
-    title: '리스크',
-    description: '전 종목의 위험을 한눈에 — 일변동성 분포와 정규근사 1일 95% VaR 랭킹 (꼬리위험은 과소평가될 수 있는 정규근사)',
-  },
-}
+// 경로(/structure · /regime · /factor · /risk)가 어떤 그룹을 보여줄지는 아래 Body 컴포넌트가 결정. 헤더 탭과 1:1.
 
 // 페이지 맨 위 "한눈 요약" 스트립 — 아래 상세 차트들의 핵심 결론만 먼저 보여준다(요약→상세).
 // 데이터는 아래 섹션과 같은 훅(캐시 공유)이라 추가 팬아웃 없음.
@@ -892,35 +1031,70 @@ function RiskSummary() {
   )
 }
 
-export default function Analysis() {
-  const { pathname, hash } = useLocation()
-  const seg = pathname.startsWith('/factor') ? 'factor'
-    : pathname.startsWith('/risk') ? 'risk'
-    : pathname.startsWith('/regime') ? 'regime' : 'structure'
-  const meta = PAGE_META[seg]
-  const group = GROUPS.find(g => g.label === meta.group) ?? GROUPS[0]
-  const Summary = seg === 'factor' ? FactorSummary
-    : seg === 'risk' ? RiskSummary
-    : seg === 'regime' ? RegimeSummary : StructureSummary
+// 여러 훅 결과를 합쳐 로딩/에러를 판정(hook 아님 — 호출부에서 hook을 직접 호출해 결과만 넘긴다).
+function gateOf(...hs: { loading: boolean; error: boolean; retry?: () => void }[]) {
+  return {
+    loading: hs.some(h => h.loading),
+    error: hs.some(h => h.error),
+    retry: () => hs.forEach(h => h.retry?.()),
+  }
+}
 
-  // 크로스링크(/structure#cluster 등)로 진입 시 해당 섹션으로 스크롤.
+// 그룹의 요약 + 섹션들을 렌더(게이트는 Body가 이미 통과한 뒤라 여기선 데이터가 준비됨).
+// 크로스링크(#network 등) 스크롤은 섹션이 실제로 그려진 뒤(=게이트 통과 후) 실행돼 정확히 동작한다.
+function GroupView({ label, Summary }: { label: string; Summary: ComponentType }) {
+  const { hash } = useLocation()
+  const group = GROUPS.find(g => g.label === label) ?? GROUPS[0]
   useEffect(() => {
     if (!hash) return
     const el = document.getElementById(hash.slice(1))
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [hash, seg])
-
+  }, [hash, label])
   return (
     <div className="space-y-6">
-      {/* 페이지 제목은 헤더 탭 활성으로 드러나므로 본문 중복 제목(PageHeader) 생략. 바로 요약 스트립부터. */}
       <Summary />
       <section className="space-y-4">
         {group.tabs.map(t => (
-          <div key={t.id} id={t.id} className="scroll-mt-20">
-            <t.Comp />
-          </div>
+          <div key={t.id} id={t.id} className="scroll-mt-20"><t.Comp /></div>
         ))}
       </section>
     </div>
   )
+}
+
+// 그룹별 Body — 그 그룹이 쓰는 훅을 모아 게이트한다. 하나라도 로딩/에러면 헤더·푸터만 남기고
+// 전체를 PageLoading/PageError로(섹션 카드·스피너 등 다른 컴포넌트는 일절 렌더하지 않음).
+// seg마다 별도 컴포넌트라 활성 그룹의 훅만 실행된다(다른 그룹 over-fetch 없음, hook 규칙 준수).
+function StructureBody() {
+  const g = gateOf(useNetwork(50), useClusters(80, 4))
+  if (g.error) return <PageError onRetry={g.retry} />
+  if (g.loading) return <PageLoading />
+  return <GroupView label="시장 구조" Summary={StructureSummary} />
+}
+function RegimeBody() {
+  const g = gateOf(usePCA(50), useRegime(2))
+  if (g.error) return <PageError onRetry={g.retry} />
+  if (g.loading) return <PageLoading />
+  return <GroupView label="시장 국면" Summary={RegimeSummary} />
+}
+function FactorBody() {
+  // 모멘텀(기본 롱숏)·페어로 초기 게이트. 모멘텀 롱온리 토글은 in-page 상호작용이라 섹션 내부 로딩으로 처리.
+  const g = gateOf(useMomentum(40, 20, 5), usePairs(50))
+  if (g.error) return <PageError onRetry={g.retry} />
+  if (g.loading) return <PageLoading />
+  return <GroupView label="팩터 분석" Summary={FactorSummary} />
+}
+function RiskBody() {
+  const g = gateOf(useCoinStats())   // 리스크 3섹션·요약 모두 coin_stats 파생(dedup)
+  if (g.error) return <PageError onRetry={g.retry} />
+  if (g.loading) return <PageLoading />
+  return <GroupView label="리스크" Summary={RiskSummary} />
+}
+
+export default function Analysis() {
+  const { pathname } = useLocation()
+  if (pathname.startsWith('/factor')) return <FactorBody />
+  if (pathname.startsWith('/risk')) return <RiskBody />
+  if (pathname.startsWith('/regime')) return <RegimeBody />
+  return <StructureBody />
 }
