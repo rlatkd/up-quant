@@ -1,13 +1,32 @@
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Annotated
 
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode
 
 
 class Settings(BaseSettings):
     app_name: str = "UPquant"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # 허용할 프론트 오리진. 배포 시 환경변수 CORS_ORIGINS(콤마 구분)로 덮어쓴다.
+    # 예: CORS_ORIGINS="https://upquant.app,https://www.upquant.app"
+    # NoDecode: pydantic-settings가 list 타입을 JSON으로 먼저 파싱하지 않게 하여(아래 validator가
+    # 콤마 구분 문자열을 직접 처리하도록), 환경변수에 그냥 CSV를 넣을 수 있게 한다.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    # 부팅 프리페치(대량 워밍) 건너뛰기 — dev 리로드마다 1~2분 대기를 피하려면 1로 설정.
+    skip_prefetch: bool = False
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_csv(cls, v):
+        # 환경변수는 문자열로 들어오므로 콤마 구분을 리스트로 변환(JSON 리스트 표기도 허용).
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                return json.loads(v)  # JSON 리스트 표기 직접 파싱
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
 
 
 settings = Settings()

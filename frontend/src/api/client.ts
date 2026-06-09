@@ -1,7 +1,8 @@
 import axios from 'axios'
+import { API_BASE } from '../config'
 
 const client = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE,
 })
 
 // ── 공통 로깅 인터셉터 (모든 API 호출이 이 인스턴스를 거친다) ──

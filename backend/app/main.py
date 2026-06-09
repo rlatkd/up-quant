@@ -1,15 +1,18 @@
 import asyncio
 import json
 import logging
+import ssl
 import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+import certifi
 import websockets
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import metrics
+from app.core.config import settings
 from app.core.logging import request_id, setup_logging
 from app.routers import markets, candles, analysis, backtest, quant, system, report
 
@@ -54,11 +57,24 @@ def _prefetch() -> None:
         logger.warning("prefetch 실패 (서버는 정상 기동): %s", e)
 
 
+# 프리페치 워밍 완료 여부 — /health(readiness)에서 노출. dev 스킵 시엔 곧장 ready로 둔다.
+_ready = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _ready
+    if settings.skip_prefetch:
+        # dev 편의: SKIP_PREFETCH=1이면 워밍을 건너뛰어 리로드마다 1~2분 대기를 없앤다.
+        # (첫 방문 화면은 콜드 fetch로 잠깐 느릴 수 있으나 개발 루프가 빨라진다.)
+        logger.info("SKIP_PREFETCH=1 → 부팅 프리페치 건너뜀(dev). 첫 요청은 콜드일 수 있음.")
+        _ready = True
+        yield
+        return
     # 워밍이 끝난 뒤 기동(blocking). 기동은 1~2분 느려지지만 첫 사용자도 콜드 없이 즉시 응답.
     # 동기 httpx 호출이라 to_thread로 이벤트루프 밖에서 실행하되, 완료까지 대기한다.
     await asyncio.to_thread(_prefetch)
+    _ready = True
     yield
 
 
@@ -66,7 +82,7 @@ app = FastAPI(title="UPquant", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-Id"],  # 프론트가 상관관계 ID를 읽을 수 있도록 노출
@@ -106,7 +122,9 @@ app.include_router(report.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # readiness: 프리페치 워밍이 끝나야 캐시 히트로 즉시 응답 가능한 "준비됨" 상태.
+    # 워밍 중에는 ready=false라 로드밸런서/오케스트레이터가 트래픽을 늦게 보낼 수 있다.
+    return {"status": "ok", "ready": _ready}
 
 
 # ── 실시간 시세 중계 (업비트 WebSocket → 프론트) ────────────────
@@ -114,6 +132,9 @@ def health():
 # 클라이언트에 fan-out한다(클라이언트당 업비트 연결을 새로 열면 다중 탭/인스턴스에서 연결이
 # N개로 늘어 비효율). 신규 클라이언트엔 최신 스냅샷(latest)을 먼저 보내 즉시 화면이 채워지게 한다.
 _UPBIT_WS = "wss://api.upbit.com/websocket/v1"
+# macOS 프레임워크 Python은 기본 CA 번들(cert.pem)이 깨진 심링크라 TLS 검증이 0개 CA로 실패한다
+# (REST httpx는 자체 certifi를 써서 무사). websockets에도 certifi 기반 컨텍스트를 명시해 환경 비의존적으로 검증한다.
+_SSL_CTX = ssl.create_default_context(cafile=certifi.where())
 
 
 class TickerHub:
@@ -146,7 +167,7 @@ class TickerHub:
         backoff = 2  # 재연결 지수 백오프(초) — 연속 실패 시 늘려 업비트 부하/로그 폭주 방지, 연결 성공 시 리셋
         while self.clients:
             try:
-                async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None) as upbit:
+                async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None, ssl=_SSL_CTX) as upbit:
                     await upbit.send(req)
                     backoff = 2
                     api_log.info("ticker hub: 업비트 WS 연결 (구독자 %d)", len(self.clients))
@@ -203,7 +224,7 @@ async def ws_market(client: WebSocket, market: str):
         {"type": "trade", "codes": [market]},
     ])
     try:
-        async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None) as upbit:
+        async with websockets.connect(_UPBIT_WS, ping_interval=20, max_size=None, ssl=_SSL_CTX) as upbit:
             await upbit.send(req)
             async for raw in upbit:
                 d = json.loads(raw)
