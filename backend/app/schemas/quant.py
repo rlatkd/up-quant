@@ -182,6 +182,27 @@ class CointPair(BaseModel):
     hedge_ratio: float   # OLS 헤지비율 β (market1 ≈ α + β·market2)
     zscore: float        # 현재 스프레드 z점수(평균회귀 신호)
     signal: str          # LONG_SPREAD | SHORT_SPREAD | NEUTRAL
+    # 사후검증(forward test) — 같은 윈도우에서 스프레드 평균회귀 전략을 돌린 요약(롤링 z로 진입/청산).
+    bt_return: float = 0.0    # 백테스트 누적수익률(%)
+    bt_trades: int = 0        # 진입 횟수
+    bt_winrate: float = 0.0   # 익절 비율(%)
+
+
+class PairBacktestPoint(BaseModel):
+    time: int       # unix초
+    z: float        # 롤링 스프레드 z점수
+    equity: float   # 전략 자산곡선(100 시작)
+
+
+class PairBacktestDetail(BaseModel):
+    """최우수(최저 p값) 페어의 상세 — 스프레드 z 시계열 + 전략 자산곡선(프론트 차트용)."""
+    market1: str
+    korean_name1: str
+    market2: str
+    korean_name2: str
+    entry: float    # 진입 임계 |z|
+    exit: float     # 청산 임계 |z|
+    points: list[PairBacktestPoint]
 
 
 class PairsResult(BaseModel):
@@ -189,6 +210,7 @@ class PairsResult(BaseModel):
     tested: int              # 검정한 페어 수
     found: int               # 공적분(p<0.05) 페어 수
     n_obs: int
+    best: PairBacktestDetail | None = None   # 최우수 페어 사후검증 상세(차트용)
 
 
 # ── 8) HMM 시장 국면(regime) 탐지 ─────────────────────────────

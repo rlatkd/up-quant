@@ -8,6 +8,7 @@
 분석 레이어는 numpy/scipy/sklearn/statsmodels/arch/networkx 등 표준 라이브러리를 사용한다.
 (직접 구현 정체성은 캐시·로깅·API 클라이언트 계층에 있고, 통계/ML은 검증된 모델을 쓴다.)
 """
+import hashlib
 import warnings
 
 import networkx as nx
@@ -31,6 +32,8 @@ from app.schemas.quant import (
     ClusterPoint,
     ClusterResult,
     CointPair,
+    PairBacktestDetail,
+    PairBacktestPoint,
     DendrogramResult,
     FrontierPoint,
     GarchResult,
@@ -57,6 +60,12 @@ from app.services import analysis_service, candle_service, market_service
 
 # 암호화폐는 연중무휴(365일) 거래 → 일간 통계의 연율화 기준.
 TRADING_DAYS = 365
+
+
+def _stable_seed(s: str) -> int:
+    """문자열 → 결정적 32비트 시드. 파이썬 내장 hash()는 PYTHONHASHSEED로 매 프로세스 난수화되어
+    서버 재시작마다 시뮬 결과(구름·부채꼴)가 달라지므로, 재현 가능한 hashlib 기반으로 고정한다."""
+    return int.from_bytes(hashlib.md5(s.encode()).digest()[:4], "big")
 
 
 def name_map() -> dict[str, str]:
@@ -154,7 +163,7 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
 
     # 무작위 가중 1000개 — Dirichlet(α,…,α). α<1이면 균등가중 중심이 아니라
     # 단일종목 집중(심플렉스 꼭짓점)까지 퍼져 구름이 넓어진다(α=1은 중심 뭉침).
-    rng = np.random.default_rng(abs(hash(tuple(kept))) % (2**32))
+    rng = np.random.default_rng(_stable_seed(",".join(kept)))
     w_sim = rng.dirichlet(np.ones(n) * _SIM_ALPHA, size=_N_SIM)     # (N, n)
     sim_ret = w_sim @ mu                               # (N,)
     sim_var = np.einsum("ij,jk,ik->i", w_sim, cov, w_sim)
@@ -570,6 +579,42 @@ _PAIR_MIN_LEN = 120
 _PAIR_CORR_GATE = 0.5     # 이 이상 상관인 페어만 검정(연산 절감 + 무의미 페어 제외)
 _PAIR_PVAL = 0.05
 _PAIR_Z = 2.0             # |z|>2 진입
+_PAIR_BT_ENTRY = 2.0      # 사후검증 진입 임계 |z|
+_PAIR_BT_EXIT = 0.5       # 사후검증 청산 임계 |z|
+_PAIR_BT_WIN = 30         # 롤링 z 윈도우(일) — 전 구간 평균/표준편차를 쓰면 룩어헤드라 롤링으로
+
+
+def _pair_backtest(spread: np.ndarray):
+    """로그 스프레드 평균회귀 백테스트(롤링 z 진입/청산). 스프레드 변화를 손익 프록시로 누적.
+    반환: (z_array, equity_array, total_return%, n_trades, win_rate%). 직전봉 z로 당일 포지션 결정(룩어헤드 최소화)."""
+    T = spread.size
+    win = min(_PAIR_BT_WIN, max(5, T // 3))
+    z = np.zeros(T)
+    for t in range(T):
+        seg = spread[max(0, t - win + 1):t + 1]
+        sd = seg.std()
+        z[t] = (spread[t] - seg.mean()) / sd if sd > 0 else 0.0
+
+    pos = 0                      # +1 롱 스프레드 / -1 숏 스프레드 / 0 현금
+    cur = 100.0
+    eq = np.full(T, 100.0)
+    trades = wins = 0
+    entry_eq = 100.0
+    for t in range(1, T):
+        cur *= (1 + pos * float(spread[t] - spread[t - 1]))   # 직전 포지션의 당일 손익(로그 스프레드 변화)
+        eq[t] = cur
+        zt = z[t - 1]            # 직전봉 z로 신호 판정(동봉 룩어헤드 회피)
+        if pos == 0:
+            if zt < -_PAIR_BT_ENTRY:
+                pos, trades, entry_eq = 1, trades + 1, cur
+            elif zt > _PAIR_BT_ENTRY:
+                pos, trades, entry_eq = -1, trades + 1, cur
+        elif abs(zt) < _PAIR_BT_EXIT:
+            if cur > entry_eq:
+                wins += 1
+            pos = 0
+    win_rate = round(wins / trades * 100, 1) if trades else 0.0
+    return z, eq, round(float(cur - 100), 2), trades, win_rate
 
 
 def _compute_pairs(top: int) -> PairsResult:
@@ -602,14 +647,39 @@ def _compute_pairs(top: int) -> PairsResult:
             sd = spread.std()
             z = float((spread[-1] - spread.mean()) / sd) if sd else 0.0
             signal = "LONG_SPREAD" if z < -_PAIR_Z else "SHORT_SPREAD" if z > _PAIR_Z else "NEUTRAL"
-            rows.append(CointPair(
-                market1=kept[i], korean_name1=nmap.get(kept[i], kept[i]),
-                market2=kept[j], korean_name2=nmap.get(kept[j], kept[j]),
-                pvalue=round(float(pval), 4), correlation=round(float(dcorr[i, j]), 3),
-                hedge_ratio=round(float(beta[1]), 3), zscore=round(z, 2), signal=signal,
+            # 사후검증 — 같은 윈도우에서 스프레드 평균회귀 전략을 돌려 "이 페어가 과거에 통했는지" 요약.
+            _, _, bt_ret, bt_trades, bt_win = _pair_backtest(spread)
+            rows.append((
+                i, j, beta,
+                CointPair(
+                    market1=kept[i], korean_name1=nmap.get(kept[i], kept[i]),
+                    market2=kept[j], korean_name2=nmap.get(kept[j], kept[j]),
+                    pvalue=round(float(pval), 4), correlation=round(float(dcorr[i, j]), 3),
+                    hedge_ratio=round(float(beta[1]), 3), zscore=round(z, 2), signal=signal,
+                    bt_return=bt_ret, bt_trades=bt_trades, bt_winrate=bt_win,
+                ),
             ))
-    rows.sort(key=lambda p: p.pvalue)
-    return PairsResult(pairs=rows[:25], tested=tested, found=len(rows), n_obs=int(closes.shape[0]))
+    rows.sort(key=lambda r: r[3].pvalue)
+    pairs = [r[3] for r in rows[:25]]
+
+    # 최우수(최저 p값) 페어의 상세 곡선(스프레드 z + 자산곡선) — 프론트 차트용.
+    best = None
+    if rows:
+        bi, bj, bbeta, _ = rows[0]
+        spread = logp[:, bi] - (bbeta[0] + bbeta[1] * logp[:, bj])
+        z_arr, eq_arr, _, _, _ = _pair_backtest(spread)
+        base = candle_service.get_candles(kept[bi], "days", count=_PAIR_CANDLES)[-closes.shape[0]:]
+        times = [int(c.timestamp // 1000) for c in base]
+        best = PairBacktestDetail(
+            market1=kept[bi], korean_name1=nmap.get(kept[bi], kept[bi]),
+            market2=kept[bj], korean_name2=nmap.get(kept[bj], kept[bj]),
+            entry=_PAIR_BT_ENTRY, exit=_PAIR_BT_EXIT,
+            points=[
+                PairBacktestPoint(time=t, z=round(float(zz), 2), equity=round(float(e), 2))
+                for t, zz, e in zip(times, z_arr, eq_arr)
+            ],
+        )
+    return PairsResult(pairs=pairs, tested=tested, found=len(rows), n_obs=int(closes.shape[0]), best=best)
 
 
 def get_pairs(top: int = _PAIR_TOP) -> PairsResult:

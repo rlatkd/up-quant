@@ -28,7 +28,7 @@ const EMPTY_CLUSTERS = { points: [], k: 0, n: 0 }
 const EMPTY_DENDRO = { icoord: [], dcoord: [], labels: [], markets: [], categories: [], n_obs: 0 }
 const EMPTY_GARCH = { cond_vol: [], forecast_vol: [], current_vol_annual: 0, var_95: 0, persistence: 0, n_obs: 0, korean_name: '' }
 const EMPTY_MOM = { equity: [], total_return: 0, benchmark_return: 0, sharpe: 0, mdd: 0, long: [], short: [], n: 0 }
-const EMPTY_PAIRS = { pairs: [], tested: 0, found: 0, n_obs: 0 }
+const EMPTY_PAIRS = { pairs: [], tested: 0, found: 0, n_obs: 0, best: null }
 const EMPTY_REGIME = { points: [], stats: [], current_regime: 0, current_label: '', n_states: 0, n_obs: 0 }
 
 export const usePortfolio  = (markets)        => useKeyed(() => quant.getPortfolio(markets), markets.join(','), EMPTY_PORTFOLIO)

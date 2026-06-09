@@ -478,37 +478,81 @@ function PairsSection() {
       {loading ? <Spinner /> : data.pairs.length === 0 ? (
         <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">공적분 페어 없음</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
-                <th className="px-3 py-2 text-left font-medium">페어</th>
-                <th className="px-3 py-2 text-right font-medium">p값</th>
-                <th className="px-3 py-2 text-right font-medium">상관</th>
-                <th className="px-3 py-2 text-right font-medium">헤지비율 β</th>
-                <th className="px-3 py-2 text-right font-medium">z점수</th>
-                <th className="px-3 py-2 text-center font-medium">신호</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.pairs.map((p, i) => (
-                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-100">
-                    {sym(p.market1)} <span className="text-gray-300">↔</span> {sym(p.market2)}
-                    <div className="text-[11px] text-gray-400 dark:text-gray-500 font-normal">{p.korean_name1} · {p.korean_name2}</div>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.pvalue.toFixed(4)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.correlation.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.hedge_ratio.toFixed(2)}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${Math.abs(p.zscore) > 2 ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{p.zscore > 0 ? '+' : ''}{p.zscore.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-center"><SignalBadge signal={p.signal} /></td>
+        <>
+          {data.best && <PairBacktestChart best={data.best} />}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
+                  <th className="px-3 py-2 text-left font-medium">페어</th>
+                  <th className="px-3 py-2 text-right font-medium">p값</th>
+                  <th className="px-3 py-2 text-right font-medium">헤지비율 β</th>
+                  <th className="px-3 py-2 text-right font-medium">z점수</th>
+                  <th className="px-3 py-2 text-center font-medium">신호</th>
+                  <th className="px-3 py-2 text-right font-medium">검증수익</th>
+                  <th className="px-3 py-2 text-right font-medium">거래·승률</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.pairs.map((p, i) => (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-100">
+                      {sym(p.market1)} <span className="text-gray-300">↔</span> {sym(p.market2)}
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500 font-normal">{p.korean_name1} · {p.korean_name2}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.pvalue.toFixed(4)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.hedge_ratio.toFixed(2)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-medium ${Math.abs(p.zscore) > 2 ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{p.zscore > 0 ? '+' : ''}{p.zscore.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-center"><SignalBadge signal={p.signal} /></td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-medium ${p.bt_return > 0 ? 'text-red-500' : p.bt_return < 0 ? 'text-blue-500' : 'text-gray-400'}`}>{p.bt_return > 0 ? '+' : ''}{p.bt_return.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-gray-400 text-xs">{p.bt_trades}회 · {p.bt_winrate.toFixed(0)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </Card>
+  )
+}
+
+// 최우수(최저 p값) 페어의 사후검증 — 스프레드 z(±진입선)와 전략 자산곡선을 겹쳐 "실제로 통했는지" 보여준다.
+function PairBacktestChart({ best }) {
+  const total = best.points.length ? best.points[best.points.length - 1].equity - 100 : 0
+  return (
+    <div className="mb-4 px-3 pt-3 pb-1 rounded-md bg-gray-50 dark:bg-[#0f1626]">
+      <div className="flex items-baseline justify-between mb-1">
+        <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+          최우수 페어 사후검증 — {sym(best.market1)} ↔ {sym(best.market2)}
+        </div>
+        <div className={`text-xs font-semibold tabular-nums ${total >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+          전략 {total >= 0 ? '+' : ''}{total.toFixed(1)}%
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={200}>
+        <ComposedChart data={best.points} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" />
+          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} hide />
+          {/* 좌축: 자산곡선, 우축: z점수 */}
+          <YAxis yAxisId="eq" tick={{ fontSize: 10, fill: '#9ca3af' }} width={38} />
+          <YAxis yAxisId="z" orientation="right" tick={{ fontSize: 10, fill: '#9ca3af' }} width={26} domain={[-4, 4]} />
+          <Tooltip
+            isAnimationActive={false}
+            labelFormatter={(t) => new Date(t * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+            formatter={(v, n) => [typeof v === 'number' ? v.toFixed(2) : v, n === 'equity' ? '자산(100기준)' : 'z점수']}
+          />
+          <ReferenceLine yAxisId="z" y={best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
+          <ReferenceLine yAxisId="z" y={-best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
+          <ReferenceLine yAxisId="z" y={0} stroke="#e5e7eb" />
+          <Area yAxisId="eq" type="monotone" dataKey="equity" stroke="#1763b6" fill="#1763b6" fillOpacity={0.10} strokeWidth={1.6} isAnimationActive={false} />
+          <Line yAxisId="z" type="monotone" dataKey="z" stroke="#9b7fc7" dot={false} strokeWidth={1.2} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 pb-1">
+        보라=스프레드 z(우축, |z|&gt;{best.entry} 진입·|z|&lt;{best.exit} 청산) · 파랑=전략 자산곡선(좌축). 롤링 z·스프레드 변화 기반 단순 검증.
+      </div>
+    </div>
   )
 }
 
