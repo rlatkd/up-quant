@@ -19,6 +19,47 @@ function fmtRate(r) {
   return (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
 }
 
+function fmtKrwShort(v) {
+  if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
+  if (v >= 1e8) return Math.round(v / 1e8).toLocaleString() + '억'
+  return v.toLocaleString()
+}
+
+// 시장 요약 스트립 — 흩어져 있던 KPI·공포탐욕·상승하락 수를 숫자 한 줄로 응집(대시보드에서 이관).
+function SummaryStrip({ tickers }) {
+  const total = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
+  const rise = tickers.filter(t => t.change === 'RISE').length
+  const fall = tickers.filter(t => t.change === 'FALL').length
+  const avg = tickers.length ? tickers.reduce((s, t) => s + t.change_rate, 0) / tickers.length * 100 : 0
+  const w52h = tickers.filter(t => t.is_52w_high).length
+  const w52l = tickers.filter(t => t.is_52w_low).length
+  const top10 = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
+    .slice(0, 10).reduce((s, t) => s + t.acc_trade_price_24h, 0)
+  const conc = total ? (top10 / total * 100).toFixed(1) : '0'
+  const riseRatio = tickers.length ? (rise / tickers.length) * 100 : 50
+  const changeScore = Math.min(100, Math.max(0, avg * 5 + 50))
+  const fg = Math.round(riseRatio * 0.6 + changeScore * 0.4)
+
+  const items = [
+    { label: '24h 총 거래대금', node: <span>{fmtKrwShort(total)}<span className="text-[11px] text-gray-400 ml-0.5">KRW</span></span> },
+    { label: '평균 등락률', node: <span className={avg >= 0 ? 'text-red-500' : 'text-blue-500'}>{(avg >= 0 ? '+' : '') + avg.toFixed(2)}%</span> },
+    { label: '상승 / 하락', node: <span><span className="text-red-500">{rise}</span><span className="text-gray-300 mx-1">/</span><span className="text-blue-500">{fall}</span></span> },
+    { label: '52주 신고 / 신저', node: <span><span className="text-red-500">{w52h}</span><span className="text-gray-300 mx-1">/</span><span className="text-blue-500">{w52l}</span></span> },
+    { label: '거래대금 집중도', node: <span>{conc}%<span className="text-[11px] text-gray-400 ml-1">상위10</span></span> },
+    { label: '공포·탐욕', node: <span className={fg >= 50 ? 'text-red-500' : 'text-blue-500'}>{fg}</span> },
+  ]
+  return (
+    <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y lg:divide-y-0 divide-gray-100 dark:divide-[#232d40]">
+      {items.map(it => (
+        <div key={it.label} className="px-4 py-3">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{it.label}</div>
+          <div className="text-base font-bold tabular-nums text-gray-800 dark:text-gray-100">{it.node}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function changeColor(change) {
   if (change === 'RISE') return 'text-red-500'
   if (change === 'FALL') return 'text-blue-500'
@@ -270,6 +311,9 @@ export default function Market() {
 
   return (
     <div className="space-y-4">
+
+      {/* 시장 요약 스트립 (KPI·공포탐욕·상승하락 — 대시보드에서 이관) */}
+      <SummaryStrip tickers={tickers} />
 
       {/* 주요 종목 (거래대금 상위) */}
       <div>
