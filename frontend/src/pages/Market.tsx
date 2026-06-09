@@ -7,6 +7,7 @@ import { useTickers } from '../hooks/useTickers'
 import { useAdvanceDecline } from '../hooks/useAnalysis'
 import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
@@ -249,9 +250,10 @@ function ADLineChart() {
 }
 
 export default function Market() {
-  const { tickers, loading } = useTickers()
+  const { tickers, loading, error, retry } = useTickers()
   const navigate = useNavigate()
 
+  if (error) return <PageError onRetry={retry} />
   if (loading) return <PageLoading />
 
   const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)

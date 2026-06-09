@@ -4,6 +4,7 @@ import { useTickers } from '../hooks/useTickers'
 import { getCoinStats } from '../api/analysis'
 import InfoTooltip from '../components/InfoTooltip'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 
 const FIELDS = [
   { key: 'change_rate',   label: '등락률',       unit: '%'  },
@@ -31,7 +32,7 @@ const PRESETS = [
 let _uid = 0
 
 export default function Screener() {
-  const { tickers, loading: tLoading } = useTickers()
+  const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
   const [stats, setStats]           = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [conditions, setConditions]  = useState([])
@@ -117,6 +118,7 @@ export default function Screener() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merged])
 
+  if (tError) return <PageError onRetry={tRetry} />
   if (tLoading || statsLoading) return <PageLoading />
 
   return (

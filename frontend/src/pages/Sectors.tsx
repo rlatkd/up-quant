@@ -7,6 +7,7 @@ import {
 import { useCategoryMonthly, useCategoryDailyCumulative, useCoinStats } from '../hooks/useAnalysis'
 import { useTickers } from '../hooks/useTickers'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 import { SERIES } from '../theme'
 
 // 카테고리(섹터)는 업비트 데이터랩 '코인 분류'에서 받아온 가변 목록(한글)이라,
@@ -320,12 +321,13 @@ function CumulativeChart({ rows, categories }) {
 
 export default function Sectors() {
   const [activeSector, setActiveSector] = useState(null)  // 모달용 — 클릭된 섹터명
-  const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
-  const { data: cumulative, loading: cumLoading } = useCategoryDailyCumulative()
+  const { data: monthly, loading: monthlyLoading, error: monthlyError, retry: monthlyRetry } = useCategoryMonthly()
+  const { data: cumulative, loading: cumLoading, error: cumError, retry: cumRetry } = useCategoryDailyCumulative()
   // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가)
   const { data: coinStats } = useCoinStats()
   const { tickers } = useTickers()
 
+  if (monthlyError || cumError) return <PageError onRetry={() => { monthlyRetry(); cumRetry() }} />
   // 누적 차트(일봉)·월별 히트맵이 모두 준비될 때까지 통짜 로딩
   if (monthlyLoading || cumLoading) return <PageLoading />
 

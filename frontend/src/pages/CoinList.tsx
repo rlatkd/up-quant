@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { CoinDetailView } from './CoinDetail'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 
 // master-detail 레이아웃 — 좌측 메인은 CoinDetailView, 우측은 슬림 코인 리스트.
@@ -67,7 +68,7 @@ const SORT_FN = {
 export default function CoinList() {
   const navigate = useNavigate()
   const { market: routeMarket } = useParams()
-  const { tickers, loading: tLoading } = useTickers()
+  const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('전체')
   const [sortKey, setSortKey]     = useState('acc_trade_price_24h')
@@ -116,6 +117,7 @@ export default function CoinList() {
     return r
   }, [tickers, filter, favorites, search, sortKey, sortDir])
 
+  if (tError) return <PageError onRetry={tRetry} />
   // 첫 진입(코인 목록 로딩) 동안은 통짜 로딩. 이후 종목 전환은 좌측 상세가 자체 로딩(master-detail).
   if (tLoading) return <PageLoading />
 

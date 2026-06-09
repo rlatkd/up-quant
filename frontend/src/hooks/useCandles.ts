@@ -1,18 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getCandles } from '../api/candles'
 
 export function useCandles(market, interval = 'days', count = 60) {
-  // loading은 (loadedKey !== currentKey)로 파생 — effect 안 setLoading(true) 제거하여
-  // cascading render(react-hooks/set-state-in-effect) 회피.
-  const currentKey = `${market}|${interval}|${count}`
-  const [state, setState] = useState({ data: [], loadedKey: null })
+  // loading/error는 (loadedKey, nonce)로 파생 — effect 안 setState(true)를 피해
+  // cascading render(react-hooks/set-state-in-effect)를 회피.
+  const [nonce, setNonce] = useState(0)
+  const key = `${market}|${interval}|${count}:${nonce}`
+  const [state, setState] = useState({ data: [], error: false, loadedKey: null })
   useEffect(() => {
     if (!market) return
     let cancelled = false
-    getCandles(market, interval, count).then(data => {
-      if (!cancelled) setState({ data, loadedKey: `${market}|${interval}|${count}` })
-    })
+    getCandles(market, interval, count)
+      .then(data => { if (!cancelled) setState({ data, error: false, loadedKey: `${market}|${interval}|${count}:${nonce}` }) })
+      .catch(() => { if (!cancelled) setState(s => ({ ...s, error: true, loadedKey: `${market}|${interval}|${count}:${nonce}` })) })
     return () => { cancelled = true }
-  }, [market, interval, count])
-  return { candles: state.data, loading: state.loadedKey !== currentKey }
+  }, [market, interval, count, nonce])
+  const retry = useCallback(() => setNonce(n => n + 1), [])
+  return { candles: state.data, loading: state.loadedKey !== key, error: state.error, retry }
 }

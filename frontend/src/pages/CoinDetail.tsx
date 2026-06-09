@@ -8,6 +8,7 @@ import { useGarch } from '../hooks/useQuant'
 import { useMarketStream } from '../hooks/useMarketStream'
 import { useLivePrice, usePulse } from '../contexts/useRealtime'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 
 // ── 기술적 지표 계산 ──────────────────────────────────────
 function calcMA(closes, period) {
@@ -313,7 +314,7 @@ export function CoinDetailView({ market }) {
   const [intervalIdx, setIntervalIdx] = useState(7)
   const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false, vwap: false, volprofile: false })
 
-  const { ticker, loading }   = useTicker(market)
+  const { ticker, loading, error: tickerError, retry: tickerRetry } = useTicker(market)
   const { orderbook: restOb } = useOrderbook(market)
   const { trades: restTrades } = useTrades(market)
   // 실시간 호가·체결(WS). 연결 전/초기엔 비어 있으니 REST 값으로 폴백.
@@ -341,6 +342,7 @@ export function CoinDetailView({ market }) {
   const liveTicker            = useLivePrice(market)  // 상단 가격 헤더 실시간
   const priceFlash            = usePulse(liveTicker?.trade_price ?? ticker?.trade_price)
 
+  if (tickerError) return <PageError onRetry={tickerRetry} message="시세를 불러오지 못했습니다." />
   if (loading || !ticker) return <PageLoading message="시세를 불러오는 중입니다…" />
 
   // 실시간 시세(WS) 우선, 없으면 REST(ticker) 폴백 — 상단 가격 헤더가 라이브로 갱신된다.

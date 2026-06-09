@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 import api from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
 import { downloadChartPng } from '../utils/chartExport'
@@ -25,7 +26,7 @@ function Spinner() {
 }
 
 export default function Compare() {
-  const { tickers, loading: tLoading } = useTickers()
+  const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
   const [searchParams, setSearchParams] = useSearchParams()
   // 공유 링크(?markets=...) 가 있으면 그 종목으로 복원, 없으면 메이저 3종(BTC·ETH·XRP)으로 시작.
   const [selected, setSelected] = useState(() => {
@@ -120,6 +121,7 @@ export default function Compare() {
     return [Math.floor(lo / 10) * 10, Math.ceil(hi / 10) * 10]
   }, [chartData, selected])
 
+  if (tError) return <PageError onRetry={tRetry} />
   if (tLoading) return <PageLoading />
 
   return (

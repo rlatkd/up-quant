@@ -9,6 +9,7 @@ import { useCategoryMonthly, useCoinStats } from '../hooks/useAnalysis'
 import { useRegime } from '../hooks/useQuant'
 import { DOM_COLORS, SERIES } from '../theme'
 import PageLoading from '../components/ui/PageLoading'
+import PageError from '../components/ui/PageError'
 import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 
 const DOM_MAJORS = ['KRW-BTC', 'KRW-ETH', 'KRW-XRP', 'KRW-SOL']
@@ -517,11 +518,13 @@ function MarketBreadth({ tickers }) {
 }
 
 export default function Dashboard() {
-  const { tickers, loading: tickersLoading } = useTickers()
+  const { tickers, loading: tickersLoading, error: tickersError, retry } = useTickers()
   const { data: monthly, loading: monthlyLoading } = useCategoryMonthly()
   const { data: coinStats, loading: statsLoading } = useCoinStats()  // Opportunity Feed의 "안정 상승 모멘텀"용
   const { data: regime, loading: regimeLoading } = useRegime(2)       // 시장 종합 추세(focal)
 
+  // 핵심 데이터(시세)가 실패하면 빈 화면 대신 재시도 UI.
+  if (tickersError) return <PageError onRetry={retry} />
   // 페이지가 쓰는 데이터가 모두 준비될 때까지 통짜 로딩(요소별 스피너 없음)
   if (tickersLoading || monthlyLoading || statsLoading || regimeLoading) {
     return <PageLoading />

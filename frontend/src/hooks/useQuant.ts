@@ -1,20 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import * as quant from '../api/quant'
 
 // 파라미터가 바뀌면 재요청하되, loading은 (loadedKey !== 현재키)로 파생해
 // effect 안 setLoading(true)을 피한다(react-hooks/set-state-in-effect 회피, useAnalysis와 동일 패턴).
+// 실패 시 error=true로 두고 retry()로 재요청한다(nonce 증가 → 키 변경 → effect 재실행).
 function useKeyed(fetcher, key, initial) {
-  const [state, setState] = useState({ data: initial, loadedKey: null })
+  const [nonce, setNonce] = useState(0)
+  const fullKey = `${key}:${nonce}`
+  const [state, setState] = useState({ data: initial, error: false, loadedKey: null })
   useEffect(() => {
     let cancelled = false
     fetcher()
-      .then(d => { if (!cancelled) setState({ data: d, loadedKey: key }) })
-      .catch(() => { if (!cancelled) setState({ data: initial, loadedKey: key }) })
+      .then(d => { if (!cancelled) setState({ data: d, error: false, loadedKey: fullKey }) })
+      .catch(() => { if (!cancelled) setState(s => ({ ...s, error: true, loadedKey: fullKey })) })
     return () => { cancelled = true }
-    // fetcher는 key로부터 파생되므로 key만 의존성으로 둔다.
+    // fetcher는 key로부터 파생되므로 key/nonce만 의존성으로 둔다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  return { data: state.data, loading: state.loadedKey !== key }
+  }, [fullKey])
+  const retry = useCallback(() => setNonce(n => n + 1), [])
+  return { data: state.data, loading: state.loadedKey !== fullKey, error: state.error, retry }
 }
 
 const EMPTY_PORTFOLIO = { points: [], frontier: [], max_sharpe: { weights: [] }, min_vol: { weights: [] }, assets: [], n_obs: 0 }
