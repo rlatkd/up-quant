@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core import metrics
 from app.core.config import settings
 from app.core.logging import request_id, setup_logging
-from app.routers import markets, candles, analysis, backtest, quant, system, report
+from app.routers import markets, candles, analysis, backtest, quant, system, report, trends
 
 setup_logging()
 logger = logging.getLogger("upquant")
@@ -32,12 +32,18 @@ def _prefetch() -> None:
     - 퀀트/ML 전역 분석(네트워크·PCA·클러스터·덴드로그램·모멘텀·페어·국면 + 기본 포트폴리오/GARCH):
       일봉은 위에서 캐시돼 추가 fetch 없이 계산만 든다(수초). 첫 방문자도 콜드 없이 즉시 응답."""
     try:
-        from app.services import market_service, analysis_service, quant_service
+        from app.services import market_service, analysis_service, quant_service, trends_service
         n = len(market_service.get_tickers())
         m = len(analysis_service.get_coin_stats())
         c = len(analysis_service.get_category_monthly().rows)
         analysis_service.get_category_daily_cumulative()
         analysis_service.get_advance_decline()  # A-D 라인(시장 폭) — 공용 일봉 캐시 재사용
+        # 트렌드 대시보드(자체 지수·기간수익·시황) — 공용 일봉/월봉 캐시 재사용이라 계산만. (환율·뉴스는 외부라 제외)
+        trends_service.get_indices()         # 일봉 + 60분봉(인트라데이) 워밍
+        trends_service.get_asset_indices()    # 시장/전략/테마/섹터 지수
+        trends_service.get_period_returns()   # 외부 시총(CoinGecko) 포함
+        trends_service.get_brief()
+        # 체결강도(WS 1회 수집)는 호출 시 갱신 — 프리페치 제외(WS 1회 ~2초)
         # 퀀트 전역(파라미터 없는/기본) 분석 워밍.
         quant_service.get_network()
         quant_service.get_pca()
@@ -118,6 +124,7 @@ app.include_router(backtest.router)
 app.include_router(quant.router)
 app.include_router(system.router)
 app.include_router(report.router)
+app.include_router(trends.router)
 
 
 @app.get("/health")
