@@ -1,20 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getCandles } from '../api/candles'
 
+// 캔들 — (market, interval, count)를 키에 포함해 인터벌/종목 전환 시 자동 재요청·캐시 재사용.
+// 분봉은 backend TTL이 짧지만, 같은 차트를 다시 열 때 staleTime 내면 즉시 렌더된다.
 export function useCandles(market, interval = 'days', count = 60) {
-  // loading/error는 (loadedKey, nonce)로 파생 — effect 안 setState(true)를 피해
-  // cascading render(react-hooks/set-state-in-effect)를 회피.
-  const [nonce, setNonce] = useState(0)
-  const key = `${market}|${interval}|${count}:${nonce}`
-  const [state, setState] = useState({ data: [], error: false, loadedKey: null })
-  useEffect(() => {
-    if (!market) return
-    let cancelled = false
-    getCandles(market, interval, count)
-      .then(data => { if (!cancelled) setState({ data, error: false, loadedKey: `${market}|${interval}|${count}:${nonce}` }) })
-      .catch(() => { if (!cancelled) setState(s => ({ ...s, error: true, loadedKey: `${market}|${interval}|${count}:${nonce}` })) })
-    return () => { cancelled = true }
-  }, [market, interval, count, nonce])
-  const retry = useCallback(() => setNonce(n => n + 1), [])
-  return { candles: state.data, loading: state.loadedKey !== key, error: state.error, retry }
+  const q = useQuery({
+    queryKey: ['candles', market, interval, count],
+    queryFn: () => getCandles(market, interval, count),
+    enabled: !!market,
+    placeholderData: [],
+  })
+  return { candles: q.data ?? [], loading: q.isLoading, error: q.isError, retry: () => { q.refetch() } }
 }

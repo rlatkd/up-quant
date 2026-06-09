@@ -1,23 +1,21 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
-// 파라미터 없는 단발 fetch 공용 훅 — { data, loading, error, retry } 일관 제공.
-// 설계: loading을 별도 상태로 들지 않고 (doneNonce !== nonce)로 파생한다.
-//  → effect 본문에서 setState(true)를 호출하지 않아 cascading render(react-hooks/set-state-in-effect)를 피한다.
-//  retry()는 nonce를 올려 effect를 재실행한다(실패한 화면의 "다시 시도" 버튼용).
-export function useFetch<T>(fetcher: () => Promise<T>, initial: T) {
-  const [nonce, setNonce] = useState(0)
-  const [state, setState] = useState({ data: initial, error: false, doneNonce: -1 })
-
-  useEffect(() => {
-    let cancelled = false
-    fetcher()
-      .then(d => { if (!cancelled) setState({ data: d, error: false, doneNonce: nonce }) })
-      .catch(() => { if (!cancelled) setState(s => ({ ...s, error: true, doneNonce: nonce })) })
-    return () => { cancelled = true }
-    // fetcher는 호출부에서 매 렌더 새로 생성될 수 있어 의존성에서 제외하고 nonce로만 재실행을 제어한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nonce])
-
-  const retry = useCallback(() => setNonce(n => n + 1), [])
-  return { data: state.data, loading: state.doneNonce !== nonce, error: state.error, retry }
+// 파라미터 없는 단발 fetch 공용 훅 — react-query로 백킹해 { data, loading, error, retry }를 일관 제공.
+// 핵심 효과: 같은 queryKey를 여러 컴포넌트가 호출해도 네트워크는 1회(디둡), 페이지 재방문 시 staleTime
+// 내면 캐시에서 즉시 렌더(재요청 없음). placeholderData로 첫 로드 전엔 initial을 주되 loading=true를 유지한다
+// (initialData를 쓰면 즉시 success가 돼 로딩 게이트가 안 떠서 placeholderData를 쓴다).
+export function useFetch<T>(key: unknown, fetcher: () => Promise<T>, initial: T) {
+  const queryKey = Array.isArray(key) ? key : [key]
+  const q = useQuery<T>({
+    queryKey,
+    queryFn: fetcher,
+    // 제네릭 T가 함수형일 수 있다는 react-query 타입 가드 때문에 캐스팅(여기 T는 데이터 형상).
+    placeholderData: initial as any,
+  })
+  return {
+    data: (q.data ?? initial) as T,
+    loading: q.isLoading,        // 캐시가 없을 때의 첫 로드에서만 true (재방문/디둡 시 false → 즉시 렌더)
+    error: q.isError,
+    retry: () => { q.refetch() },
+  }
 }
