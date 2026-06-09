@@ -215,6 +215,22 @@ REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업�
 
 ---
 
+## 8. 트렌드 대시보드 — `/api/trends` (업비트 '코인동향' 미러)
+
+업비트 시세 기반 자체 산출 + 외부 소스(환율·뉴스·시총). **외부 실패 시 응답의 `error` 필드에 "소스 교체 필요" 메시지**(프론트가 숨기지 않고 노출).
+
+| 엔드포인트 | 응답 요지 |
+|---|---|
+| `GET /indices` | `TrendsIndices` — `indices[{key,label,value,change_rate,spark[],today[{h,pct}],prev[{h,pct}],n}]`. 자체 동일가중 시장지수(종합·알트·BTC그룹·ETH그룹·상위10/30) + 60분봉 당일/전일 인트라데이(시가 대비 %) |
+| `GET /asset-indices` | `AssetIndices` — `rows[{key,label,desc,tab(시장\|전략\|테마\|섹터),value,d1,m1,m3,n}]`. 자체 동일가중 지수(전략=모멘텀Top5·저변동Top5, 테마=level2, 섹터=level1) |
+| `GET /volume-power` | `VolumePower` — `buy[]`·`sell[]`(`{market,korean_name,power}`). 체결강도=매수/매도×100 (업비트 **WS 티커 `acc_ask/bid_volume`** 1회 스냅샷, 스테이블·저유동 제외). `error?` |
+| `GET /period-returns` | `PeriodReturns` — `rows[{market,korean_name,acc_trade_price_24h,r1w,r1m,r3m,r6m,r1y,market_cap,market_cap_rank}]`. 일봉(≤6m)·월봉(1y) + **시총(CoinGecko 외부)** |
+| `GET /brief` | `MarketBrief` — `{text,as_of,rise,fall,avg_change,dominance,total_volume}`. 자체 생성 시황 한 줄 |
+| `GET /fx` | `FxResult` — `rates[{pair,label,unit,price,change,change_rate}]`·`as_of`·`error?`. **외부 open.er-api.com** 프록시(10분 캐시) |
+| `GET /news` | `NewsResult` — `items[{title,url,source,published,ts}]`·`error?`. **외부 한국 크립토 RSS**(헤드라인+링크만) |
+
+---
+
 ## 스키마(모델) 정의
 
 ### Ticker

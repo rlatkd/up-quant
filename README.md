@@ -201,12 +201,16 @@ clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재
 
 | 데이터 | 수집 방식 | 가져온 데이터 | 활용 |
 |---|---|---|---|
-| **업비트 시세 Open API** | 공개 REST/WebSocket (인증 불필요) | 현재가·캔들·호가·체결·52주 (약 260종) | 시세·차트·리스크·정량분석 전반 |
-| **업비트 데이터랩 '코인 분류'** | 웹 스크래핑 (1회, 정적 스냅샷) | 약 260종 섹터(대분류 5) | 섹터 성과·분류 |
+| **업비트 시세 Open API** | 공개 REST/WebSocket (인증 불필요) | 현재가·캔들·호가·체결·52주·**체결강도(WS `acc_ask/bid_volume`)** (약 260종) | 시세·차트·리스크·정량분석·트렌드 전반 |
+| **업비트 데이터랩 '코인 분류'** | 웹 스크래핑 (1회, 정적 스냅샷) | 약 260종 섹터(대분류 5)·테마(level2) | 섹터·테마 성과·분류 |
+| **환율** (open.er-api.com) | 외부 무료 API (백엔드 프록시·캐시) | USD·JPY·CNY·EUR / KRW | 트렌드 대시보드 '오늘의 환율' |
+| **뉴스** (한국 크립토 RSS) | 외부 RSS 통합 (헤드라인+링크만) | 최신 기사 제목·링크 | 트렌드 대시보드 '최신 뉴스' |
+| **시가총액** (CoinGecko) | 외부 무료 API (상위 500) | 시총·순위 (심볼 매핑) | 트렌드 대시보드 '시가총액' 탭 |
 
 - **분석 유니버스 = KRW 마켓 전체**(약 261종, `config.USE_ALL_KRW_MARKETS`). 부팅 시 `/market/all`과 교집합만 사용해 상장폐지 종목을 자동 제외합니다(예: MATIC → POL).
 - 시세 API는 코인의 카테고리를 주지 않으므로, 데이터랩 '코인 분류' 페이지(Next.js RSC 페이로드)를 **1회 스크랩**해 정적 스냅샷(`upbit_sectors.json`)으로 보관합니다 — **5개 대분류**: `스마트 컨트랙트 플랫폼` · `인프라` · `디파이` · `문화/엔터테인먼트` · `밈`.
 - 섹터 수익률은 더미가 아닌 **실데이터**입니다(소속 종목의 일봉/월봉 close 동일가중 평균).
+- **트렌드 대시보드**는 업비트 '코인동향'을 미러링합니다 — 시장지수는 공식 UBMI가 비공개라 **자체 동일가중 지수**로 대체, 당일/전일 인트라데이는 60분봉 자체 산출. 환율·뉴스·시총만 외부 소스이며 **실패 시 숨기지 않고 "소스 교체 필요"를 노출**합니다.
 
 > 업비트 Open API: REST `https://api.upbit.com/v1`, WebSocket `wss://api.upbit.com/websocket/v1`. 공개 시세는 인증 불필요.
 
@@ -235,21 +239,27 @@ up-quant/
 │   │   │   ├── backtest.py           # /api/backtest/* MA·RSI·전략비교·워크포워드·몬테카를로·추세추종·포트폴리오
 │   │   │   ├── quant.py              # /api/quant/*    정량/ML 9종
 │   │   │   ├── report.py             # /api/report/*   AI 전략 리포트(Gemini)
-│   │   │   └── system.py             # /api/system/*   관측성 메트릭
+│   │   │   ├── system.py             # /api/system/*   관측성 메트릭
+│   │   │   └── trends.py             # /api/trends/*   코인동향(지수·인트라데이·환율·뉴스·체결강도·시총)
 │   │   ├── services/                 # 비즈니스 로직 + 캐싱 (≈ @Service)
 │   │   │   ├── market_service.py     # 현재가·한글명·호가·체결·요약·52주·스파크라인
 │   │   │   ├── candle_service.py     # 캔들 (일봉 200개 캐시 후 슬라이스 공유)
 │   │   │   ├── analysis_service.py   # 변동성·1개월수익률·상관관계·섹터 수익률·A-D (실데이터)
 │   │   │   ├── backtest_service.py   # MA·RSI·전략비교·워크포워드·몬테카를로·TSMOM·포트폴리오 (거래비용·슬리피지·벤치마크)
 │   │   │   ├── quant_service.py      # 공용 returns_matrix + Markowitz(경계선)·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR·리스크패리티
-│   │   │   └── report_service.py     # AI 전략 리포트 생성 (Gemini 호출부 주석 · 종류별 차등 캐시)
+│   │   │   ├── report_service.py     # AI 전략 리포트 생성 (Gemini 호출부 주석 · 종류별 차등 캐시)
+│   │   │   ├── trends_service.py      # 자체 시장지수·인트라데이·자산지수·체결강도(WS)·기간수익·시황
+│   │   │   ├── fx_service.py          # 환율 프록시 (open.er-api, 외부)
+│   │   │   ├── news_service.py        # 한국 크립토 RSS 통합 (외부)
+│   │   │   └── marketcap_service.py   # 시가총액 (CoinGecko, 외부)
 │   │   └── schemas/                  # Pydantic 응답 모델(DTO)
 │   │       ├── market.py             # Ticker · MarketSummary · Orderbook · Trade
 │   │       ├── candle.py             # CandleItem
 │   │       ├── analysis.py           # CategoryReturns · CoinStat · CorrelationItem · AdvanceDeclineResult
 │   │       ├── backtest.py           # BacktestResult · StrategyCompareResult · WalkForwardResult · MonteCarloResult · TsmomResult · PortfolioBacktestResult
 │   │       ├── quant.py              # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
-│   │       └── report.py             # ReportResult
+│   │       ├── report.py             # ReportResult
+│   │       └── trends.py             # MarketIndex · AssetIndices · VolumePower · PeriodReturns · FxResult · NewsResult · MarketBrief
 │   ├── tests/                        # pytest (수치 코어·캐시·설정·라우터 스모크)
 │   │   ├── test_numeric.py           # MDD·리스크조정·과최적화 p값·피어슨·일간수익률
 │   │   ├── test_cache.py             # SWR 콜드/신선/stale 갱신 · single-flight
@@ -265,10 +275,10 @@ up-quant/
 │   │   ├── theme.ts                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
 │   │   ├── api/                      # axios 호출 래퍼
 │   │   │   ├── client.ts             # axios 인스턴스(baseURL=API_BASE) + 요청/응답 로깅 인터셉터(rid)
-│   │   │   ├── markets.ts · candles.ts · analysis.ts · backtest.ts · quant.ts · report.ts · system.ts
+│   │   │   ├── markets.ts · candles.ts · analysis.ts · backtest.ts · quant.ts · report.ts · system.ts · trends.ts
 │   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 · error/retry)
 │   │   │   ├── useFetch.ts           # 공용 단발 fetch ({data,loading,error,retry})
-│   │   │   ├── useTickers.ts · useCandles.ts · useAnalysis.ts · useQuant.ts
+│   │   │   ├── useTickers.ts · useCandles.ts · useAnalysis.ts · useQuant.ts · useTrends.ts
 │   │   │   └── useMarketStream.ts    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
 │   │   ├── contexts/                 # 실시간 시세 · 가격 알림
 │   │   │   ├── Realtime.tsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
@@ -288,7 +298,7 @@ up-quant/
 │   │   └── pages/                    # 라우트별 페이지
 │   │       ├── CoinList.tsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
 │   │       ├── CoinDetail.tsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
-│   │       ├── Dashboard.tsx         # '/dashboard' — 관제탑(시그널·KPI·시장추세·시세표)
+│   │       ├── Dashboard.tsx         # '/dashboard' — 코인동향 미러(자체지수·인트라데이·환율·뉴스·체결강도·기간수익/시총·자산지수)
 │   │       ├── Explore.tsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
 │   │       ├── Market.tsx · Sectors.tsx · Screener.tsx   # 탐색 본문 (Explore가 재사용)
 │   │       ├── Analysis.tsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
@@ -368,6 +378,7 @@ npm run dev
 | **Analysis** `/api/analysis` | `/category/monthly` · `/category/cumulative-daily` · `/coins` · `/correlation/{market}` · `/advance-decline` |
 | **Backtest** `/api/backtest` | `/ma-cross` · `/rsi` · `/compare`(전략 비교) · `/walk-forward`(과최적화 검증) · `/montecarlo` · `/tsmom`(추세추종) · `/portfolio` |
 | **Quant** `/api/quant` | `/portfolio`(효율적 경계선) · `/network`(MST) · `/pca` · `/clusters` · `/dendrogram` · `/garch/{market}` · `/momentum` · `/pairs`(공적분) · `/regime`(HMM) |
+| **Trends** `/api/trends` | `/indices`(자체 시장지수+당일/전일 인트라데이) · `/asset-indices`(시장·전략·테마·섹터) · `/volume-power`(체결강도, WS) · `/period-returns`(기간수익+시총) · `/brief`(시황) · `/fx`(환율·외부) · `/news`(뉴스·외부) |
 | **Report / System** | `/api/report/strategy`(AI 전략 리포트) · `/api/system/metrics`(관측성) |
 | **WebSocket** `/ws` | `/ws/tickers`(전체 현재가 실시간) · `/ws/market/{market}`(종목 호가·체결 실시간) |
 | **Health** | `/health`(status · ready) |
