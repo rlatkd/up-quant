@@ -225,6 +225,12 @@ async def ws_market(client: WebSocket, market: str):
     """코인 상세용 — 한 종목의 호가(orderbook)·체결(trade)을 실시간 중계.
     종목별 on-demand(상세를 열 때만)라 클라이언트당 1연결. ticker(전체)와 달리 공유 허브가 불필요."""
     await client.accept()
+    # path의 market을 검증 없이 업비트로 전달하지 않는다 — 상장된 KRW 마켓만 허용(미검증 입력 업스트림 전달 차단).
+    from app.services import market_service
+    valid = await asyncio.to_thread(market_service.valid_markets)
+    if market not in set(valid):
+        await client.close(code=1008)  # policy violation
+        return
     req = json.dumps([
         {"ticket": "upquant"},
         {"type": "orderbook", "codes": [market]},
