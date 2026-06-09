@@ -139,25 +139,14 @@ def get_category_daily_cumulative(n_days: int = _DAILY_CUM_CANDLES) -> CategoryR
     return cached("category:cumulative_daily", config.TTL_CATEGORY, build)
 
 
-def _volatility(market: str) -> float:
-    """30일 일간 수익률의 표준편차 (Upbit /v1/candles/days 기반)"""
-    candles = candle_service.get_candles(market, "days", count=30)
-    closes = [c.close for c in candles]
-    if len(closes) < 3:
+def _volatility_from_returns(rets: list[float]) -> float:
+    """일간 수익률(소수) 리스트 → 표준편차(%, 표본). 캔들을 다시 받지 않고 이미 구한 수익률로 계산."""
+    if len(rets) < 2:
         return 0.0
-    returns = [(closes[i] - closes[i - 1]) / closes[i - 1] * 100 for i in range(1, len(closes))]
-    mean = sum(returns) / len(returns)
-    var = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
+    pct = [r * 100 for r in rets]
+    mean = sum(pct) / len(pct)
+    var = sum((r - mean) ** 2 for r in pct) / (len(pct) - 1)
     return round(math.sqrt(var), 2)
-
-
-def _return_1m(market: str) -> float:
-    """최근 30일 총 수익률 (Upbit /v1/candles/days 기반)"""
-    candles = candle_service.get_candles(market, "days", count=30)
-    if len(candles) < 2:
-        return 0.0
-    first, last = candles[0].close, candles[-1].close
-    return round((last - first) / first * 100, 2) if first else 0.0
 
 
 def _pearson(xs: list[float], ys: list[float]) -> float:
@@ -220,16 +209,17 @@ def _compute_coin_stats() -> list[CoinStat]:
     btc_var = sum((r - btc_mean) ** 2 for r in btc_rets) / len(btc_rets) if btc_rets else 0.0
 
     # 1패스 — 종목별 지표 계산 (z-score는 전종목 분포가 필요해 2패스로 뒤에서)
+    # 일봉은 종목당 1회만 받아(공용 캐시 히트) 변동성·수익률·베타·급증을 모두 그 데이터로 계산.
     rows: list[tuple] = []
     for t in tickers:
         candles = candle_service.get_candles(t.market, "days", count=30)
         closes = [c.close for c in candles]
         volumes = [c.volume for c in candles]
-        volatility = _volatility(t.market)
-        return_1m = _return_1m(t.market)
+        rets = _daily_returns(closes)
+        volatility = _volatility_from_returns(rets)
+        return_1m = round((closes[-1] - closes[0]) / closes[0] * 100, 2) if len(closes) >= 2 and closes[0] else 0.0
 
         # BTC 베타 = cov(종목, BTC) / var(BTC) — 공통 최근 구간으로 정렬
-        rets = _daily_returns(closes)
         n = min(len(rets), len(btc_rets))
         if n >= 5 and btc_var > 0:
             sr, br = rets[-n:], btc_rets[-n:]
@@ -274,8 +264,8 @@ def _compute_coin_stats() -> list[CoinStat]:
 
 
 def get_coin_stats() -> list[CoinStat]:
-    # 전체 유니버스면 코인 수가 많아 계산 비용이 커지므로 짧게 캐시한다.
-    return cached("coin_stats", config.TTL_TICKER, _compute_coin_stats)
+    # 261종 루프라 계산이 비싸고 내용은 일봉 파생(거의 안 변함) → 길게 캐시(SWR이라 만료돼도 즉시 응답).
+    return cached("coin_stats", config.TTL_COIN_STATS, _compute_coin_stats)
 
 
 # ── Advance-Decline 라인 (시장 폭의 추세) ──────────────────────

@@ -40,6 +40,30 @@ def test_stale_serves_old_value_then_revalidates_in_background():
     assert cache.cached("k", 60, fetch) == "v2"  # 갱신 후 신선
 
 
+def test_lru_evicts_oldest_over_capacity(monkeypatch):
+    cache.clear()
+    monkeypatch.setattr(cache, "_MAX_KEYS", 3)
+    for i in range(5):
+        cache.cached(f"k{i}", 60, lambda i=i: i)   # 콜드 5개 삽입(상한 3)
+    # 가장 오래된 k0·k1은 축출, 최근 3개만 남는다.
+    assert set(cache._store.keys()) == {"k2", "k3", "k4"}
+    assert "k0" not in cache._locks and "k1" not in cache._locks   # 락도 동반 정리
+
+
+def test_revalidation_refreshes_lru_position(monkeypatch):
+    cache.clear()
+    monkeypatch.setattr(cache, "_MAX_KEYS", 3)
+    for i in range(3):
+        cache.cached(f"k{i}", 0, lambda i=i: i)     # ttl=0 → 즉시 stale
+    cache.cached("k0", 60, lambda: 0)               # k0 stale 접근 → 백그라운드 갱신(꼬리로 이동)
+    for _ in range(50):
+        if cache._store and next(iter(cache._store)) != "k0":
+            break
+        time.sleep(0.02)
+    cache.cached("k3", 60, lambda: 3)               # 새 키 → 가장 오래된 것(k1) 축출, k0은 생존
+    assert "k0" in cache._store
+
+
 def test_single_flight_skips_concurrent_revalidation():
     cache.clear()
     calls = {"n": 0}

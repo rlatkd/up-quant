@@ -56,6 +56,7 @@ TTL_MARKET_ALL = 3600   # 마켓 목록/한글명 (거의 안 변함)
 TTL_TICKER     = 5      # 현재가
 TTL_CANDLE     = 30     # 캔들 (분/주/월)
 TTL_CANDLE_DAYS = 600   # 일봉 (통계 공용 — 장시간 캐시로 전체 유니버스 부하 억제)
+TTL_COIN_STATS = 300    # 코인 통계(변동성·수익률·베타·z-score) — 일봉 파생이라 거의 안 변함. 261종 루프 비싸서 길게.
 TTL_SPARKLINE  = 300    # 코인목록 1일 스파크라인 (1시간봉 24개)
 TTL_ORDERBOOK  = 3      # 호가
 TTL_TRADES     = 3      # 체결
