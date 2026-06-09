@@ -4,32 +4,34 @@
 // ⚠️ width는 헤더(full-bleed)와 달리 페이지 본문(max-w-[1440px])에 맞춘다 — 상단 구분선도 본문 폭만큼만.
 // 가짜 사업자정보·연락처는 넣지 않고, 이 프로젝트의 실제 정보(데이터 출처·면책·기술 스택)만 담는다.
 
+// 헤더 그룹(시황·마켓·리서치·포트폴리오)과 라벨을 일치시킨다. '종목 비교'는 리서치로, 스크리너는 마켓에.
 const NAV_COLUMNS = [
   {
-    title: '둘러보기',
+    title: '마켓',
     links: [
-      { label: '대시보드', to: '/dashboard' },
-      { label: '마켓', to: '/market' },
+      { label: '시황', to: '/dashboard' },
+      { label: '시장 현황', to: '/market' },
       { label: '섹터', to: '/sectors' },
       { label: '스크리너', to: '/screener' },
       { label: '코인 목록', to: '/coins' },
     ],
   },
   {
-    title: '정량 분석',
+    title: '리서치',
     links: [
       { label: '시장 구조', to: '/structure' },
       { label: '시장 국면', to: '/regime' },
-      { label: '팩터 분석', to: '/factor' },
+      { label: '팩터', to: '/factor' },
       { label: '리스크', to: '/risk' },
+      { label: '종목 비교', to: '/tools/compare' },
     ],
   },
   {
-    title: '전략 도구',
+    title: '전략',
     links: [
-      { label: '포트폴리오 최적화', to: '/tools/portfolio' },
+      { label: '최적화', to: '/tools/portfolio' },
       { label: '백테스트', to: '/tools/backtest' },
-      { label: '비교 분석', to: '/tools/compare' },
+      { label: '검증·시뮬레이션', to: '/tools/validation' },
     ],
   },
 ]

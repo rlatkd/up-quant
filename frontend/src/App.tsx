@@ -13,6 +13,7 @@ const CoinList = lazy(() => import('./pages/CoinList'))
 const Analysis = lazy(() => import('./pages/Analysis'))
 const PortfolioPage = lazy(() => import('./pages/Tools').then(m => ({ default: m.PortfolioPage })))
 const BacktestPage = lazy(() => import('./pages/Tools').then(m => ({ default: m.BacktestPage })))
+const ValidationPage = lazy(() => import('./pages/Tools').then(m => ({ default: m.ValidationPage })))
 const ComparePage = lazy(() => import('./pages/Tools').then(m => ({ default: m.ComparePage })))
 const SystemMonitor = lazy(() => import('./pages/SystemMonitor'))
 const Help = lazy(() => import('./pages/Help'))
@@ -46,6 +47,7 @@ function App() {
           <Route path="/tools" element={<Navigate to="/tools/portfolio" replace />} />
           <Route path="/tools/portfolio" element={<PortfolioPage />} />
           <Route path="/tools/backtest" element={<BacktestPage />} />
+          <Route path="/tools/validation" element={<ValidationPage />} />
           <Route path="/tools/compare" element={<ComparePage />} />
           {/* 시스템 모니터링 (관측성) — 푸터 링크로 진입 */}
           <Route path="/system" element={<SystemMonitor />} />

@@ -17,9 +17,9 @@ const METHODOLOGY = [
   { name: 'PCA 시장 요인',             q: '시장이 한 덩어리로 동조화된 정도 (PC1 = 공통 시장 요인 ≈ 베타)', how: '표준화 수익률 주성분분석', lib: 'scikit-learn', where: '시장 국면', route: '/regime#pca' },
   { name: 'K-means · 계층 군집',        q: '테마와 무관하게 통계적 성격(변동성·수익·거래대금)이 닮은 종목 묶기', how: 'K-means + 평균연결 덴드로그램', lib: 'scikit-learn · scipy', where: '시장 구조', route: '/structure#cluster' },
   { name: 'HMM 시장 국면',             q: '시장이 스스로 나눈 평온 / 격동 국면 (변동성 군집성으로 지속)', how: '가우시안 은닉마르코프모델 [수익률·변동성]', lib: 'hmmlearn', where: '시장 국면', route: '/regime#regime' },
-  { name: '횡단면 모멘텀 팩터',         q: '오른 종목이 더 오르나 — 모멘텀 효과의 실재 검증', how: '분위 롱숏 달러중립 팩터 백테스트', lib: 'numpy', where: '팩터 분석', route: '/factor#momentum' },
-  { name: '공적분 페어트레이딩',        q: '장기적으로 같이 움직이는 두 코인의 평균회귀 기회', how: 'Engle-Granger 공적분 + 스프레드 z점수', lib: 'statsmodels', where: '팩터 분석', route: '/factor#pairs' },
-  { name: 'Markowitz 효율적 경계선',    q: '위험 대비 수익이 최적인 포트폴리오 비중', how: '평균-분산 최적화 (★최대샤프 / ◆최소분산)', lib: 'scipy SLSQP', where: '전략 도구', route: '/tools/portfolio' },
+  { name: '횡단면 모멘텀 팩터',         q: '오른 종목이 더 오르나 — 모멘텀 효과의 실재 검증', how: '분위 롱숏 달러중립 팩터 백테스트', lib: 'numpy', where: '리서치 › 팩터', route: '/factor#momentum' },
+  { name: '공적분 페어트레이딩',        q: '장기적으로 같이 움직이는 두 코인의 평균회귀 기회', how: 'Engle-Granger 공적분 + 스프레드 z점수', lib: 'statsmodels', where: '리서치 › 팩터', route: '/factor#pairs' },
+  { name: 'Markowitz 효율적 경계선',    q: '위험 대비 수익이 최적인 포트폴리오 비중', how: '평균-분산 최적화 (★최대샤프 / ◆최소분산)', lib: 'scipy SLSQP', where: '포트폴리오 › 최적화', route: '/tools/portfolio' },
   { name: 'GARCH 변동성 예측 + VaR',   q: '변동성 군집성·향후 변동성·1일 예상 최대손실(VaR)', how: 'GARCH(1,1) 조건부 변동성', lib: 'arch', where: '코인 상세', route: '/coins' },
 ]
 

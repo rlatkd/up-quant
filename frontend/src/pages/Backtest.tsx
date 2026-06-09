@@ -3,20 +3,17 @@ import { useTickers } from '../hooks/useTickers'
 import PageLoading from '../components/ui/PageLoading'
 import { runMaCross, runRsi } from '../api/backtest'
 import InfoTooltip from '../components/InfoTooltip'
-import CompareBody from './backtest/CompareBody'
-import WalkForwardBody from './backtest/WalkForwardBody'
-import MonteCarloBody from './backtest/MonteCarloBody'
 import TsmomBody from './backtest/TsmomBody'
 import SingleStrategyBody from './backtest/SingleStrategyBody'
 import PortfolioBacktest from './backtest/PortfolioBacktest'
 
+// 전략 백테스트(전략 실행) — 실제 매매 규칙을 과거 데이터로 돌려본다. 같은 입력(종목·기간·비용)을
+// 공유하며 전략만 갈아끼우는 워크플로라 선택자(selector) 한 페이지가 맞다.
+// 검증·시뮬레이션(전략 비교·워크포워드·몬테카를로)은 성격이 달라 별도 페이지(/tools/validation)로 분리.
 const STRATEGIES = [
   { key: 'ma',  label: 'MA 크로스' },
   { key: 'rsi', label: 'RSI 역추세' },
-  { key: 'compare', label: '전략 비교' },
-  { key: 'walkforward', label: '워크포워드' },
-  { key: 'montecarlo', label: '몬테카를로' },
-  { key: 'tsmom', label: '추세추종(TS모멘텀)' },
+  { key: 'tsmom', label: '추세추종(TSMOM)' },
   { key: 'portfolio', label: '포트폴리오 보유' },
 ]
 
@@ -65,12 +62,12 @@ export default function Backtest({ preset }) {
 
   return (
     <div className="space-y-4">
-      {/* 전략 선택 (공통) */}
+      {/* 전략 선택 (전략 실행 4종 — 같은 입력 공유) */}
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
           전략 선택
           <InfoTooltip>
-            과거 일봉으로 전략을 시뮬레이션합니다. MA 크로스·RSI는 단일 종목 매매 전략, 추세추종은 다종목 시계열 모멘텀, 포트폴리오 보유는 여러 종목을 비중대로 들고 있었을 때의 성과를 봅니다.
+            실제 매매 전략을 과거 일봉으로 시뮬레이션합니다. MA 크로스·RSI는 단일 종목 매매, 추세추종은 다종목 시계열 모멘텀, 포트폴리오 보유는 여러 종목을 비중대로 들고 있었을 때의 성과입니다. 전략의 강건성·전망 점검(전략 비교·워크포워드·몬테카를로)은 [검증·시뮬레이션] 페이지에 있습니다.
           </InfoTooltip>
         </div>
         <div className="flex gap-1.5 flex-wrap">
@@ -87,12 +84,6 @@ export default function Backtest({ preset }) {
 
       {strategy === 'portfolio' ? (
         <PortfolioBacktest tickers={tickers} preset={preset} />
-      ) : strategy === 'compare' ? (
-        <CompareBody market={market} setMarket={setMarket} tickers={tickers} />
-      ) : strategy === 'walkforward' ? (
-        <WalkForwardBody market={market} setMarket={setMarket} tickers={tickers} />
-      ) : strategy === 'montecarlo' ? (
-        <MonteCarloBody market={market} setMarket={setMarket} tickers={tickers} />
       ) : strategy === 'tsmom' ? (
         <TsmomBody />
       ) : (

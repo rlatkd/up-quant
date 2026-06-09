@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PortfolioSection } from './Analysis'
 import Backtest from './Backtest'
+import Validation from './Validation'
 import Compare from './Compare'
 
 // 전략 도구 — 헤더 "서비스 더보기" 드롭다운의 독립 페이지 3종.
@@ -17,6 +18,10 @@ export function PortfolioPage() {
 export function BacktestPage() {
   const { state } = useLocation()
   return <Backtest preset={state?.preset} />
+}
+
+export function ValidationPage() {
+  return <Validation />
 }
 
 export function ComparePage() {

@@ -31,33 +31,37 @@ function ThemeToggle() {
   )
 }
 
-// ── 메인 내비 — 4그룹(대시보드 단일 + 둘러보기·분석·전략 드롭다운) ──
+// ── 메인 내비 — 자산운용 리서치 톤 4그룹(시황 단일 + 마켓·리서치·포트폴리오 드롭다운) ──
 // 평탄 탭이 과해 그룹 드롭다운으로 축소. 하위 항목은 호버 시 펼침(내비 한정 — 페이지 콘텐츠는 탭으로 숨기지 않음).
+// '종목 비교'(/tools/compare)는 고른 종목을 분석하는 행위라 포트폴리오가 아닌 리서치 그룹에 둔다(active 매칭도 리서치로).
+// 스크리너는 전체 시장에서 조건으로 종목을 '발굴'하는 도구라 마켓(시장 탐색) 그룹에 둔다.
 const NAV: { label: string; to?: string; match: (p: string) => boolean; items?: { to: string; label: string }[] }[] = [
-  { label: '대시보드', to: '/dashboard', match: (p) => p.startsWith('/dashboard') },
+  { label: '시황', to: '/dashboard', match: (p) => p.startsWith('/dashboard') },
   {
-    label: '둘러보기', match: (p) => /^\/(market|sectors|screener|explore)/.test(p),
+    label: '마켓', match: (p) => /^\/(market|sectors|screener|explore)/.test(p),
     items: [
-      { to: '/market', label: '마켓 현황' },
+      { to: '/market', label: '시장 현황' },
       { to: '/sectors', label: '섹터' },
       { to: '/screener', label: '스크리너' },
     ],
   },
   {
-    label: '분석', match: (p) => /^\/(structure|regime|factor|risk)/.test(p),
+    label: '리서치', match: (p) => /^\/(structure|regime|factor|risk)/.test(p) || p.startsWith('/tools/compare'),
     items: [
       { to: '/structure', label: '시장 구조' },
       { to: '/regime', label: '시장 국면' },
-      { to: '/factor', label: '팩터 분석' },
+      { to: '/factor', label: '팩터' },
       { to: '/risk', label: '리스크' },
+      { to: '/tools/compare', label: '종목 비교' },
     ],
   },
   {
-    label: '전략', match: (p) => p.startsWith('/tools'),
+    // '전략' — 최적화·백테스트·검증을 아우르는 상위어(포트폴리오 전용이 아닌 백테스트/검증을 포괄).
+    label: '전략', match: (p) => p.startsWith('/tools/portfolio') || p.startsWith('/tools/backtest') || p.startsWith('/tools/validation'),
     items: [
-      { to: '/tools/portfolio', label: '포트폴리오 최적화' },
+      { to: '/tools/portfolio', label: '최적화' },
       { to: '/tools/backtest', label: '백테스트' },
-      { to: '/tools/compare', label: '비교 분석' },
+      { to: '/tools/validation', label: '검증·시뮬레이션' },
     ],
   },
 ]
@@ -66,7 +70,7 @@ function NavGroup({ group }) {
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const active = group.match(pathname)
-  const cls = `flex items-center gap-1 px-3.5 h-full text-[14px] border-b-2 transition-colors cursor-pointer ${
+  const cls = `flex items-center gap-1 px-5 h-full text-[15.5px] border-b-2 transition-colors cursor-pointer ${
     active ? 'text-white font-bold border-white/80' : 'text-white/70 hover:text-white/90 font-semibold border-transparent'
   }`
 
@@ -147,7 +151,7 @@ function Header() {
         <Link to="/" className="flex items-center mr-8" title="코인 목록">
           <img src="/logo.png" alt="UPquant" className="h-13 w-auto" />
         </Link>
-        <nav className="flex h-full items-stretch">
+        <nav className="flex h-full items-stretch gap-1">
           {NAV.map(g => <NavGroup key={g.label} group={g} />)}
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
