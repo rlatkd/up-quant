@@ -170,14 +170,14 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 
 | 엔드포인트 | 쿼리 | 응답 요지 |
 |---|---|---|
-| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]`(Dirichlet α=0.3) + `frontier[{vol,ret}]`(효율적 경계선 곡선, 60점) + `max_sharpe`/`min_vol`/**`risk_parity`**(`PortfolioSpot`: 좌표 + `weights[]`; 리스크패리티=역변동성, mu 추정 비의존) + `assets[]` + **`shrinkage`**(Ledoit-Wolf 수축 강도 0~1; 공분산은 표본 대신 수축 추정) (Markowitz, scipy SLSQP) |
+| `GET /portfolio` | `markets`(2~8) | `PortfolioResult` — 무작위 1000 시뮬 `points[{vol,ret,sharpe}]`(Dirichlet α=0.3) + `frontier[{vol,ret,`**`weights[]`**`}]`(효율적 경계선 60점, **Phase 30 각 점의 비중 — 목표수익률 슬라이더용**) + `max_sharpe`/`min_vol`/**`risk_parity`**(`PortfolioSpot`: 좌표 + `weights[]` + **`risk_contrib[]`**(자산별 리스크 기여도%, 합100 — 비중≠리스크비중) + **`diversification`**(분산효과 비율≥1)) + `assets[{...,`**`sharpe`**`}]` + **`shrinkage`**(Ledoit-Wolf 수축 0~1) + **`corr_labels`·`corr_matrix`**(선택 바스켓 상관행렬 — 분산효과 근원) (Markowitz, scipy SLSQP) |
 | `GET /network` | `top`(5~100, 50) | `NetworkResult` — `nodes[{market, category, value, degree}]` + `edges[{source,target,corr}]`(MST, networkx) |
 | `GET /pca` | `top`(5~100, 50) | `PCAResult` — `components[{index,explained}]` + `loadings[{market,category,pc1,pc2}]` + `pc1_explained`(시장요인 설명비율%) |
 | `GET /clusters` | `top`(10~150, 80), `k`(2~8, 4) | `ClusterResult` — `points[{market,category,cluster,volatility,return_1m,log_value}]` (K-means) |
 | `GET /dendrogram` | `top`(5~60, 40) | `DendrogramResult` — scipy 플롯 좌표 `icoord/dcoord` + `labels/markets/categories`(잎 순서) |
 | `GET /garch/{market}` | — | `GarchResult` — `cond_vol[{time,vol}]` + `forecast_vol[]` + `current_vol_annual`·`var_95`(정규근사)·**`hist_var_95`·`cvar_95`**(경험분위 VaR/기대손실 — 팻테일 반영)·`persistence`(arch GARCH(1,1)) |
-| `GET /momentum` | `top`(10~100,40), `lookback`(5~60,20), `holding`(1~20,5) | `MomentumResult` — `equity[{time,factor,benchmark}]` + `total_return`·`benchmark_return`·`sharpe`·`mdd` + `long[]`/`short[]` (횡단면 롱숏) |
-| `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal, bt_return,bt_trades,bt_winrate}]`(사후검증 요약 포함) + `tested`·`found` + **`best`**(최저 p값 페어 상세: `points[{time,z,equity}]`·`entry`·`exit` — 스프레드 z+자산곡선 차트용) (statsmodels 공적분 + 롤링 z 평균회귀 백테스트) |
+| `GET /momentum` | `top`(10~100,40), `lookback`(5~60,20), `holding`(1~20,5), **`long_only`**(bool,false) | `MomentumResult` — `equity[{time,factor,benchmark}]` + `total_return`·`benchmark_return`·`sharpe`·`mdd` + `long[]`/`short[]` + **`long_only`**. 기본은 달러중립 롱숏(공매도 가정 — 업비트 현물 실행 불가, 학술 검증용), **`long_only=true`면 상위분위 매수만(현물 실행 가능, short[]는 빔)** |
+| `GET /pairs` | `top`(5~40, 30) | `PairsResult` — `pairs[{market1,market2,pvalue,correlation,hedge_ratio,zscore,signal, bt_return,bt_trades,bt_winrate}]`(사후검증 요약 포함) + `tested`·`found` + **`best`**(최저 p값 페어 상세: `points[{time,z,equity}]`·`entry`·`exit`·**`formation_end`** — 스프레드 z+자산곡선 차트용) (statsmodels 공적분 + 롤링 z 평균회귀 백테스트). **Phase 30 — 헤지비율 β는 형성기간(앞50%)으로만 추정, 거래기간(뒤50%)만 매매하는 out-of-sample**(`formation_end`가 그 경계, 사후성과 낙관편향 제거) |
 | `GET /regime` | `n_states`(2~4, 2) | `RegimeResult` — `points[{time,regime,index}]` + `stats[{regime,label,mean_return,volatility,days,share}]` + `current_regime`·`current_label` (hmmlearn HMM) |
 
 ---
@@ -339,10 +339,11 @@ REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업�
 | 코인 목록 | `/api/markets/tickers`, `/api/markets/summary`, `WS /ws/tickers`(현재가 실시간) |
 | 탐색(마켓·섹터·스크리너 통합 `/explore`) | `/api/markets/tickers`, `/api/analysis/coins`, `/api/analysis/category/monthly`, `/api/analysis/category/cumulative-daily` |
 | 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}`, `/api/analysis/coins`, `/api/quant/garch/{market}`, `WS /ws/tickers`·`WS /ws/market/{market}`(현재가·호가·체결 실시간) |
-| 비교 분석 | `/api/candles/{market}` (선택 종목별) |
-| 백테스트 | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/compare`, `/api/backtest/walk-forward`, `/api/backtest/portfolio` |
+| 종목 비교 (`/tools/compare`, 리서치 그룹) | `/api/candles/{market}` (선택 종목별) |
+| 백테스트(전략 실행, `/tools/backtest`) | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/tsmom`, `/api/backtest/portfolio` |
+| 검증·시뮬레이션 (`/tools/validation`, Phase 30 분리) | `/api/backtest/compare`, `/api/backtest/walk-forward`, `/api/backtest/montecarlo` |
 | 시장 구조 (`/structure`) | `/api/quant/network`, `/api/quant/clusters`, `/api/quant/dendrogram` |
 | 시장 국면 (`/regime`) | `/api/quant/pca`, `/api/quant/regime` |
-| 팩터 분석 (`/factor`) | `/api/quant/momentum`, `/api/quant/pairs` |
+| 팩터 (`/factor`) | `/api/quant/momentum`(±`long_only`), `/api/quant/pairs` |
 | 리스크 (`/risk`) | `/api/analysis/coins` (변동성·VaR 재사용, 추가 호출 0) |
-| 포트폴리오 최적화 (`/tools/portfolio`) | `/api/quant/portfolio` |
+| 최적화 (`/tools/portfolio`) | `/api/quant/portfolio` |
