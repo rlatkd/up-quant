@@ -8,7 +8,6 @@
   결과를 그대로 재사용한다(core/cache의 stale-while-revalidate). 단일 인스턴스 전역 캐시라
   그 시간 동안 어느 클라이언트가 호출해도 같은 첫 답변을 받는다 → 비결정성·비용·레이트리밋 차단.
 """
-import os
 from datetime import datetime, timezone, timedelta
 
 from app.core.cache import cached
@@ -171,6 +170,7 @@ def _generate(report_type: str) -> ReportResult:
     generated_at = int(datetime.now(timezone.utc).timestamp())
 
     # ── LLM 호출 (Gemini) — 주석 처리. GEMINI_API_KEY 설정 후 이 블록을 활성화하면 동작 ──
+    # import os
     # from google import genai
     # from google.genai import types
     # client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])

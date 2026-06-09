@@ -1,3 +1,4 @@
+import hashlib
 import math
 from statistics import mean, pstdev
 
@@ -161,24 +162,18 @@ def run_ma_cross(
                            benchmark_btc=btc_val_at(times[i]))
 
     for i in range(len(closes)):
-        if fast_ma[i] is None or slow_ma[i] is None:
-            equity.append(_ep(i, equity_val))
-            continue
-
-        prev_fast = fast_ma[i - 1]
-        prev_slow = slow_ma[i - 1]
-
-        # 골든크로스 → 매수
-        if not position and prev_fast is not None and prev_slow is not None:
-            if prev_fast <= prev_slow and fast_ma[i] > slow_ma[i]:
+        # 신호는 "직전 완결봉(i-1)"의 크로스로 판정하고 당일 종가(closes[i])에 체결한다 →
+        # 당일 종가로 신호를 알고 그 종가에 사는 룩어헤드를 제거(익일 체결). (i-2→i-1 크로스 → i 체결)
+        if i >= 2 and None not in (fast_ma[i - 2], slow_ma[i - 2], fast_ma[i - 1], slow_ma[i - 1]):
+            f2, s2, f1, s1 = fast_ma[i - 2], slow_ma[i - 2], fast_ma[i - 1], slow_ma[i - 1]
+            # 골든크로스(직전봉 확정) → 당일 매수
+            if not position and f2 <= s2 and f1 > s1:
                 position = True
                 buy_price = closes[i]
                 equity_val *= (1 - fee)            # 진입 거래비용
                 trades.append(TradeRecord(time=times[i], side="BUY", price=closes[i], pnl=0.0))
-
-        # 데드크로스 → 매도
-        elif position and prev_fast is not None and prev_slow is not None:
-            if prev_fast >= prev_slow and fast_ma[i] < slow_ma[i]:
+            # 데드크로스(직전봉 확정) → 당일 매도
+            elif position and f2 >= s2 and f1 < s1:
                 pnl = (closes[i] - buy_price) / buy_price * 100
                 equity_val *= (1 + pnl / 100) * (1 - fee)   # 실현 후 청산 거래비용
                 if pnl > 0:
@@ -418,17 +413,16 @@ def _ma_curve(closes: list[float], fast: int, slow: int, fee: float, start: int 
     eq = 100.0
     curve: list[float] = []
     for i in range(start, len(closes)):
-        pf, ps = fast_ma[i - 1], slow_ma[i - 1]
-        if fast_ma[i] is None or slow_ma[i] is None or pf is None or ps is None:
-            curve.append(eq)
-            continue
-        if not pos and pf <= ps and fast_ma[i] > slow_ma[i]:
-            pos = True
-            buy = closes[i]
-            eq *= (1 - fee)
-        elif pos and pf >= ps and fast_ma[i] < slow_ma[i]:
-            eq *= (1 + (closes[i] - buy) / buy) * (1 - fee)
-            pos = False
+        # 익일 체결: 직전 완결봉(i-2→i-1) 크로스로 판정하고 당일 종가(closes[i])에 체결(룩어헤드 제거).
+        if i >= 2 and None not in (fast_ma[i - 2], slow_ma[i - 2], fast_ma[i - 1], slow_ma[i - 1]):
+            f2, s2, f1, s1 = fast_ma[i - 2], slow_ma[i - 2], fast_ma[i - 1], slow_ma[i - 1]
+            if not pos and f2 <= s2 and f1 > s1:
+                pos = True
+                buy = closes[i]
+                eq *= (1 - fee)
+            elif pos and f2 >= s2 and f1 < s1:
+                eq *= (1 + (closes[i] - buy) / buy) * (1 - fee)
+                pos = False
         curve.append(eq * (1 + (closes[i] - buy) / buy) if pos else eq)
     ret = round((curve[-1] - 100), 2) if curve else 0.0
     return ret, curve
@@ -510,7 +504,8 @@ def run_montecarlo(market: str, horizon: int = 30, n_paths: int = 1000,
         return empty
 
     rets = closes[1:] / closes[:-1] - 1.0
-    rng = np.random.default_rng(abs(hash(market)) % (2**32))
+    # 결정적 시드(hashlib) — 내장 hash()는 프로세스마다 난수화돼 재시작 시 부채꼴이 달라진다.
+    rng = np.random.default_rng(int.from_bytes(hashlib.md5(market.encode()).digest()[:4], "big"))
     # 부트스트랩: 과거 일간수익률에서 (n_paths, horizon) 복원추출 → 누적곱으로 가격 경로(100 시작).
     sampled = rng.choice(rets, size=(n_paths, horizon), replace=True)
     paths = np.cumprod(1.0 + sampled, axis=1) * 100.0          # (n_paths, horizon)
