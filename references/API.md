@@ -2,13 +2,13 @@
 
 UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open API(시세, 인증 불필요)** 를 호출해 생성하며, 인메모리 TTL 캐시(stale-while-revalidate)로 제공됩니다. (카테고리 분류는 업비트 데이터랩 '코인 분류'를 1회 스크랩한 정적 스냅샷, 수익률은 실 월봉 집계)
 
-- **Base URL**: `http://localhost:8000`
+- **Base URL**: `http://localhost:8000` (배포 시 프론트는 `VITE_API_BASE`로 주입)
 - **자동 생성 문서** (서버 실행 중일 때):
   - Swagger UI: <http://localhost:8000/docs>
   - ReDoc: <http://localhost:8000/redoc>
   - OpenAPI JSON: <http://localhost:8000/openapi.json>
 - **인증**: 없음
-- **CORS**: `http://localhost:5173`(프론트엔드)만 허용
+- **CORS**: 기본 `http://localhost:5173`(프론트엔드). 배포 시 `CORS_ORIGINS` 환경변수(콤마 구분 또는 JSON 리스트)로 덮어씀
 - **응답 헤더**: 모든 응답에 추적용 `X-Request-Id`(rid) 포함 — 프론트·백엔드·업비트 로그가 같은 rid로 묶임
 - **캐싱/레이트리밋**: 업비트 시세 호출은 전역 스로틀(~초당 8회) + 429 재시도로 보호되며, 결과는 TTL 캐시(ticker 5s · candle 30s · market_all 1h 등). 첫 호출(콜드)만 다소 느리고 이후·만료 시에도 즉시 응답.
 
@@ -185,8 +185,8 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 ## 6. 기타
 
 ### `GET /health`
-서버 상태 확인.
-- **응답**: `{ "status": "ok" }`
+서버 상태 + readiness 확인. `ready`는 부팅 프리페치(캐시 워밍) 완료 여부 — `false`면 워밍 중(오케스트레이터가 트래픽을 늦게 보낼 수 있음), `SKIP_PREFETCH=1`이면 곧장 `true`.
+- **응답**: `{ "status": "ok", "ready": <bool> }`
 
 ### `GET /api/report/strategy`
 LLM(Gemini) 투자 전략 리포트 — 시장 데이터(프리페치 재사용)를 모아 표준 리서치 5섹션 마크다운 생성. **LLM 호출부는 주석 처리(미연동)** — `GEMINI_API_KEY` + 주석 해제 시 동작, 미연동 시 데이터 기반 자동 초안 반환. **종류별 차등 캐시**(시장 2h / 포트·리스크 6h).

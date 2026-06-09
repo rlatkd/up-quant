@@ -139,7 +139,7 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 | **hmmlearn** | 가우시안 HMM 시장 국면 탐지 |
 | **networkx** | 상관 네트워크 최소신장트리(MST) |
 
-> 외부 의존성 없는 인메모리 TTL 캐시(`core/cache.py`, stale-while-revalidate · single-flight), `contextvars` 기반 요청 ID 로깅(`core/logging.py`), 업비트 WS 중계 허브(`main.py:TickerHub`)를 자체 구현했습니다.
+> 외부 의존성 없는 인메모리 TTL 캐시(`core/cache.py`, stale-while-revalidate · single-flight), `contextvars` 기반 요청 ID 로깅(`core/logging.py`), 업비트 WS 중계 허브(`main.py:TickerHub`)를 자체 구현했습니다. WS는 `certifi` 기반 SSL 컨텍스트로 TLS를 검증합니다. 수치 코어·캐시·설정·라우터는 `pytest`(`backend/tests/`)로 검증하며 GitHub Actions CI(`.github/workflows/ci.yml`)에서 백엔드 테스트 + 프론트 lint·typecheck·build를 돌립니다.
 
 ### Frontend (Node · React 19 + Vite + TypeScript)
 
@@ -218,11 +218,12 @@ clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재
 up-quant/
 ├── backend/                          # FastAPI 서버
 │   ├── app/
-│   │   ├── main.py                   # 진입점 · CORS · 로깅 미들웨어 · 부팅 프리페치 · 실시간 WS 허브(TickerHub) · /health
+│   │   ├── main.py                   # 진입점 · CORS(env) · 로깅 미들웨어 · 부팅 프리페치(SKIP_PREFETCH) · 실시간 WS 허브(TickerHub, certifi SSL) · /health(readiness)
 │   │   ├── core/
-│   │   │   ├── config.py             # 환경설정 · 마켓 유니버스/카테고리 · 캐시 TTL
+│   │   │   ├── config.py             # 환경설정(CORS_ORIGINS·SKIP_PREFETCH) · 마켓 유니버스/카테고리 · 캐시 TTL
 │   │   │   ├── cache.py              # 인메모리 TTL 캐시 (stale-while-revalidate · single-flight)
-│   │   │   └── logging.py            # 요청 ID(rid) contextvar + 공통 로깅 포맷
+│   │   │   ├── logging.py            # 요청 ID(rid) contextvar + 공통 로깅 포맷
+│   │   │   └── metrics.py            # 자체 관측성 메트릭 (캐시 적중률·외부 호출·응답시간·최근 rid)
 │   │   ├── clients/
 │   │   │   └── upbit_rest.py         # 업비트 REST 클라이언트 (httpx · 스로틀 · 429 재시도 · event_hook 로깅)
 │   │   ├── data/
@@ -230,78 +231,82 @@ up-quant/
 │   │   ├── routers/                  # HTTP 엔드포인트 (≈ @RestController)
 │   │   │   ├── markets.py            # /api/markets/*  현재가·요약·호가·체결
 │   │   │   ├── candles.py            # /api/candles/*  캔들
-│   │   │   ├── analysis.py           # /api/analysis/* 카테고리·코인통계·상관관계
-│   │   │   ├── backtest.py           # /api/backtest/* MA·RSI·전략비교·워크포워드·포트폴리오
-│   │   │   └── quant.py              # /api/quant/*    정량/ML 9종
+│   │   │   ├── analysis.py           # /api/analysis/* 카테고리·코인통계·상관관계·A-D 라인
+│   │   │   ├── backtest.py           # /api/backtest/* MA·RSI·전략비교·워크포워드·몬테카를로·추세추종·포트폴리오
+│   │   │   ├── quant.py              # /api/quant/*    정량/ML 9종
+│   │   │   ├── report.py             # /api/report/*   AI 전략 리포트(Gemini)
+│   │   │   └── system.py             # /api/system/*   관측성 메트릭
 │   │   ├── services/                 # 비즈니스 로직 + 캐싱 (≈ @Service)
 │   │   │   ├── market_service.py     # 현재가·한글명·호가·체결·요약·52주·스파크라인
 │   │   │   ├── candle_service.py     # 캔들 (일봉 200개 캐시 후 슬라이스 공유)
-│   │   │   ├── analysis_service.py   # 변동성·1개월수익률·상관관계·섹터 수익률 (실데이터)
-│   │   │   ├── backtest_service.py   # MA크로스·RSI·전략비교·워크포워드·포트폴리오 보유 (거래비용·벤치마크)
-│   │   │   └── quant_service.py      # 공용 returns_matrix + Markowitz·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR
+│   │   │   ├── analysis_service.py   # 변동성·1개월수익률·상관관계·섹터 수익률·A-D (실데이터)
+│   │   │   ├── backtest_service.py   # MA·RSI·전략비교·워크포워드·몬테카를로·TSMOM·포트폴리오 (거래비용·슬리피지·벤치마크)
+│   │   │   ├── quant_service.py      # 공용 returns_matrix + Markowitz(경계선)·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR·리스크패리티
+│   │   │   └── report_service.py     # AI 전략 리포트 생성 (Gemini 호출부 주석 · 종류별 차등 캐시)
 │   │   └── schemas/                  # Pydantic 응답 모델(DTO)
 │   │       ├── market.py             # Ticker · MarketSummary · Orderbook · Trade
 │   │       ├── candle.py             # CandleItem
-│   │       ├── analysis.py           # CategoryReturns · CoinStat · CorrelationItem
-│   │       ├── backtest.py           # BacktestResult · StrategyCompareResult · WalkForwardResult · PortfolioBacktestResult
-│   │       └── quant.py              # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
+│   │       ├── analysis.py           # CategoryReturns · CoinStat · CorrelationItem · AdvanceDeclineResult
+│   │       ├── backtest.py           # BacktestResult · StrategyCompareResult · WalkForwardResult · MonteCarloResult · TsmomResult · PortfolioBacktestResult
+│   │       ├── quant.py              # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
+│   │       └── report.py             # ReportResult
+│   ├── tests/                        # pytest (수치 코어·캐시·설정·라우터 스모크)
+│   │   ├── test_numeric.py           # MDD·리스크조정·과최적화 p값·피어슨·일간수익률
+│   │   ├── test_cache.py             # SWR 콜드/신선/stale 갱신 · single-flight
+│   │   ├── test_config.py            # CORS_ORIGINS(CSV·JSON)·SKIP_PREFETCH 파싱
+│   │   └── test_routes.py            # /health·메트릭·라우트 등록(네트워크 0)
 │   └── requirements.txt
-├── frontend/                         # React + Vite SPA
+├── frontend/                         # React + Vite SPA (전 소스 TypeScript)
 │   ├── src/
-│   │   ├── main.jsx                  # 앱 진입점 (ReactDOM)
-│   │   ├── App.jsx                   # 라우트 정의 · RealtimeProvider
-│   │   ├── index.css                 # Tailwind 엔트리 + @theme 색 토큰(업비트 블루) · 실시간 펄스 애니메이션
-│   │   ├── theme.js                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
+│   │   ├── main.tsx                  # 앱 진입점 (ReactDOM)
+│   │   ├── App.tsx                   # 라우트 정의(코드 스플리팅) · Realtime·PriceAlert Provider
+│   │   ├── config.ts                 # API_BASE·WS_BASE (VITE_API_BASE·VITE_WS_BASE 환경변수)
+│   │   ├── index.css                 # Tailwind 엔트리 + @theme 색 토큰(업비트 블루) · 다크모드 · 실시간 펄스 애니메이션
+│   │   ├── theme.ts                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
 │   │   ├── api/                      # axios 호출 래퍼
-│   │   │   ├── client.js             # axios 인스턴스 + 요청/응답 로깅 인터셉터(rid)
-│   │   │   ├── markets.js            # 현재가·요약·호가·체결
-│   │   │   ├── candles.js            # 캔들
-│   │   │   ├── analysis.js           # 카테고리 수익률·코인 통계·상관관계
-│   │   │   ├── backtest.js           # 백테스트 (MA·RSI·전략비교·워크포워드·포트폴리오)
-│   │   │   └── quant.js              # 정량/ML 9종
-│   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 패턴)
-│   │   │   ├── useTickers.js         # 현재가 목록
-│   │   │   ├── useCandles.js         # 캔들 (인터벌·개수별)
-│   │   │   ├── useAnalysis.js        # 카테고리 수익률·코인 통계·상관관계
-│   │   │   ├── useQuant.js           # 정량/ML 분석 9종
-│   │   │   └── useMarketStream.js    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
-│   │   ├── contexts/                 # 실시간 시세 (외부 store + 종목별 selector)
-│   │   │   ├── Realtime.jsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
-│   │   │   ├── realtimeStore.js      # 외부 store (종목별 리스너 — useSyncExternalStore)
-│   │   │   └── useRealtime.js        # useLivePrice · useWsConnected · usePulse
+│   │   │   ├── client.ts             # axios 인스턴스(baseURL=API_BASE) + 요청/응답 로깅 인터셉터(rid)
+│   │   │   ├── markets.ts · candles.ts · analysis.ts · backtest.ts · quant.ts · report.ts · system.ts
+│   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 · error/retry)
+│   │   │   ├── useFetch.ts           # 공용 단발 fetch ({data,loading,error,retry})
+│   │   │   ├── useTickers.ts · useCandles.ts · useAnalysis.ts · useQuant.ts
+│   │   │   └── useMarketStream.ts    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
+│   │   ├── contexts/                 # 실시간 시세 · 가격 알림
+│   │   │   ├── Realtime.tsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
+│   │   │   ├── realtimeStore.ts      # 외부 store (종목별 리스너 — useSyncExternalStore)
+│   │   │   ├── useRealtime.ts        # useLivePrice · useWsConnected · usePulse
+│   │   │   ├── PriceAlerts.tsx       # 가격 알림(실시간 WS 감시 → 토스트, localStorage)
+│   │   │   └── usePriceAlerts.ts
+│   │   ├── utils/
+│   │   │   └── chartExport.ts        # 차트 SVG→PNG 내보내기
 │   │   ├── components/
-│   │   │   ├── ui/                   # 공용 UI 컴포넌트
-│   │   │   │   ├── Spinner.jsx       # 로딩 스피너
-│   │   │   │   ├── Card.jsx          # 카드 · 카드헤더
-│   │   │   │   ├── StatCard.jsx      # 통계 카드
-│   │   │   │   └── PageLoading.jsx   # 페이지 단위 통짜 로딩
-│   │   │   ├── layout/               # 레이아웃
-│   │   │   │   ├── Header.jsx        # 헤더 (탭 4그룹 · WS 연결 인디케이터)
-│   │   │   │   ├── Footer.jsx        # 공통 푸터 (full-bleed)
-│   │   │   │   └── Layout.jsx        # Outlet + ErrorBoundary 래핑
-│   │   │   ├── LiveCells.jsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
-│   │   │   ├── ErrorBoundary.jsx     # 페이지 단위 에러 경계
-│   │   │   └── InfoTooltip.jsx       # 제목 옆 ? 호버 안내
+│   │   │   ├── ui/                   # 공용 UI (Spinner · Card · StatCard · PageLoading · PageError)
+│   │   │   ├── layout/               # Header(탭 4그룹·WS·🔔·🌙·AI리포트) · Footer · Layout(+ErrorBoundary)
+│   │   │   ├── LiveCells.tsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
+│   │   │   ├── ErrorBoundary.tsx     # 페이지 단위 에러 경계
+│   │   │   ├── ReportModal.tsx       # AI 전략 리포트 모달
+│   │   │   └── InfoTooltip.tsx       # 제목 옆 ? 호버 안내
 │   │   └── pages/                    # 라우트별 페이지
-│   │       ├── CoinList.jsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
-│   │       ├── CoinDetail.jsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
-│   │       ├── Dashboard.jsx         # '/dashboard' — 관제탑(시그널·KPI·시장추세·시세표)
-│   │       ├── Explore.jsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
-│   │       ├── Market.jsx            # 탐색: 마켓 현황 본문 (Explore가 재사용)
-│   │       ├── Sectors.jsx           # 탐색: 섹터 분석 본문 (Explore가 재사용)
-│   │       ├── Screener.jsx          # 탐색: 스크리너 본문 (Explore가 재사용)
-│   │       ├── Analysis.jsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
-│   │       ├── Tools.jsx             # '/tools/*' 래퍼 (PortfolioPage·BacktestPage·ComparePage)
-│   │       ├── Backtest.jsx          # 전략도구: 백테스트 본문 (Tools가 재사용)
-│   │       ├── Compare.jsx           # 전략도구: 비교 분석 본문 (Tools가 재사용)
-│   │       ├── Guide.jsx             # '/guide' — 방법론·기술스택 (별도 창)
-│   │       └── Help.jsx              # '/help' — 기능 안내 (별도 창)
+│   │       ├── CoinList.tsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
+│   │       ├── CoinDetail.tsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
+│   │       ├── Dashboard.tsx         # '/dashboard' — 관제탑(시그널·KPI·시장추세·시세표)
+│   │       ├── Explore.tsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
+│   │       ├── Market.tsx · Sectors.tsx · Screener.tsx   # 탐색 본문 (Explore가 재사용)
+│   │       ├── Analysis.tsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
+│   │       ├── Tools.tsx             # '/tools/*' 래퍼 (PortfolioPage·BacktestPage·ComparePage)
+│   │       ├── Backtest.tsx          # 전략도구: 백테스트 오케스트레이터
+│   │       ├── backtest/             # 백테스트 전략별 본문(Single·Portfolio·Compare·WalkForward·MonteCarlo·Tsmom) + parts·helpers
+│   │       ├── Compare.tsx           # 전략도구: 비교 분석 본문 (Tools가 재사용)
+│   │       ├── SystemMonitor.tsx     # '/system' — 자체 관측성 메트릭
+│   │       ├── Guide.tsx             # '/guide' — 방법론·기술스택 (별도 창)
+│   │       └── Help.tsx              # '/help' — 기능 안내 (별도 창)
+│   ├── .env.example                  # 배포 환경변수 예시(VITE_API_BASE·VITE_WS_BASE)
 │   ├── index.html                    # HTML 엔트리 · Pretendard 폰트 · favicon
-│   ├── vite.config.js                # Vite 빌드 설정
-│   ├── eslint.config.js              # ESLint 설정
-│   └── package.json                  # 의존성 · npm 스크립트
+│   ├── tsconfig.json                 # TypeScript 설정(점진 strict)
+│   ├── vite.config.js · eslint.config.js
+│   └── package.json                  # 의존성 · npm 스크립트(dev·build·lint·typecheck)
+├── .github/workflows/ci.yml          # CI — 백엔드 compileall+pytest / 프론트 lint+typecheck+build
 ├── references/                       # 기획서 · API 명세(API.md) · 엔지니어링 노트 · 발표 자료(pt/)
-├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~25)
+├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~27)
 └── pages.md                          # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 (보조 작업 문서)
 ```
 
@@ -312,7 +317,7 @@ up-quant/
 ### 사전 요구사항
 
 - **Python** 3.11+
-- **Node.js** 18+ (권장: 20+)
+- **Node.js** 20+ (권장: 22.x)
 
 ### Backend
 
@@ -328,6 +333,7 @@ fastapi dev app/main.py
 
 > macOS / Linux는 `source .venv/bin/activate`로 가상환경을 활성화합니다.
 > 첫 기동 시 부팅 프리페치(동기 워밍)로 수십 초~1분 걸릴 수 있으나, 이후 모든 사용자는 캐시 히트로 콜드 없이 즉시 응답합니다.
+> **개발 중**에는 `SKIP_PREFETCH=1 fastapi dev app/main.py`로 워밍을 건너뛰면 리로드마다 대기하지 않습니다(첫 요청만 콜드).
 
 ### Frontend
 
@@ -340,12 +346,14 @@ npm run dev
 → 개발 서버: <http://localhost:5173>
 
 > 프론트엔드는 `http://localhost:8000`을 백엔드로 호출하며(REST + WebSocket), 백엔드 CORS는 `http://localhost:5173`을 허용합니다. **두 서버를 함께 실행**해야 합니다.
+> **배포·다른 호스트**에서는 백엔드 주소를 `frontend/.env`의 `VITE_API_BASE`(REST)·`VITE_WS_BASE`(WebSocket, 미지정 시 `VITE_API_BASE`에서 `http→ws` 자동 유도)로 주입합니다(`frontend/.env.example` 참고). 백엔드는 `CORS_ORIGINS` 환경변수로 허용 오리진을 지정합니다.
 
 | 명령 (frontend) | 설명 |
 |------|------|
 | `npm run dev` | 개발 서버 (HMR) |
 | `npm run build` | 프로덕션 빌드 |
 | `npm run lint` | ESLint 검사 |
+| `npm run typecheck` | TypeScript 타입 검사 (`tsc --noEmit`) |
 
 ---
 
@@ -357,11 +365,12 @@ npm run dev
 |------|-----------------|
 | **Markets** `/api/markets` | `/tickers` · `/tickers/{market}` · `/summary` · `/orderbook/{market}` · `/trades/{market}` |
 | **Candles** `/api/candles` | `/{market}?interval=days&count=60` (`minutes/{1..240}`·`days`·`weeks`·`months`) |
-| **Analysis** `/api/analysis` | `/category/monthly` · `/category/cumulative-daily` · `/coins` · `/correlation/{market}` |
-| **Backtest** `/api/backtest` | `/ma-cross` · `/rsi` · `/compare`(전략 비교) · `/walk-forward`(과최적화 검증) · `/portfolio` |
+| **Analysis** `/api/analysis` | `/category/monthly` · `/category/cumulative-daily` · `/coins` · `/correlation/{market}` · `/advance-decline` |
+| **Backtest** `/api/backtest` | `/ma-cross` · `/rsi` · `/compare`(전략 비교) · `/walk-forward`(과최적화 검증) · `/montecarlo` · `/tsmom`(추세추종) · `/portfolio` |
 | **Quant** `/api/quant` | `/portfolio`(효율적 경계선) · `/network`(MST) · `/pca` · `/clusters` · `/dendrogram` · `/garch/{market}` · `/momentum` · `/pairs`(공적분) · `/regime`(HMM) |
+| **Report / System** | `/api/report/strategy`(AI 전략 리포트) · `/api/system/metrics`(관측성) |
 | **WebSocket** `/ws` | `/ws/tickers`(전체 현재가 실시간) · `/ws/market/{market}`(종목 호가·체결 실시간) |
-| **Health** | `/health` |
+| **Health** | `/health`(status · ready) |
 
 ---
 
@@ -380,6 +389,9 @@ npm run dev
 | 마켓 유니버스 | 분석은 KRW 전체(~261종) | `/market/all` 교집합으로 상장폐지 자동 제외 |
 | 코인 분류 | 업비트 데이터랩 '코인 분류' 스크랩 (정적 스냅샷, 5섹터) | 시세 API 미제공 → 데이터랩 RSC 1회 스크랩 |
 | 정량 분석 | 통계/ML은 검증된 라이브러리, 일봉은 공용 캐시 재사용 | 직접구현 정체성은 캐시·로깅·실시간·API 계층에. 추가 팬아웃 0 |
+| 에러 UX | 데이터 로드 실패 시 빈 화면 대신 "다시 시도" 게이트 (`useFetch`·`PageError`) | 훅이 `error`/`retry`를 노출 → 페이지가 재요청 UI 표시 (조용한 실패 제거) |
+| 배포 환경변수 | 프론트 `VITE_API_BASE`/`VITE_WS_BASE`, 백엔드 `CORS_ORIGINS`·`SKIP_PREFETCH` | 호스트/포트 하드코딩 제거, 로컬은 기본값으로 무설정 동작 |
+| TLS(WebSocket) | `websockets` 연결에 certifi 기반 SSL 컨텍스트 명시 | macOS 프레임워크 Python의 깨진 CA 번들 의존 제거(환경 비의존) |
 | 색상 컨벤션 | 상승 = 빨강 / 하락 = 파랑, 액센트 = 업비트 블루(`#1763b6`) | 한국 금융 UI 관행 + 업비트 톤 |
 
 ### 캐시 동작 (TTL · stale-while-revalidate)
