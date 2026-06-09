@@ -323,13 +323,15 @@ export default function Sectors() {
   const [activeSector, setActiveSector] = useState(null)  // 모달용 — 클릭된 섹터명
   const { data: monthly, loading: monthlyLoading, error: monthlyError, retry: monthlyRetry } = useCategoryMonthly()
   const { data: cumulative, loading: cumLoading, error: cumError, retry: cumRetry } = useCategoryDailyCumulative()
-  // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가)
-  const { data: coinStats } = useCoinStats()
-  const { tickers } = useTickers()
+  // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가). 게이트 판정에도 포함.
+  const statsH = useCoinStats()
+  const tickersH = useTickers()
+  const coinStats = statsH.data, tickers = tickersH.tickers
 
-  if (monthlyError || cumError) return <PageError onRetry={() => { monthlyRetry(); cumRetry() }} />
-  // 누적 차트(일봉)·월별 히트맵이 모두 준비될 때까지 통짜 로딩
-  if (monthlyLoading || cumLoading) return <PageLoading />
+  // 하나라도 로딩/에러면 헤더·푸터만 남기고 전체를 로딩/에러 페이지로(다른 컴포넌트 비노출).
+  if (monthlyError || cumError || statsH.error || tickersH.error)
+    return <PageError onRetry={() => { monthlyRetry(); cumRetry(); statsH.retry?.(); tickersH.retry?.() }} />
+  if (monthlyLoading || cumLoading || statsH.loading || tickersH.loading) return <PageLoading />
 
   return (
     <div className="space-y-4">

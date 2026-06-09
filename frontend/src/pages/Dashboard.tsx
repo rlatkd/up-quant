@@ -135,8 +135,8 @@ function NewsRow() {
         : data.error ? <SourceError message={data.error} />
         : (
           <div className="grid md:grid-cols-2 gap-x-6 gap-y-2">
-            {slice.map((it: any, i: number) => (
-              <a key={i} href={it.url} target="_blank" rel="noopener noreferrer"
+            {slice.map((it: any) => (
+              <a key={it.url} href={it.url} target="_blank" rel="noopener noreferrer"
                 className="flex items-baseline justify-between gap-3 text-sm py-1 border-b border-gray-50 dark:border-[#232d40]/50 hover:text-brand-600 transition-colors">
                 <span className="text-gray-700 dark:text-gray-200 truncate">{it.title}</span>
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap flex-shrink-0">{it.published}</span>
@@ -318,15 +318,26 @@ function PowerList({ rows }: any) {
 }
 
 export default function Dashboard() {
-  const { data: indices, loading: il, error: ie, retry } = useIndices()
-  const { data: brief, loading: bl } = useBrief()
-  const { data: pr } = usePeriodReturns()
+  // 페이지가 쓰는 모든 데이터(자식 컴포넌트가 호출하는 것 포함, react-query 디둡)를 여기서 모아
+  // 로딩/에러를 한 번에 판정한다 → 하나라도 로딩이면 헤더·푸터만 남기고 전체가 PageLoading,
+  // 하드 에러면 전체가 PageError(다른 컴포넌트는 일절 렌더하지 않음).
+  const indicesH = useIndices()
+  const briefH = useBrief()
+  const prH = usePeriodReturns()
+  const assetH = useAssetIndices()
+  const vpH = useVolumePower()
+  const fxH = useFx()
+  const newsH = useNews()
+  const tickersH = useTickers()
+  const statsH = useCoinStats()
   const [mode, setMode] = useState<'today' | 'prev'>('today')
 
+  const indices = indicesH.data, brief = briefH.data, pr = prH.data
   const weekly = useMemo(() => [...(pr.rows || [])].filter((r: any) => r.r1w != null).sort((a: any, b: any) => b.r1w - a.r1w).slice(0, 10), [pr])
 
-  if (ie) return <PageError onRetry={retry} />
-  if (il || bl) return <PageLoading />
+  const hooks = [indicesH, briefH, prH, assetH, vpH, fxH, newsH, tickersH, statsH]
+  if (hooks.some(h => h.error)) return <PageError onRetry={() => hooks.forEach(h => h.retry?.())} />
+  if (hooks.some(h => h.loading)) return <PageLoading />
 
   return (
     <div className="space-y-5">

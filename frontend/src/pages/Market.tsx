@@ -292,10 +292,12 @@ function ADLineChart() {
 
 export default function Market() {
   const { tickers, loading, error, retry } = useTickers()
+  const ad = useAdvanceDecline()   // 자식(ADLineChart)도 호출하지만 디둡 — 게이트 판정용으로 함께 모음
   const navigate = useNavigate()
 
-  if (error) return <PageError onRetry={retry} />
-  if (loading) return <PageLoading />
+  // 하나라도 로딩/에러면 헤더·푸터만 남기고 전체를 로딩/에러 페이지로(다른 컴포넌트 비노출).
+  if (error || ad.error) return <PageError onRetry={() => { retry?.(); ad.retry?.() }} />
+  if (loading || ad.loading) return <PageLoading />
 
   const sorted = [...tickers].sort((a, b) => b.change_rate - a.change_rate)
   const byVolume = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)

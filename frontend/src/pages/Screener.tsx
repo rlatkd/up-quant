@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
-import { getCoinStats } from '../api/analysis'
+import { useCoinStats } from '../hooks/useAnalysis'
 import InfoTooltip from '../components/InfoTooltip'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
@@ -33,15 +33,10 @@ let _uid = 0
 
 export default function Screener() {
   const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
-  const [stats, setStats]           = useState([])
-  const [statsLoading, setStatsLoading] = useState(true)
+  const { data: stats, loading: statsLoading, error: statsError, retry: statsRetry } = useCoinStats()
   const [conditions, setConditions]  = useState([])
   const [results, setResults]        = useState(null)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    getCoinStats().then(setStats).finally(() => setStatsLoading(false))
-  }, [])
 
   const merged = useMemo(() => {
     if (!tickers.length || !stats.length) return []
@@ -118,7 +113,7 @@ export default function Screener() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merged])
 
-  if (tError) return <PageError onRetry={tRetry} />
+  if (tError || statsError) return <PageError onRetry={() => { tRetry?.(); statsRetry?.() }} />
   if (tLoading || statsLoading) return <PageLoading />
 
   return (

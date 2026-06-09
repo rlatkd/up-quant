@@ -140,6 +140,24 @@ function CandlestickChart({ candles, indicators, livePrice }) {
     return () => { chart.remove() }
   }, [])
 
+  // 다크모드 토글 즉시 반영 — 차트는 createChart 시점 테마만 읽으므로, html.dark 클래스 변경을
+  // 감시해 배경/격자/축 색을 applyOptions로 다시 적용한다(종목·인터벌을 안 바꿔도 즉시 전환).
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      const chart = chartRef.current
+      if (!chart) return
+      const th = chartTheme()
+      chart.applyOptions({
+        layout: { background: { color: th.bg }, textColor: th.text },
+        grid: { vertLines: { color: th.grid }, horzLines: { color: th.grid } },
+        rightPriceScale: { borderColor: th.border },
+        timeScale: { borderColor: th.border },
+      })
+    })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+
   // 캔들 데이터 — 인터벌(candles) 변경 시에만 setData + fitContent.
   // (지표 토글 effect와 분리: 토글로 fitContent가 불려 줌/스크롤이 리셋되던 문제 해결)
   useEffect(() => {
@@ -240,7 +258,19 @@ function RSIChart({ candles }) {
       if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
     }
     window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); chart.remove(); chartRef.current = null; seriesRef.current = [] }
+    // 다크모드 토글 즉시 반영(메인 차트와 동일).
+    const obs = new MutationObserver(() => {
+      if (!chartRef.current) return
+      const t2 = chartTheme()
+      chartRef.current.applyOptions({
+        layout: { background: { color: t2.bg }, textColor: t2.text },
+        grid: { vertLines: { color: t2.grid }, horzLines: { color: t2.grid } },
+        rightPriceScale: { borderColor: t2.border },
+        timeScale: { borderColor: t2.border },
+      })
+    })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => { window.removeEventListener('resize', onResize); obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = [] }
   }, [])
 
   useEffect(() => {
