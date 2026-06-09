@@ -55,8 +55,9 @@ def get_momentum(
     top: int = Query(40, ge=10, le=100, description="거래대금 상위 N종 유니버스"),
     lookback: int = Query(20, ge=5, le=60, description="모멘텀 산정 기간(일)"),
     holding: int = Query(5, ge=1, le=20, description="리밸런스 주기(일)"),
+    long_only: bool = Query(False, description="True면 상위분위 매수만(공매도 제외) — 업비트 현물 실행 가능 버전"),
 ):
-    return quant_service.get_momentum(top, lookback, holding)
+    return quant_service.get_momentum(top, lookback, holding, long_only)
 
 
 @router.get("/pairs", response_model=PairsResult)

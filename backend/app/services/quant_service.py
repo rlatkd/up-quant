@@ -125,7 +125,16 @@ _N_FRONTIER = 60        # 효율적 경계선 곡선 분할 수 (목표수익률
 def _spot(w: np.ndarray, mu: np.ndarray, cov: np.ndarray,
           kept: list[str], nmap: dict[str, str]) -> PortfolioSpot:
     r = float(w @ mu)
-    v = float(np.sqrt(max(w @ cov @ w, 0.0)))
+    pv = float(w @ cov @ w)                       # 포트폴리오 분산
+    v = float(np.sqrt(max(pv, 0.0)))
+    # 리스크 기여도(%) — PCR_i = w_i·(Σw)_i / (wᵀΣw), 합 100. (비중 ≠ 리스크 비중)
+    if pv > 0:
+        pcr = (w * (cov @ w)) / pv
+    else:
+        pcr = np.zeros_like(w)
+    # 분산효과 비율 = 가중평균 개별변동성 / 포트폴리오 변동성 ≥ 1.
+    asset_vol = np.sqrt(np.clip(np.diag(cov), 0.0, None))
+    div = float((w @ asset_vol) / v) if v > 0 else 1.0
     return PortfolioSpot(
         vol=round(v * 100, 2),
         ret=round(r * 100, 2),
@@ -134,6 +143,8 @@ def _spot(w: np.ndarray, mu: np.ndarray, cov: np.ndarray,
             PortfolioWeight(market=m, korean_name=nmap.get(m, m), weight=round(float(wi), 4))
             for m, wi in zip(kept, w)
         ],
+        risk_contrib=[round(float(x) * 100, 2) for x in pcr],
+        diversification=round(div, 3),
     )
 
 
@@ -192,17 +203,24 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
     w_ms = res_ms.x if res_ms.success else w_sim[int(np.argmax(sim_sharpe))]
     w_mv = res_mv.x if res_mv.success else w_sim[int(np.argmin(sim_vol))]
 
+    a_vol = np.sqrt(np.clip(np.diag(cov), 0.0, None))   # 개별 종목 연율 변동성
     assets = [
         AssetPoint(
             market=m, korean_name=nmap.get(m, m),
-            vol=round(float(np.sqrt(max(cov[i, i], 0.0))) * 100, 2),
+            vol=round(float(a_vol[i]) * 100, 2),
             ret=round(float(mu[i]) * 100, 2),
+            sharpe=round(float(mu[i] / a_vol[i]), 3) if a_vol[i] else 0.0,
         )
         for i, m in enumerate(kept)
     ]
 
+    # 자산 간 상관행렬 — 공분산에서 직접(분산효과의 근원 입력). corr = D⁻¹ Σ D⁻¹.
+    d = np.where(a_vol > 0, a_vol, 1.0)
+    corr = cov / np.outer(d, d)
+    corr_matrix = [[round(float(corr[i, j]), 2) for j in range(n)] for i in range(n)]
+
     # 효율적 경계선 곡선: 목표수익률을 [min μ, max μ] 등분하고 각 타깃에서 분산 최소화.
-    # (w@mu=target, Σw=1, 0≤w≤1) → 타깃 ret 오름차순 곡선이 나와 프론트가 라인으로 잇는다.
+    # (w@mu=target, Σw=1, 0≤w≤1) → 타깃 ret 오름차순 곡선 + 각 점의 비중(슬라이더용).
     frontier: list[FrontierPoint] = []
     lo, hi = float(mu.min()), float(mu.max())
     if hi > lo:
@@ -214,8 +232,11 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
             res = minimize(variance, w0, method="SLSQP", bounds=bnds, constraints=fcons)
             if res.success:
                 v = float(np.sqrt(max(res.x @ cov @ res.x, 0.0)))
-                frontier.append(FrontierPoint(vol=round(v * 100, 2),
-                                              ret=round(float(res.x @ mu) * 100, 2)))
+                frontier.append(FrontierPoint(
+                    vol=round(v * 100, 2),
+                    ret=round(float(res.x @ mu) * 100, 2),
+                    weights=[round(float(x), 4) for x in res.x],
+                ))
 
     return PortfolioResult(
         points=points,
@@ -226,6 +247,8 @@ def _compute_portfolio(markets: list[str]) -> PortfolioResult:
         assets=assets,
         n_obs=int(r.shape[0]),
         shrinkage=round(shrinkage, 3),
+        corr_labels=kept,
+        corr_matrix=corr_matrix,
     )
 
 
@@ -485,12 +508,13 @@ def _mdd(equity: np.ndarray) -> float:
     return float((np.min((equity - peak) / peak)) * 100)
 
 
-def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
+def _compute_momentum(top: int, lookback: int, holding: int, long_only: bool = False) -> MomentumResult:
     tickers = market_service.get_tickers()[:top]
     markets = [t.market for t in tickers]
     kept, closes = closes_matrix(markets, count=_MOM_CANDLES, min_len=_MOM_MIN_LEN)  # (T, n)
     empty = MomentumResult(equity=[], total_return=0.0, benchmark_return=0.0, sharpe=0.0,
-                           mdd=0.0, long=[], short=[], lookback=lookback, holding=holding, n=0)
+                           mdd=0.0, long=[], short=[], lookback=lookback, holding=holding, n=0,
+                           long_only=long_only)
     if len(kept) < 10:
         return empty
     t_len, n = closes.shape
@@ -501,8 +525,9 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
     times = [int(c.timestamp / 1000) for c in base_candles][-t_len:]
     nq = max(1, int(n * _MOM_Q))
 
-    # 매 리밸런스마다 롱·숏 분위를 새로 구성 → 롱 1.0 + 숏 1.0 = 총 2.0 명목을 회전시킨다고 보고
-    # 편도 거래비용을 2×fee로 근사 차감(전량 회전 가정). 거래비용 없이는 모멘텀이 과대평가됨.
+    # 거래비용(편도). 롱숏은 롱 1.0+숏 1.0=총 2.0 명목 회전이라 2×fee, 롱온리는 롱 책만 회전한다고
+    # 봐도 매 리밸런스 전량 교체 시 매도1.0+매수1.0이라 동일하게 2×fee로 보수적 차감.
+    # 거래비용 없이는 모멘텀이 과대평가됨.
     fee = _MOM_FEE_BPS / 10000.0
     rebal_cost = 2 * fee
     eq_f, eq_b, eq_t, rebal = [100.0], [100.0], [times[lookback]], []
@@ -512,12 +537,17 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
         order = np.argsort(trail)
         longs, shorts = order[-nq:], order[:nq]
         fwd = closes[t + holding] / closes[t] - 1.0
-        ls_r = float(fwd[longs].mean() - fwd[shorts].mean()) - rebal_cost   # 달러중립 롱숏(거래비용 차감)
+        if long_only:
+            # 업비트 현물에서 실행 가능 — 상위분위 동일가중 매수만(공매도 없음).
+            port_r = float(fwd[longs].mean()) - rebal_cost
+        else:
+            # 학술 표준 — 상위분위 롱 / 하위분위 숏 달러중립(공매도 가정, 현물 실행 불가).
+            port_r = float(fwd[longs].mean() - fwd[shorts].mean()) - rebal_cost
         bench_r = float(fwd.mean())
-        eq_f.append(eq_f[-1] * (1 + ls_r))
+        eq_f.append(eq_f[-1] * (1 + port_r))
         eq_b.append(eq_b[-1] * (1 + bench_r))
         eq_t.append(times[t + holding])
-        rebal.append(ls_r)
+        rebal.append(port_r)
         t += holding
 
     equity = [
@@ -554,19 +584,19 @@ def _compute_momentum(top: int, lookback: int, holding: int) -> MomentumResult:
         sharpe=sharpe,
         mdd=round(_mdd(np.array(eq_f)), 2),
         long=_hold(long_idx, "LONG"),
-        short=_hold(short_idx, "SHORT"),
+        short=[] if long_only else _hold(short_idx, "SHORT"),  # 롱온리면 숏 없음
         lookback=lookback, holding=holding, n=n,
-        fee_bps=_MOM_FEE_BPS,
+        fee_bps=_MOM_FEE_BPS, long_only=long_only,
     )
 
 
 def get_momentum(top: int = _MOM_TOP, lookback: int = _MOM_LOOKBACK,
-                 holding: int = _MOM_HOLDING) -> MomentumResult:
+                 holding: int = _MOM_HOLDING, long_only: bool = False) -> MomentumResult:
     top = max(10, min(top, 100))
     lookback = max(5, min(lookback, 60))
     holding = max(1, min(holding, 20))
-    key = f"quant:momentum:{top}:{lookback}:{holding}"
-    return cached(key, config.TTL_CANDLE_DAYS, lambda: _compute_momentum(top, lookback, holding))
+    key = f"quant:momentum:{top}:{lookback}:{holding}:{int(long_only)}"
+    return cached(key, config.TTL_CANDLE_DAYS, lambda: _compute_momentum(top, lookback, holding, long_only))
 
 
 # ── 7) 공적분 페어트레이딩 스크리너 ───────────────────────────
@@ -582,10 +612,13 @@ _PAIR_Z = 2.0             # |z|>2 진입
 _PAIR_BT_ENTRY = 2.0      # 사후검증 진입 임계 |z|
 _PAIR_BT_EXIT = 0.5       # 사후검증 청산 임계 |z|
 _PAIR_BT_WIN = 30         # 롤링 z 윈도우(일) — 전 구간 평균/표준편차를 쓰면 룩어헤드라 롤링으로
+_PAIR_FORMATION = 0.5     # 형성기간 비율 — 앞 절반으로 헤지비율 β를 추정하고, 뒤 절반(거래기간)만 매매·집계
+                          # (β를 전 구간으로 적합하면 미래를 포함해 사후성과가 낙관 편향 → out-of-sample로)
 
 
-def _pair_backtest(spread: np.ndarray):
+def _pair_backtest(spread: np.ndarray, trade_start: int = 0):
     """로그 스프레드 평균회귀 백테스트(롤링 z 진입/청산). 스프레드 변화를 손익 프록시로 누적.
+    trade_start 이후 구간만 매매·집계한다(그 이전은 β 형성기간이라 평가 제외 — out-of-sample).
     반환: (z_array, equity_array, total_return%, n_trades, win_rate%). 직전봉 z로 당일 포지션 결정(룩어헤드 최소화)."""
     T = spread.size
     win = min(_PAIR_BT_WIN, max(5, T // 3))
@@ -600,7 +633,8 @@ def _pair_backtest(spread: np.ndarray):
     eq = np.full(T, 100.0)
     trades = wins = 0
     entry_eq = 100.0
-    for t in range(1, T):
+    start = max(1, trade_start)  # 거래기간 시작(형성기간은 평가 제외)
+    for t in range(start, T):
         cur *= (1 + pos * float(spread[t] - spread[t - 1]))   # 직전 포지션의 당일 손익(로그 스프레드 변화)
         eq[t] = cur
         zt = z[t - 1]            # 직전봉 z로 신호 판정(동봉 룩어헤드 회피)
@@ -628,6 +662,8 @@ def _compute_pairs(top: int) -> PairsResult:
     dcorr = np.corrcoef(np.diff(logp, axis=0), rowvar=False)  # 수익률 상관(게이트용)
     nmap = name_map()
     n = len(kept)
+    T = closes.shape[0]
+    split = int(T * _PAIR_FORMATION)                        # 형성기간/거래기간 경계
     rows: list[CointPair] = []
     tested = 0
     for i in range(n):
@@ -637,18 +673,20 @@ def _compute_pairs(top: int) -> PairsResult:
             tested += 1
             s1, s2 = logp[:, i], logp[:, j]
             try:
-                _, pval, _ = coint(s1, s2)
+                _, pval, _ = coint(s1, s2)                  # 공적분 검정은 전 구간(페어 '선정'용 통계검정 — 성과주장 아님)
             except Exception:
                 continue
             if pval > _PAIR_PVAL:
                 continue
-            beta = sm.OLS(s1, sm.add_constant(s2)).fit().params  # [α, β]
+            # 헤지비율 β는 형성기간(앞 절반)으로만 추정 → 거래기간(뒤 절반)은 out-of-sample.
+            beta = sm.OLS(s1[:split], sm.add_constant(s2[:split])).fit().params  # [α, β]
             spread = s1 - (beta[0] + beta[1] * s2)
-            sd = spread.std()
-            z = float((spread[-1] - spread.mean()) / sd) if sd else 0.0
+            oos = spread[split:]                            # 현재 신호 z는 거래기간 분포 기준
+            sd = oos.std()
+            z = float((spread[-1] - oos.mean()) / sd) if sd else 0.0
             signal = "LONG_SPREAD" if z < -_PAIR_Z else "SHORT_SPREAD" if z > _PAIR_Z else "NEUTRAL"
-            # 사후검증 — 같은 윈도우에서 스프레드 평균회귀 전략을 돌려 "이 페어가 과거에 통했는지" 요약.
-            _, _, bt_ret, bt_trades, bt_win = _pair_backtest(spread)
+            # 사후검증 — 거래기간(OOS)에서만 평균회귀 전략을 돌려 "이 페어가 형성기간 밖에서도 통했는지" 요약.
+            _, _, bt_ret, bt_trades, bt_win = _pair_backtest(spread, trade_start=split)
             rows.append((
                 i, j, beta,
                 CointPair(
@@ -662,18 +700,19 @@ def _compute_pairs(top: int) -> PairsResult:
     rows.sort(key=lambda r: r[3].pvalue)
     pairs = [r[3] for r in rows[:25]]
 
-    # 최우수(최저 p값) 페어의 상세 곡선(스프레드 z + 자산곡선) — 프론트 차트용.
+    # 최우수(최저 p값) 페어의 상세 곡선(스프레드 z + 자산곡선) — 프론트 차트용. 거래기간(OOS)만 매매.
     best = None
     if rows:
         bi, bj, bbeta, _ = rows[0]
         spread = logp[:, bi] - (bbeta[0] + bbeta[1] * logp[:, bj])
-        z_arr, eq_arr, _, _, _ = _pair_backtest(spread)
+        z_arr, eq_arr, _, _, _ = _pair_backtest(spread, trade_start=split)
         base = candle_service.get_candles(kept[bi], "days", count=_PAIR_CANDLES)[-closes.shape[0]:]
         times = [int(c.timestamp // 1000) for c in base]
         best = PairBacktestDetail(
             market1=kept[bi], korean_name1=nmap.get(kept[bi], kept[bi]),
             market2=kept[bj], korean_name2=nmap.get(kept[bj], kept[bj]),
             entry=_PAIR_BT_ENTRY, exit=_PAIR_BT_EXIT,
+            formation_end=times[split] if split < len(times) else (times[0] if times else 0),
             points=[
                 PairBacktestPoint(time=t, z=round(float(zz), 2), equity=round(float(e), 2))
                 for t, zz, e in zip(times, z_arr, eq_arr)

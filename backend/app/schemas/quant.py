@@ -27,6 +27,11 @@ class PortfolioSpot(BaseModel):
     ret: float
     sharpe: float
     weights: list[PortfolioWeight]
+    # 자산별 리스크 기여도(%) — weights와 같은 순서. PCR_i = w_i·(Σw)_i / (wᵀΣw), 합 100.
+    # "비중 ≠ 리스크 비중"을 보여준다(리스크 패리티는 이 값을 균등화한 해).
+    risk_contrib: list[float] = []
+    # 분산효과 비율 = (Σ w_i·σ_i) / σ_p ≥ 1. 클수록 분산으로 위험을 더 줄임(Choueifaty 2008).
+    diversification: float = 1.0
 
 
 class AssetPoint(BaseModel):
@@ -35,12 +40,14 @@ class AssetPoint(BaseModel):
     korean_name: str
     vol: float
     ret: float
+    sharpe: float = 0.0   # 연율 수익/변동성 (무위험수익률 0)
 
 
 class FrontierPoint(BaseModel):
     """효율적 경계선 곡선 위 한 점 — 목표수익률별 최소분산 해."""
     vol: float      # 연율 변동성 (%)
     ret: float      # 연율 기대수익률 (%)
+    weights: list[float] = []   # 이 목표수익률에서의 종목별 비중(assets 순서) — 슬라이더로 구성 확인
 
 
 class PortfolioResult(BaseModel):
@@ -52,6 +59,8 @@ class PortfolioResult(BaseModel):
     assets: list[AssetPoint]       # 개별 종목 단독 보유점
     n_obs: int                     # 공분산 추정에 쓴 일간 수익률 관측 수
     shrinkage: float = 0.0         # Ledoit-Wolf 수축 강도(0~1, 표본공분산↔구조화 타깃)
+    corr_labels: list[str] = []    # 상관행렬 종목 순서(market) — 선택 바스켓
+    corr_matrix: list[list[float]] = []  # 자산 간 상관계수 행렬(분산효과의 근원 입력)
 
 
 # ── 2) 상관 네트워크 (Mantegna 최소신장트리) ───────────────────
@@ -169,6 +178,7 @@ class MomentumResult(BaseModel):
     holding: int              # 리밸런스 주기(일)
     n: int                    # 유니버스 종목 수
     fee_bps: float = 0.0      # 적용한 편도 거래비용(bps) — 리밸런스 회전에 차감
+    long_only: bool = False   # True면 상위분위 매수만(공매도 제외) — 업비트 현물에서 실행 가능한 버전
 
 
 # ── 7) 공적분 페어트레이딩 스크리너 ───────────────────────────
@@ -202,6 +212,7 @@ class PairBacktestDetail(BaseModel):
     korean_name2: str
     entry: float    # 진입 임계 |z|
     exit: float     # 청산 임계 |z|
+    formation_end: int = 0  # 형성기간 종료 unix초 — 이 이전은 β 추정용(거래 없음), 이후가 out-of-sample 거래기간
     points: list[PairBacktestPoint]
 
 
