@@ -47,11 +47,22 @@ def _fetch(market: str, interval: str, count: int) -> list[CandleItem]:
 # 일봉은 종목별로 200개를 한 번만 받아 캐시하고, 요청 수만큼 잘라 공유한다.
 # (스파크라인 30 / 통계 30 / 상관관계 60 / 상세 120 등이 같은 캐시를 재사용 → 호출 폭증 방지)
 _CANON = 200
+# 월봉도 같은 canonical 패턴. 월봉 최대 요청치는 기간수익률(1년=13개월)·섹터 월봉의 61.
+# 고정 키 하나로 받아 슬라이스 공유 → 여러 집계가 종목당 월봉을 1번만 받는다.
+_CANON_MONTHS = 61
 
 
 def get_candles(market: str, interval: str = "days", count: int = 60) -> list[CandleItem]:
+    # 일봉·주봉·월봉은 '느린' 캔들 — canonical 1회 fetch + 장기 TTL로 슬라이스 공유(집계 팬아웃 억제).
     if interval == "days" and count <= _CANON:
         full = cached(f"candle:{market}:days", config.TTL_CANDLE_DAYS, lambda: _fetch(market, "days", _CANON))
         return full[-count:] if count < len(full) else full
+    if interval == "months" and count <= _CANON_MONTHS:
+        full = cached(f"candle:{market}:months", config.TTL_CANDLE_LONG, lambda: _fetch(market, "months", _CANON_MONTHS))
+        return full[-count:] if count < len(full) else full
+    if interval == "weeks" and count <= _CANON:
+        full = cached(f"candle:{market}:weeks", config.TTL_CANDLE_LONG, lambda: _fetch(market, "weeks", _CANON))
+        return full[-count:] if count < len(full) else full
+    # 분봉(인트라데이) 등은 짧은 TTL — 라이브 차트 신선도 우선.
     key = f"candle:{market}:{interval}:{count}"
     return cached(key, config.TTL_CANDLE, lambda: _fetch(market, interval, count))
