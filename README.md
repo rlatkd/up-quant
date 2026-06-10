@@ -30,7 +30,6 @@ UPquant는 업비트 KRW 마켓에 상장된 암호화폐 **약 260종 전체**�
 - [시작하기](#시작하기)
 - [API 레퍼런스](#api-레퍼런스)
 - [설계 노트](#설계-노트)
-- [현재 상태 & 로드맵](#현재-상태--로드맵)
 
 ---
 
@@ -106,8 +105,8 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 | 경로 | 페이지 | 설명 |
 |------|--------|------|
 | `/` · `/coins` · `/coins/:market` | **코인 목록** (메인, master-detail) | 좌: 코인 상세(캔들 인터벌 10종·MA/Bollinger/RSI 토글·호가·체결·상관관계·GARCH/VaR·거래대금 순위·호가 압력 바) / 우: 슬림 사이드바(검색·필터·정렬·★ 즐겨찾기). **현재가·호가·체결 실시간(WS)** |
-| `/dashboard` | **대시보드** | 오늘의 시그널 4카드 · KPI 4 · 시장 종합 추세(HMM 국면 밴드, focal) · 공포·탐욕 게이지 · 시장 지배력 도넛 · 시세 표(거래대금 상위, **실시간 시세**) |
-| `/market` | **마켓 현황** | 미니 차트 카드 · 52주 신고/신저 배지(상위 30) · 상승/하락/거래대금 표(**실시간 셀**) · 거래대금 트리맵 · 리스크-수익 산점도 · **시장 폭 추세(Advance-Decline 라인)** |
+| `/dashboard` | **시황 (코인동향 미러)** | 자체 시장지수 6카드 + 당일/전일 인트라데이(60분봉) · 주간 상승 TOP10 · 오늘의 환율 · 시황 한 줄 · 랭킹 그리드(급상승·급하락·거래량급증·**체결강도**) · 최신 뉴스 · 디지털 자산 표(기간수익/시가총액) · 디지털 자산 지수 표(시장·전략·테마·섹터) |
+| `/market` | **마켓 현황** | **시장 요약 스트립**(총거래대금·평균등락·52주신고저·집중도·**공포·탐욕**·상승하락) · 미니 차트 카드 · 52주 신고/신저 배지(상위 30) · 상승/하락/거래대금 표(**실시간 셀**) · 거래대금 트리맵 · 리스크-수익 산점도 · **시장 폭 추세(Advance-Decline 라인)** |
 | `/sectors` | **섹터 분석** | 섹터 안내(클릭 → 소속 종목 드릴다운) · 누적수익률(일봉 동일가중) · 월별 히트맵 · 상관관계 히트맵 |
 | `/screener` | **스크리너** | 다중조건·프리셋 스크리닝 |
 | `/structure` | **시장 구조** | 상관 네트워크(MST) · K-means + 계층 덴드로그램 — *종목 간 관계(미시)* |
@@ -148,12 +147,14 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 |-----------|------|
 | **React 19 + Vite** | UI 프레임워크 · 번들러 |
 | **TypeScript** | 전 소스 `.ts/.tsx`(점진 strict) · `tsc --noEmit` 타입체크 · 라우트 기반 코드 스플리팅(`React.lazy`) |
-| **react-router-dom v7** | 클라이언트 사이드 라우팅 |
-| **axios** | HTTP 클라이언트 (요청 ID 인터셉터) |
+| **react-router-dom v7** | 클라이언트 사이드 라우팅 (인증 게이트) |
+| **@tanstack/react-query** | 서버 상태 캐시 (동일키 디둡 · staleTime · keepPreviousData) |
+| **axios** | HTTP 클라이언트 (요청 ID 인터셉터 · 쿠키 인증 · 401 갱신) |
 | **recharts v3** | 분석 차트 (라인 · 산점도 · 트리맵 · 스파크라인 · 효율적 경계선) |
 | **lightweight-charts v5** | 캔들차트 (코인 상세) |
 | **d3-force** | 상관 네트워크 force 레이아웃 |
 | **Tailwind CSS v4** | 스타일링 (`@tailwindcss/vite`, `@theme` 색 토큰) |
+| **vitest + Testing Library** | 프론트 단위 테스트 (`npm run test`) |
 
 > 실시간 시세는 `useSyncExternalStore` 기반 **외부 store + 종목별 selector**로 구독해, 261종이 고빈도로 갱신돼도 바뀐 종목의 셀만 리렌더합니다(Context 전체 구독의 리렌더 폭주 회피).
 
@@ -229,12 +230,15 @@ up-quant/
 │   │   │   ├── config.py             # 환경설정(CORS_ORIGINS·SKIP_PREFETCH) · 마켓 유니버스/카테고리 · 캐시 TTL
 │   │   │   ├── cache.py              # 인메모리 TTL 캐시 (stale-while-revalidate · single-flight)
 │   │   │   ├── logging.py            # 요청 ID(rid) contextvar + 공통 로깅 포맷
-│   │   │   └── metrics.py            # 자체 관측성 메트릭 (캐시 적중률·외부 호출·응답시간·최근 rid)
+│   │   │   ├── metrics.py            # 자체 관측성 메트릭 (캐시 적중률·외부 호출·응답시간·최근 rid·소스 상태)
+│   │   │   ├── security.py           # OAuth2+JWT(PyJWT·bcrypt) · current_user 의존성 · WS 단발 티켓
+│   │   │   └── ratelimit.py          # IP 토큰버킷 레이트리밋 · 로그인 brute-force 잠금
 │   │   ├── clients/
 │   │   │   └── upbit_rest.py         # 업비트 REST 클라이언트 (httpx · 스로틀 · 429 재시도 · event_hook 로깅)
 │   │   ├── data/
 │   │   │   └── upbit_sectors.json    # 데이터랩 '코인 분류' 스크랩 스냅샷 (섹터)
 │   │   ├── routers/                  # HTTP 엔드포인트 (≈ @RestController)
+│   │   │   ├── auth.py               # /api/auth/*     로그인·토큰·갱신·로그아웃·me·WS 티켓
 │   │   │   ├── markets.py            # /api/markets/*  현재가·요약·호가·체결
 │   │   │   ├── candles.py            # /api/candles/*  캔들
 │   │   │   ├── analysis.py           # /api/analysis/* 카테고리·코인통계·상관관계·A-D 라인
@@ -242,7 +246,8 @@ up-quant/
 │   │   │   ├── quant.py              # /api/quant/*    정량/ML 9종
 │   │   │   ├── report.py             # /api/report/*   AI 전략 리포트(Gemini)
 │   │   │   ├── system.py             # /api/system/*   관측성 메트릭
-│   │   │   └── trends.py             # /api/trends/*   코인동향(지수·인트라데이·환율·뉴스·체결강도·시총)
+│   │   │   ├── trends.py             # /api/trends/*   코인동향(지수·인트라데이·환율·뉴스·체결강도·시총)
+│   │   │   └── signals.py            # /api/signals    모멘텀·페어·국면·돌파 시그널 통합
 │   │   ├── services/                 # 비즈니스 로직 + 캐싱 (≈ @Service)
 │   │   │   ├── market_service.py     # 현재가·한글명·호가·체결·요약·52주·스파크라인
 │   │   │   ├── candle_service.py     # 캔들 (일봉 200개 캐시 후 슬라이스 공유)
@@ -253,7 +258,9 @@ up-quant/
 │   │   │   ├── trends_service.py      # 자체 시장지수·인트라데이·자산지수·체결강도(WS)·기간수익·시황
 │   │   │   ├── fx_service.py          # 환율 프록시 (open.er-api, 외부)
 │   │   │   ├── news_service.py        # 한국 크립토 RSS 통합 (외부)
-│   │   │   └── marketcap_service.py   # 시가총액 (CoinGecko, 외부)
+│   │   │   ├── marketcap_service.py   # 시가총액·BTC 도미넌스 (CoinGecko, 외부)
+│   │   │   ├── fng_service.py          # 공포·탐욕 지수 (alternative.me, 외부)
+│   │   │   └── signal_service.py       # 모멘텀·페어·국면·돌파 시그널 집계
 │   │   └── schemas/                  # Pydantic 응답 모델(DTO)
 │   │       ├── market.py             # Ticker · MarketSummary · Orderbook · Trade
 │   │       ├── candle.py             # CandleItem
@@ -261,43 +268,54 @@ up-quant/
 │   │       ├── backtest.py           # BacktestResult · StrategyCompareResult · WalkForwardResult · MonteCarloResult · TsmomResult · PortfolioBacktestResult
 │   │       ├── quant.py              # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
 │   │       ├── report.py             # ReportResult
-│   │       └── trends.py             # MarketIndex · AssetIndices · VolumePower · PeriodReturns · FxResult · NewsResult · MarketBrief
-│   ├── tests/                        # pytest (수치 코어·캐시·설정·라우터 스모크)
+│   │       ├── trends.py             # MarketIndex · AssetIndices · VolumePower · PeriodReturns · FxResult · NewsResult · MarketBrief
+│   │       └── signal.py             # SignalItem · SignalsResult
+│   ├── tests/                        # pytest (수치 코어·캐시·설정·라우터·개선 항목)
 │   │   ├── test_numeric.py           # MDD·리스크조정·과최적화 p값·피어슨·일간수익률
-│   │   ├── test_cache.py             # SWR 콜드/신선/stale 갱신 · single-flight
+│   │   ├── test_cache.py             # SWR 콜드/신선/stale 갱신 · single-flight · LRU 읽기 터치
 │   │   ├── test_config.py            # CORS_ORIGINS(CSV·JSON)·SKIP_PREFETCH 파싱
-│   │   └── test_routes.py            # /health·메트릭·라우트 등록(네트워크 0)
+│   │   ├── test_quant_units.py       # 페어 OOS 불변식 · 월봉/주봉 canonical 공유
+│   │   ├── test_improvements.py      # RSI(Wilder)·변동성 사이징·FDR·2-leg PnL·JWT·레이트리밋·외부 파서
+│   │   └── test_routes.py            # /health·메트릭·인증·라우트 등록(네트워크 0)
 │   └── requirements.txt
 ├── frontend/                         # React + Vite SPA (전 소스 TypeScript)
 │   ├── src/
-│   │   ├── main.tsx                  # 앱 진입점 (ReactDOM)
-│   │   ├── App.tsx                   # 라우트 정의(코드 스플리팅) · Realtime·PriceAlert Provider
+│   │   ├── main.tsx                  # 앱 진입점 (ReactDOM · react-query QueryClientProvider)
+│   │   ├── App.tsx                   # 라우트 정의(코드 스플리팅) · RequireAuth 게이트 · Auth·Realtime·PriceAlert Provider
 │   │   ├── config.ts                 # API_BASE·WS_BASE (VITE_API_BASE·VITE_WS_BASE 환경변수)
 │   │   ├── index.css                 # Tailwind 엔트리 + @theme 색 토큰(업비트 블루) · 다크모드 · 실시간 펄스 애니메이션
 │   │   ├── theme.ts                  # 구분용 색 팔레트 (SERIES · DOM_COLORS)
 │   │   ├── api/                      # axios 호출 래퍼
-│   │   │   ├── client.ts             # axios 인스턴스(baseURL=API_BASE) + 요청/응답 로깅 인터셉터(rid)
-│   │   │   ├── markets.ts · candles.ts · analysis.ts · backtest.ts · quant.ts · report.ts · system.ts · trends.ts
-│   │   ├── hooks/                    # 데이터 페칭 훅 (loadedKey 파생 로딩 · error/retry)
-│   │   │   ├── useFetch.ts           # 공용 단발 fetch ({data,loading,error,retry})
-│   │   │   ├── useTickers.ts · useCandles.ts · useAnalysis.ts · useQuant.ts · useTrends.ts
+│   │   │   ├── client.ts             # axios 인스턴스(withCredentials · 401→토큰 갱신 1회→/login) + rid 인터셉터
+│   │   │   ├── auth.ts               # 로그인·로그아웃·me·WS 티켓
+│   │   │   ├── markets.ts · candles.ts · analysis.ts · backtest.ts · quant.ts · report.ts · system.ts · trends.ts · signals.ts
+│   │   ├── hooks/                    # 데이터 페칭 훅 (react-query 백킹 · error/retry)
+│   │   │   ├── useFetch.ts           # 공용 단발 fetch (react-query 백킹 · {data,loading,error,retry})
+│   │   │   ├── useTickers.ts · useCandles.ts · useAnalysis.ts · useQuant.ts · useTrends.ts · useSignals.ts
+│   │   │   ├── useGate.ts            # 표시형 페이지 전역 로딩/에러 게이트 합성
 │   │   │   └── useMarketStream.ts    # 코인 상세 호가·체결 실시간 WS(/ws/market/:market)
-│   │   ├── contexts/                 # 실시간 시세 · 가격 알림
+│   │   ├── contexts/                 # 인증 · 실시간 시세 · 가격 알림
+│   │   │   ├── Auth.tsx · useAuth.ts # 로그인 세션(쿠키 JWT) · RequireAuth용 상태
 │   │   │   ├── Realtime.tsx          # RealtimeProvider — WS(/ws/tickers) 생명주기 · 300ms 배치
 │   │   │   ├── realtimeStore.ts      # 외부 store (종목별 리스너 — useSyncExternalStore)
 │   │   │   ├── useRealtime.ts        # useLivePrice · useWsConnected · usePulse
 │   │   │   ├── PriceAlerts.tsx       # 가격 알림(실시간 WS 감시 → 토스트, localStorage)
 │   │   │   └── usePriceAlerts.ts
 │   │   ├── utils/
-│   │   │   └── chartExport.ts        # 차트 SVG→PNG 내보내기
+│   │   │   ├── chartExport.ts        # 차트 SVG→PNG 내보내기
+│   │   │   ├── csv.ts                # 시그널 CSV 내보내기
+│   │   │   └── format.ts             # 숫자·금액 포맷 헬퍼
 │   │   ├── components/
 │   │   │   ├── ui/                   # 공용 UI (Spinner · Card · StatCard · PageLoading · PageError)
 │   │   │   ├── layout/               # Header(탭 4그룹·WS·🔔·🌙·AI리포트) · Footer · Layout(+ErrorBoundary)
 │   │   │   ├── LiveCells.tsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
 │   │   │   ├── ErrorBoundary.tsx     # 페이지 단위 에러 경계
 │   │   │   ├── ReportModal.tsx       # AI 전략 리포트 모달
+│   │   │   ├── SignalsPanel.tsx      # 시그널 통합 패널(+CSV 내보내기)
+│   │   │   ├── Caveat.tsx            # 백테스트·정량 신뢰성 경고 배지
 │   │   │   └── InfoTooltip.tsx       # 제목 옆 ? 호버 안내
 │   │   └── pages/                    # 라우트별 페이지
+│   │       ├── Login.tsx             # '/login' — 단일 계정 로그인(인트로 연출·인라인 폼)
 │   │       ├── CoinList.tsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
 │   │       ├── CoinDetail.tsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
 │   │       ├── Dashboard.tsx         # '/dashboard' — 코인동향 미러(자체지수·인트라데이·환율·뉴스·체결강도·기간수익/시총·자산지수)
@@ -318,7 +336,7 @@ up-quant/
 │   └── package.json                  # 의존성 · npm 스크립트(dev·build·lint·typecheck)
 ├── .github/workflows/ci.yml          # CI — 백엔드 compileall+pytest / 프론트 lint+typecheck+build
 ├── references/                       # 기획서 · API 명세(API.md) · 엔지니어링 노트 · 발표 자료(pt/)
-├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~27)
+├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~32)
 └── pages.md                          # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 (보조 작업 문서)
 ```
 
@@ -374,7 +392,7 @@ npm run dev
 
 ## API 레퍼런스
 
-기본 URL: `http://localhost:8000` · 전 엔드포인트 인증 불필요 (공개 시세). 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다. **상세 명세는 [`references/API.md`](references/API.md)** 또는 Swagger(`/docs`)를 참고하세요.
+기본 URL: `http://localhost:8000` · **모든 `/api/*`·`/ws/*`는 로그인 인증 필요**(HttpOnly 쿠키 JWT, 과제용 계정 `test`/`test`). 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다. **상세 명세는 [`references/API.md`](references/API.md)** 또는 Swagger(`/docs`)를 참고하세요.
 
 | 그룹 | 주요 엔드포인트 |
 |------|-----------------|
@@ -395,6 +413,7 @@ npm run dev
 | 항목 | 선택 | 사유 |
 |------|------|------|
 | 데이터 소스 | 업비트 시세 REST + WebSocket · 인증 불필요 | 계정/거래 권한 없이 시세만 사용 |
+| 인증/보안 | OAuth2+JWT(HttpOnly·SameSite 쿠키) · IP 레이트리밋 · 로그인 brute-force 잠금 · WS 단발 티켓 | 모든 `/api`·`/ws` 보호, 배포(AWS) 시 비용성 남용 방어. 엣지(WAF)가 1차, 앱은 backstop |
 | 캐싱 | 인메모리 TTL + stale-while-revalidate + single-flight | 만료 시에도 옛 값 즉시 응답, 갱신은 백그라운드 1스레드만 (콜드·스탬피드 회피) |
 | 일봉 캐시 통합 | 종목별 200개 1회 fetch 후 슬라이스 공유 | 스파크라인·통계·상관관계·정량분석이 캔들을 재호출하지 않음 (상관관계 ~1800ms → ~5ms) |
 | 캐시 워밍 | 부팅 시 **동기** 프리페치(tickers·coin_stats·카테고리 월봉·일봉 누적·퀀트 9종) 후 기동 | 기동 느려지는 대신 첫 사용자도 콜드 없음. 대량 팬아웃은 기동 1회만 |
@@ -425,14 +444,6 @@ npm run dev
 | 주봉·월봉 (canonical, 집계 공용) | 1800s | 261콜 |
 | 외부 소스(환율·뉴스·시총·도미넌스·F&G) | 성공 600~3600s / **에러 60s** | 1콜 |
 | 마켓목록 · 한글명 | 3600s | 1콜 |
-
-> **Phase 32 — TTL 재조정으로 숨은 팬아웃 제거.** 일봉은 하루 1회 확정(장중엔 WS가 라이브)이라 600s→**1시간**, 60·240분봉은 시간 단위 갱신인데 30s라 인트라데이 지수 재계산마다 콜드 재팬아웃→**5분**, 스파크라인은 코인목록 전 행이 쓰므로 전 종목 프리페치+30분. **외부 소스 에러는 60초만 캐시**(죽은 소스에 매 진입 재-매달림 방지) + httpx 타임아웃 4초.
->
-> **포그라운드 우선 스로틀(Phase 32)**: 백그라운드 워밍/재검증이 261종 팬아웃을 동시에 쏟으면 사용자(포그라운드) 요청이 전역 업비트 스로틀 줄 뒤에서 수십 초 대기하던 문제 → 백그라운드 호출을 직렬화 + 포그라운드 대기 시 양보, 사용자 요청은 다음 슬롯(~0.12s)만 대기. 주기 재워밍도 240s를 7그룹으로 분산.
->
-> **프론트는 react-query로 클라이언트 캐시도 둠** — 같은 엔드포인트 1회 호출(디둡), `staleTime 5분` 내 즉시 렌더, `gcTime 1시간`(재방문에도 옛 화면 즉시), `keepPreviousData`(코인/인터벌 전환 시 옛 화면 유지). 백엔드 캐시와 2단.
-
-각 키는 **신선** / **stale**(옛 값 즉시 + 백그라운드 갱신) / **콜드**(동기 fetch) 3상태로 동작합니다. **읽기 적중도 LRU 꼬리로 이동**(핫 키 축출 방지)하고 상한(20000)을 둡니다. 콜드 경로도 single-flight로 동시 첫 방문의 중복 fetch를 막습니다.
 
 ---
 
