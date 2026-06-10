@@ -1,6 +1,7 @@
-﻿import { useState, useCallback, useMemo } from 'react'
+﻿import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
+import { useLiveTickers } from '../contexts/useRealtime'
 import { CoinDetailView } from './CoinDetail'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
@@ -38,6 +39,31 @@ function fmtVolume(v) {
   return v.toLocaleString()
 }
 
+// 경량 SVG 스파크라인(1일·1시간봉 24개) — recharts 대신 polyline 하나라 261행도 가뿐. 색=등락 방향.
+function Sparkline({ data, up }: { data: number[]; up: boolean }) {
+  if (!data || data.length < 2) return <span className="inline-block w-10" />
+  const w = 40, h = 16
+  const min = Math.min(...data), max = Math.max(...data)
+  const span = max - min || 1
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / span) * (h - 2) - 1}`).join(' ')
+  return (
+    <svg width={w} height={h} className="block" preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={up ? '#ef4444' : '#3b82f6'} strokeWidth="1" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// 최근 본 코인 — localStorage에 최근 선택 종목을 쌓아 빠른 재이동 바로 보여준다.
+const RECENT_KEY = 'upquant_recent_coins'
+function loadRecent(): string[] {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
+}
+function pushRecent(market: string): string[] {
+  const list = [market, ...loadRecent().filter(m => m !== market)].slice(0, 6)  // 최근 6개만 유지
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)) } catch { /* ignore */ }
+  return list
+}
+
 
 function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthClass = '' }) {
   const active = sortKey === col
@@ -69,14 +95,23 @@ export default function CoinList() {
   const navigate = useNavigate()
   const { market: routeMarket } = useParams()
   const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
+  // REST tickers에 실시간 시세를 덮어쓴 배열 — 정렬·필터 카운트·거래대금이 라이브로 갱신된다.
+  const liveTickers = useLiveTickers(tickers)
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('전체')
   const [sortKey, setSortKey]     = useState('acc_trade_price_24h')
   const [sortDir, setSortDir]     = useState('desc')
   const [favorites, setFavorites] = useState(loadFavorites)
+  const [recent, setRecent]       = useState<string[]>(loadRecent)
 
   // URL에 market이 없으면 디폴트로 KRW-BTC (랜딩 시 빈 화면 방지)
   const selectedMarket = routeMarket || 'KRW-BTC'
+
+  // 선택 종목이 바뀌면 '최근 본 코인'에 기록(navigation 부수효과 — 의도적 setState)
+  useEffect(() => {
+    if (selectedMarket) setRecent(pushRecent(selectedMarket))  // eslint-disable-line react-hooks/set-state-in-effect
+  }, [selectedMarket])
+  const nameOf = useMemo(() => Object.fromEntries(tickers.map(t => [t.market, t.korean_name])), [tickers])
 
   const toggleFavorite = useCallback((market, e) => {
     e.stopPropagation()
@@ -100,11 +135,11 @@ export default function CoinList() {
     }
   }
 
-  // 정렬·필터·검색은 tickers 갱신마다 다시 도는데, 261종이라 가벼움. useMemo로 묶음.
+  // 정렬·필터·검색은 실시간 tickers(liveTickers) 기준 → 가격/거래대금이 바뀌면 라이브로 재정렬·재집계.
   const rows = useMemo(() => {
-    if (!tickers.length) return []
+    if (!liveTickers.length) return []
     const changeVal = FILTER_MAP[filter]
-    let r = tickers.filter(t => {
+    let r = liveTickers.filter(t => {
       if (filter === '관심') return favorites.has(t.market)
       const matchFilter = !changeVal || t.change === changeVal
       const matchSearch = t.korean_name.includes(search) || t.market.toLowerCase().includes(search.toLowerCase())
@@ -115,7 +150,7 @@ export default function CoinList() {
       r = [...r].sort((a, b) => sortDir === 'desc' ? fn(a, b) : -fn(a, b))
     }
     return r
-  }, [tickers, filter, favorites, search, sortKey, sortDir])
+  }, [liveTickers, filter, favorites, search, sortKey, sortDir])
 
   if (tError) return <PageError onRetry={tRetry} />
   // 첫 진입(코인 목록 로딩) 동안은 통짜 로딩. 이후 종목 전환은 좌측 상세가 자체 로딩(master-detail).
@@ -125,6 +160,27 @@ export default function CoinList() {
   // items-start를 두지 않음(기본 stretch) → 우측 사이드바 높이가 좌측 상세 높이에 맞춰진다.
   // (items-start면 우측이 자기 콘텐츠 높이로 grid row를 밀어, 줌 아웃 시 좌측보다 길어져 페이지가 끝없이 늘어남)
   return (
+    <>
+      {/* 최근 본 코인 — 화면 왼쪽에 떠 있는 컴팩트 패널(최근 6개). 클릭 시 해당 코인으로 이동. */}
+      {recent.length > 1 && (
+        <div className="hidden xl:flex flex-col gap-1.5 fixed left-3 top-1/2 -translate-y-1/2 z-30">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 px-1 mb-0.5">최근 본</span>
+          {recent.map(m => {
+            const active = m === selectedMarket
+            return (
+              <button key={m} onClick={() => navigate(`/coins/${m}`)} title={nameOf[m] || m}
+                className={`w-12 px-1 py-1.5 rounded-md text-[11px] font-semibold cursor-pointer transition-all shadow-sm ${
+                  active
+                    ? 'bg-brand-500 text-white'
+                    : 'bg-white/85 dark:bg-[#1a2234]/85 backdrop-blur border border-gray-200 dark:border-[#2c3850] text-gray-600 dark:text-gray-300 hover:border-brand-400 hover:text-brand-500'
+                }`}>
+                {m.replace('KRW-', '')}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
     <div className="grid grid-cols-[repeat(24,minmax(0,1fr))] gap-4">
       {/* 좌측 메인 — 코인 상세 */}
       <div className="col-span-[17] min-w-0">
@@ -162,7 +218,7 @@ export default function CoinList() {
               {f}
               {f !== '전체' && f !== '관심' && (
                 <span className="ml-1 opacity-70">
-                  {tickers.filter(t => t.change === FILTER_MAP[f]).length}
+                  {liveTickers.filter(t => t.change === FILTER_MAP[f]).length}
                 </span>
               )}
             </button>
@@ -178,15 +234,16 @@ export default function CoinList() {
                 <SortTh label="한글명"   col="korean_name"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" widthClass="w-20" />
                 <SortTh label="현재가"   col="trade_price"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh label="전일대비" col="change_rate"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+                <th className="px-1 py-2 font-medium text-center">1일</th>
                 <SortTh label="거래대금" col="acc_trade_price_24h"  sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
               </tr>
             </thead>
             <tbody>
               {tLoading ? (
-                <tr><td colSpan={5} className="px-3 py-10 text-center text-gray-400 dark:text-gray-500">로딩 중...</td></tr>
+                <tr><td colSpan={6} className="px-3 py-10 text-center text-gray-400 dark:text-gray-500">로딩 중...</td></tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400 dark:text-gray-500">
+                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400 dark:text-gray-500">
                     {filter === '관심' ? '관심 종목이 없습니다' : '검색 결과가 없습니다'}
                   </td>
                 </tr>
@@ -213,6 +270,9 @@ export default function CoinList() {
                     <td className="px-2 py-1.5 text-right">
                       <LiveChangeRate ticker={t} />
                     </td>
+                    <td className="px-1 py-1.5">
+                      <Sparkline data={t.sparkline} up={t.change_rate >= 0} />
+                    </td>
                     <td className="px-2 py-1.5 text-right text-gray-600 dark:text-gray-300 tabular-nums">
                       {fmtVolume(t.acc_trade_price_24h)}
                     </td>
@@ -225,5 +285,6 @@ export default function CoinList() {
       </aside>
       </div>
     </div>
+    </>
   )
 }

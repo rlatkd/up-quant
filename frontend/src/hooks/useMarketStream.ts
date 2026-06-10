@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { WS_BASE } from '../config'
+import { wsTicket } from '../api/auth'
 
 // 코인 상세용 — 한 종목의 호가(orderbook)·체결(trade)을 백엔드 WS(/ws/market/:market)로 실시간 수신.
 // market이 바뀌면 재연결. 초기엔 비어 있으니 호출부가 REST 값으로 폴백한다.
@@ -20,8 +21,12 @@ export function useMarketStream(market) {
     let alive = true
     let retry
 
-    function connect() {
-      ws = new WebSocket(`${WS_BASE}/ws/market/${market}`)
+    async function connect() {
+      if (!alive) return
+      let ticket
+      try { ticket = await wsTicket() } catch { if (alive) retry = setTimeout(connect, 3000); return }
+      if (!alive) return
+      ws = new WebSocket(`${WS_BASE}/ws/market/${market}?token=${encodeURIComponent(ticket)}`)
       ws.onmessage = (e) => {
         try {
           const d = JSON.parse(e.data)

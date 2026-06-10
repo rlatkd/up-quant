@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { applyTickers, setConnected } from './realtimeStore'
 import { WS_BASE } from '../config'
+import { wsTicket } from '../api/auth'
 
 // 실시간 시세 Provider — 백엔드 WS(/ws/tickers, 업비트 중계)에 연결해 외부 store에 반영한다.
 // 시세 구독은 store의 종목별 selector(useLivePrice)가 맡으므로, 여기선 WS 생명주기만 관리(렌더 없음).
@@ -13,18 +14,27 @@ export function RealtimeProvider({ children }) {
     let alive = true
     let retry
 
-    function connect() {
-      // WS 베이스는 config(WS_BASE)에서 — 로컬은 ws://localhost:8000, 배포는 VITE_WS_BASE.
-      ws = new WebSocket(`${WS_BASE}/ws/tickers`)
-      ws.onopen = () => setConnected(true)
-      ws.onmessage = (e) => {
-        try {
-          const d = JSON.parse(e.data)
-          bufferRef.current[d.market] = d
-        } catch { /* 무시 */ }
+    async function connect() {
+      if (!alive) return
+      try {
+        // 쿠키 인증된 REST로 WS 단기 티켓을 받아 ?token=으로 붙인다(브라우저 WS 쿠키 미전송 우회).
+        const ticket = await wsTicket()
+        if (!alive) return
+        ws = new WebSocket(`${WS_BASE}/ws/tickers?token=${encodeURIComponent(ticket)}`)
+        ws.onopen = () => setConnected(true)
+        ws.onmessage = (e) => {
+          try {
+            const d = JSON.parse(e.data)
+            bufferRef.current[d.market] = d
+          } catch { /* 무시 */ }
+        }
+        ws.onclose = () => { setConnected(false); if (alive) retry = setTimeout(connect, 3000) }
+        ws.onerror = () => { try { ws.close() } catch { /* noop */ } }
+      } catch {
+        // 티켓 발급 실패(미인증 등) → 잠시 후 재시도
+        setConnected(false)
+        if (alive) retry = setTimeout(connect, 3000)
       }
-      ws.onclose = () => { setConnected(false); if (alive) retry = setTimeout(connect, 3000) }
-      ws.onerror = () => { try { ws.close() } catch { /* noop */ } }
     }
     connect()
 

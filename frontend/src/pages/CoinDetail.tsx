@@ -1,14 +1,15 @@
 ﻿import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createChart, CandlestickSeries, LineSeries } from 'lightweight-charts'
-import { useTicker, useTickers, useOrderbook, useTrades } from '../hooks/useTickers'
+import { useTickers, useOrderbook, useTrades } from '../hooks/useTickers'
 import { useCandles } from '../hooks/useCandles'
 import { useCorrelation, useCoinStats } from '../hooks/useAnalysis'
 import { useGarch } from '../hooks/useQuant'
+import { useSignals } from '../hooks/useSignals'
 import { useMarketStream } from '../hooks/useMarketStream'
-import { useLivePrice, usePulse } from '../contexts/useRealtime'
+import { useLivePrice, usePulse, useLiveTickers } from '../contexts/useRealtime'
 import PageLoading from '../components/ui/PageLoading'
-import PageError from '../components/ui/PageError'
+import Spinner from '../components/ui/Spinner'
 
 // ── 기술적 지표 계산 ──────────────────────────────────────
 function calcMA(closes, period) {
@@ -27,16 +28,27 @@ function calcBollinger(closes, period = 20, mult = 2) {
   })
 }
 
+// Wilder RSI(표준) — 첫 period개 변화의 단순평균으로 시드 후 지수평활(α=1/period). 백엔드와 동일 정의.
+// (과거엔 매 봉 윈도우 단순평균이라 업비트/TradingView 값과 어긋났음)
 function calcRSI(closes, period = 14) {
-  return closes.map((_, i) => {
-    if (i < period) return null
-    const slice = closes.slice(i - period, i)
-    const gains  = slice.map((v, j) => j === 0 ? 0 : Math.max(0, v - slice[j - 1]))
-    const losses = slice.map((v, j) => j === 0 ? 0 : Math.max(0, slice[j - 1] - v))
-    const ag = gains.reduce((a, b) => a + b, 0) / period
-    const al = losses.reduce((a, b) => a + b, 0) / period
-    return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2))
-  })
+  const n = closes.length
+  const out = new Array(n).fill(null)
+  if (n <= period) return out
+  const gains: number[] = [], losses: number[] = []
+  for (let i = 1; i < n; i++) {
+    const d = closes[i] - closes[i - 1]
+    gains.push(d > 0 ? d : 0)
+    losses.push(d < 0 ? -d : 0)
+  }
+  let ag = gains.slice(0, period).reduce((a, b) => a + b, 0) / period
+  let al = losses.slice(0, period).reduce((a, b) => a + b, 0) / period
+  out[period] = al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2))
+  for (let i = period + 1; i < n; i++) {
+    ag = (ag * (period - 1) + gains[i - 1]) / period
+    al = (al * (period - 1) + losses[i - 1]) / period
+    out[i] = al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2))
+  }
+  return out
 }
 
 // 누적 VWAP(거래량가중평균가) — 표시 구간 시작부터 누적. typical=(고+저+종)/3.
@@ -111,11 +123,20 @@ function chartTheme() {
     : { bg: '#ffffff', text: '#9ca3af', grid: '#f3f4f6', border: '#e5e7eb' }
 }
 
+// 인터벌의 한 봉(버킷) 길이(초). months는 캘린더 기반이라 새 봉 형성은 생략(라이브 종가만 갱신).
+function bucketSeconds(intervalApi: string): number | null {
+  if (intervalApi?.startsWith('minutes/')) return parseInt(intervalApi.split('/')[1], 10) * 60
+  if (intervalApi === 'days') return 86400
+  if (intervalApi === 'weeks') return 604800
+  return null
+}
+
 // ── 차트 컴포넌트 ──────────────────────────────────────────
-function CandlestickChart({ candles, indicators, livePrice }) {
+function CandlestickChart({ candles, indicators, livePrice, intervalApi }) {
   const containerRef = useRef(null)
   const chartRef     = useRef(null)
   const seriesRef    = useRef<any>({})
+  const liveBarRef   = useRef<any>(null)   // 형성 중인 라이브 봉(REST 마지막 봉 이후 버킷)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -171,20 +192,40 @@ function CandlestickChart({ candles, indicators, livePrice }) {
     chart.timeScale().fitContent()
   }, [candles])
 
-  // 실시간 가격 — 마지막 봉의 종가를 livePrice로 갱신(고/저는 넘으면 확장). 줌/스크롤은 건드리지 않음.
-  // 간단 버전: 새 봉 생성·거래량 누적은 안 함(다음 인터벌 조회 때 REST 공식값으로 재동기화).
+  // REST 캔들이 새로 오면(인터벌·종목 변경, 주기 재동기화) 형성 중 라이브 봉을 리셋.
+  useEffect(() => { liveBarRef.current = null }, [candles])
+
+  // 실시간 슬라이딩 — livePrice 틱마다:
+  //  ⑴같은 버킷이면 형성 중 봉의 종가·고저 갱신
+  //  ⑵새 버킷이 시작되면 우측에 새 봉을 생성(open=현재가) → lightweight-charts가 뷰를 우측으로 밀어
+  //    봉 폭은 그대로, 가장 왼쪽 봉은 화면 밖으로 사라진다(고정폭 슬라이딩).
   useEffect(() => {
     const { candle } = seriesRef.current
     if (!candle || !candles.length || livePrice == null) return
     const last = candles[candles.length - 1]
-    candle.update({
-      time: Math.floor(last.timestamp / 1000),
-      open: last.open,
-      high: Math.max(last.high, livePrice),
-      low: Math.min(last.low, livePrice),
-      close: livePrice,
-    })
-  }, [livePrice, candles])
+    const lastTime = Math.floor(last.timestamp / 1000)
+    const bs = bucketSeconds(intervalApi)
+    const nowBucket = bs ? Math.floor(Date.now() / 1000 / bs) * bs : lastTime
+
+    if (bs && nowBucket > lastTime) {
+      // REST 마지막 봉 이후의 새 버킷 → 형성 중 라이브 봉 유지/생성(open·고저를 ref에 누적)
+      let bar = liveBarRef.current
+      if (!bar || bar.time !== nowBucket) {
+        bar = { time: nowBucket, open: livePrice, high: livePrice, low: livePrice }
+        liveBarRef.current = bar
+      } else {
+        bar.high = Math.max(bar.high, livePrice)
+        bar.low = Math.min(bar.low, livePrice)
+      }
+      candle.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: livePrice })
+    } else {
+      // REST 마지막 봉과 같은 버킷 → 그 봉을 형성 중으로 갱신
+      candle.update({
+        time: lastTime, open: last.open,
+        high: Math.max(last.high, livePrice), low: Math.min(last.low, livePrice), close: livePrice,
+      })
+    }
+  }, [livePrice, candles, intervalApi])
 
   // 오버레이 지표(MA·Bollinger) — candles 또는 토글 변경 시 제거 후 재생성. fitContent 없음 → 줌 유지.
   useEffect(() => {
@@ -340,11 +381,30 @@ function Metric({ label, value, color = 'text-gray-800 dark:text-gray-100', hint
 // ── 본문 (재사용 가능 컴포넌트) ────────────────────────────
 // CoinList(master-detail)에서도 이 컴포넌트를 그대로 우측 메인에 끼워 쓴다.
 // market을 prop으로 받아 라우터 의존을 없앴고, 단독 라우트는 default export wrapper가 useParams로 넘긴다.
+// 이 코인이 현재 시그널(모멘텀 롱·돌파)에 해당하면 배지로 — "보기"에서 "액션"으로 잇는 연결.
+function CoinSignalBadges({ market }) {
+  const { data } = useSignals()
+  const mine = (data.items || []).filter((s: any) => s.market === market)
+  if (!mine.length) return null
+  const meta: any = {
+    momentum: { label: '모멘텀 롱', cls: 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' },
+    breakout: { label: '돌파/급등', cls: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10' },
+  }
+  const kinds = [...new Set(mine.map((s: any) => s.kind))]
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {kinds.map((k: any) => (
+        <span key={k} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${meta[k]?.cls || 'text-gray-500 bg-gray-100'}`}
+          title="실행 가능한 시그널(인샘플·생존편향 한계)">★ {meta[k]?.label || k}</span>
+      ))}
+    </div>
+  )
+}
+
 export function CoinDetailView({ market }) {
   const [intervalIdx, setIntervalIdx] = useState(7)
   const [indicators, setIndicators]   = useState({ ma: false, bollinger: false, rsi: false, vwap: false, volprofile: false })
 
-  const { ticker, loading, error: tickerError, retry: tickerRetry } = useTicker(market)
   const { orderbook: restOb } = useOrderbook(market)
   const { trades: restTrades } = useTrades(market)
   // 실시간 호가·체결(WS). 연결 전/초기엔 비어 있으니 REST 값으로 폴백.
@@ -363,17 +423,37 @@ export function CoinDetailView({ market }) {
     merged.sort((a, b) => b.timestamp - a.timestamp)
     return merged.slice(0, 30)
   }, [liveTrades, restTrades])
-  const { candles }           = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
+  const { candles, loading: candlesLoading } = useCandles(market, INTERVALS[intervalIdx].api, INTERVALS[intervalIdx].count)
   const { data: corrData }    = useCorrelation(market)
-  // 추가 지표용 — 전체 티커(시장 점유율), 코인 통계(변동성·수익률), GARCH(리스크)
+  // 시세(ticker)는 프리페치된 tickers 목록에서 즉시 가져온다(별도 fetch·별도 로딩 없음 →
+  // 좌측만 로딩되고 우측 사이드바가 보이는 분리 현상 제거). 페이지 로딩 게이트는 CoinList가 tickers로 소유.
   const { tickers }           = useTickers()
+  const liveTickers           = useLiveTickers(tickers)   // 점유율·거래대금순위 라이브 계산용
+  const ticker                = useMemo(() => tickers.find(t => t.market === market), [tickers, market])
   const { data: coinStats }   = useCoinStats()
   const { data: garch }       = useGarch(market)
   const liveTicker            = useLivePrice(market)  // 상단 가격 헤더 실시간
   const priceFlash            = usePulse(liveTicker?.trade_price ?? ticker?.trade_price)
 
-  if (tickerError) return <PageError onRetry={tickerRetry} message="시세를 불러오지 못했습니다." />
-  if (loading || !ticker) return <PageLoading message="시세를 불러오는 중입니다…" />
+  // 라이브 파생값 — hooks 규칙상 early return 앞에서 계산(ticker 없을 수 있어 옵셔널 접근).
+  const stat = coinStats.find(s => s.market === market)
+  const lp = liveTicker?.trade_price ?? ticker?.trade_price ?? 0   // 현재가(라이브 우선)
+  // 거래대금 순위 — 실시간 거래대금으로 재정렬한 순위(1위가 바뀌면 즉시 반영).
+  const volRank = useMemo(() => {
+    const sorted = [...liveTickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
+    const i = sorted.findIndex(t => t.market === market)
+    return i >= 0 ? i + 1 : null
+  }, [liveTickers, market])
+  // 1개월 수익률(라이브) — coinStats의 return_1m로 '한 달 전 가격'을 역산 후 현재가(라이브)로 재계산.
+  const liveReturn1m = useMemo(() => {
+    const r0 = stat?.return_1m
+    if (r0 == null || !ticker) return null
+    const closes0 = ticker.trade_price / (1 + r0 / 100)
+    return closes0 > 0 ? (lp / closes0 - 1) * 100 : r0
+  }, [stat, ticker, lp])
+
+  // tickers는 CoinList에서 페이지 게이트로 보장되지만, 직접 진입 등 예외 시 인라인 로딩.
+  if (!ticker) return <PageLoading message="시세를 불러오는 중입니다…" />
 
   // 실시간 시세(WS) 우선, 없으면 REST(ticker) 폴백 — 상단 가격 헤더가 라이브로 갱신된다.
   const live = liveTicker
@@ -385,15 +465,13 @@ export function CoinDetailView({ market }) {
   const isFall = chg === 'FALL'
   const priceColor = isRise ? 'text-red-500' : isFall ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'
 
-  // 추가 지표
-  const stat = coinStats.find(s => s.market === market)
-  const totalVol = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
-  const share = totalVol ? (ticker.acc_trade_price_24h / totalVol) * 100 : 0
-  // 거래대금 순위 — tickers는 거래대금 desc 정렬이라 인덱스가 곧 순위(추가 호출 0)
-  const volRankIdx = tickers.findIndex(t => t.market === market)
-  const volRank = volRankIdx >= 0 ? volRankIdx + 1 : null
+  // 추가 지표 — 현재가/거래대금에 종속되는 것들은 실시간 값으로 계산(가격 움직이면 즉시 갱신).
+  const liveVol = live?.acc_trade_price_24h ?? ticker.acc_trade_price_24h
+  const totalVol = liveTickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
+  const share = totalVol ? (liveVol / totalVol) * 100 : 0   // 시장 점유율(라이브 거래대금)
+  // 52주 위치 — 현재가(라이브)가 분자라 가격이 오르면 바가 즉시 우측으로.
   const w52span = ticker.w52_high - ticker.w52_low
-  const w52pos = w52span > 0 ? Math.max(0, Math.min(100, (ticker.trade_price - ticker.w52_low) / w52span * 100)) : 0
+  const w52pos = w52span > 0 ? Math.max(0, Math.min(100, (price - ticker.w52_low) / w52span * 100)) : 0
   // 호가 막대폭은 표시된 호가의 최대 잔량 대비 상대 스케일 (임의 배율 대신 깊이 비교가 의미 있게)
   const maxDepth = orderbook
     ? Math.max(...orderbook.asks.map(a => a.size), ...orderbook.bids.map(b => b.size), 1e-9)
@@ -416,6 +494,7 @@ export function CoinDetailView({ market }) {
           <div className="min-w-[120px]">
             <div className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{market}</div>
             <div className="text-base font-semibold text-gray-800 dark:text-gray-100">{ticker.korean_name}</div>
+            <CoinSignalBadges market={market} />
           </div>
           <div>
             <div className="text-3xl font-bold tracking-tight">
@@ -452,8 +531,8 @@ export function CoinDetailView({ market }) {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <Metric label="거래대금 순위" value={volRank ? `#${volRank}` : '—'} hint={`전체 ${tickers.length}종`} />
             <Metric label="30일 변동성" value={stat ? stat.volatility.toFixed(2) + '%' : '—'} hint="일간 표준편차" />
-            <Metric label="1개월 수익률" value={stat ? pctSigned(stat.return_1m) : '—'}
-              color={stat ? (stat.return_1m >= 0 ? 'text-red-500' : 'text-blue-500') : 'text-gray-800 dark:text-gray-100'} />
+            <Metric label="1개월 수익률" value={liveReturn1m != null ? pctSigned(liveReturn1m) : '—'}
+              color={liveReturn1m != null ? (liveReturn1m >= 0 ? 'text-red-500' : 'text-blue-500') : 'text-gray-800 dark:text-gray-100'} />
             <Metric label="시장 점유율" value={share.toFixed(2) + '%'} hint="24h 거래대금 비중" />
             <Metric label="BTC 베타" value={stat ? stat.btc_beta.toFixed(2) : '—'}
               hint={stat ? (stat.btc_beta > 1 ? 'BTC보다 민감' : stat.btc_beta < 0 ? '역행' : 'BTC보다 둔감') : 'BTC 민감도'} />
@@ -523,8 +602,15 @@ export function CoinDetailView({ market }) {
             </div>
           </div>
           <div className="px-4 pb-3 pt-2 flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0">
-              <CandlestickChart candles={candles} indicators={indicators} livePrice={live?.trade_price} />
+            <div className="flex-1 min-h-0 relative">
+              {/* 캔들은 종목/인터벌별 on-demand fetch라 페이지를 막지 않고 차트 자리에 인라인 로딩 */}
+              {candlesLoading && candles.length === 0 && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/70 dark:bg-[#1a2234]/70">
+                  <Spinner />
+                  <span className="text-xs text-gray-400 dark:text-gray-500">차트 불러오는 중…</span>
+                </div>
+              )}
+              <CandlestickChart candles={candles} indicators={indicators} livePrice={live?.trade_price} intervalApi={INTERVALS[intervalIdx].api} />
             </div>
             {indicators.rsi && (
               <div className="mt-1 border-t border-gray-100 dark:border-[#232d40] pt-1 shrink-0">
