@@ -46,3 +46,14 @@ table, .tabular-nums {
 @keyframes flashDown { 0% { background-color: rgba(59, 130, 246, 0.28); } 100% { background-color: transparent; } }
 .flash-up   { animation: flashUp 0.5s ease-out; }
 .flash-down { animation: flashDown 0.5s ease-out; }
+
+/* ── 로그인 인트로 애니메이션 ──────────────────────────────── */
+/* 로고 쉬머 — 워드마크 위로 흰 하이라이트가 쓸고 지나간다(로고 마스크로 글자에만) */
+@keyframes loginShimmer { 0% { background-position: 160% 0; } 100% { background-position: -60% 0; } }
+.login-shimmer {
+  background: linear-gradient(105deg, transparent 38%, rgba(255,255,255,0.85) 50%, transparent 62%);
+  background-size: 250% 100%;
+  animation: loginShimmer 2.4s ease-in-out 0.5s infinite;
+}
+@keyframes loginRise { 0% { opacity: 0; transform: translateY(16px); } 100% { opacity: 1; transform: translateY(0); } }
+.login-rise { animation: loginRise 0.7s ease-out both; }
