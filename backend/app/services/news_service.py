@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
+from app.core import metrics
 from app.core.cache import cached
 from app.schemas.trends import NewsResult, NewsItem
 
@@ -73,7 +74,7 @@ def _fetch() -> NewsResult:
     errors = 0
     for source, url in _FEEDS:
         try:
-            r = httpx.get(url, timeout=6.0, follow_redirects=True,
+            r = httpx.get(url, timeout=4.0, follow_redirects=True,
                           headers={"User-Agent": "Mozilla/5.0 (UPquant)"})
             r.raise_for_status()
             collected.extend(_parse_feed(source, r.text))
@@ -82,7 +83,9 @@ def _fetch() -> NewsResult:
             logger.info("news feed 실패(%s): %s", source, e)
     if not collected:
         # 전부 실패 → 숨기지 않고 교체 필요 명시
+        metrics.record_source("news", ok=False, error=f"{errors} feeds failed")
         return NewsResult(items=[], error="뉴스 소스 연결 실패 — 소스 교체 필요 (RSS 응답 없음)")
+    metrics.record_source("news", ok=True)
     collected.sort(key=lambda x: x.ts, reverse=True)
     # 시간 미상(ts=0)은 뒤로 밀리되 포함. 중복 제목 제거.
     seen, uniq = set(), []
@@ -94,9 +97,14 @@ def _fetch() -> NewsResult:
     return NewsResult(items=uniq[:_LIMIT], error=None)
 
 
-def get_news() -> NewsResult:
-    """10분 캐시. 전부 실패 시 에러 메시지를 담아 반환."""
+def _build() -> NewsResult:
     try:
-        return cached("trends:news", 600, _fetch)
+        return _fetch()
     except Exception as e:  # noqa: BLE001
+        metrics.record_source("news", ok=False, error=str(e))
         return NewsResult(items=[], error=f"뉴스 소스 연결 실패 — 소스 교체 필요 ({type(e).__name__})")
+
+
+def get_news() -> NewsResult:
+    """성공 10분 / 에러 60초 캐시(죽은 RSS에 매 진입마다 매달리지 않게). 전부 실패 시 에러 메시지 노출."""
+    return cached("trends:news", lambda r: 60 if r.error else 600, _build)

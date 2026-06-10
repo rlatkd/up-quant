@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 import httpx
 
+from app.core import metrics
 from app.core.cache import cached
 from app.schemas.trends import FxResult, FxRate
 
@@ -20,13 +21,14 @@ def _now() -> str:
 
 
 def _fetch() -> FxResult:
-    r = httpx.get(_FX_URL, timeout=8.0)
+    r = httpx.get(_FX_URL, timeout=4.0)   # 4초 — 넘으면 죽은 소스로 보고 에러(짧게 캐시)
     r.raise_for_status()
     d = r.json()
     rates = d.get("rates", {})
     krw = rates.get("KRW")
     if not krw:
         raise ValueError("KRW rate missing")
+    metrics.record_source("fx", ok=True)
     out: list[FxRate] = []
     for code, label, unit in _PAIRS:
         rx = rates.get(code)
@@ -42,10 +44,16 @@ def _fetch() -> FxResult:
     return FxResult(rates=out, as_of=_now(), error=None)
 
 
-def get_fx() -> FxResult:
-    """10분 캐시. 외부 실패 시 에러 메시지를 담아 반환(캐시하지 않음 → 다음 요청에 재시도)."""
+def _build() -> FxResult:
+    # 성공은 10분 캐시, 실패는 에러 결과를 60초만 캐시(죽은 소스에 진입할 때마다 매번 매달리지 않게).
     try:
-        return cached("trends:fx", 600, _fetch)
+        return _fetch()
     except Exception as e:  # noqa: BLE001
+        metrics.record_source("fx", ok=False, error=str(e))
         return FxResult(rates=[], as_of=_now(),
                         error=f"환율 소스 연결 실패 — 소스 교체 필요 ({type(e).__name__})")
+
+
+def get_fx() -> FxResult:
+    """성공 10분 / 에러 60초 캐시(callable TTL). 외부 실패도 화면에 숨기지 않고 에러 메시지로 노출."""
+    return cached("trends:fx", lambda r: 60 if r.error else 600, _build)

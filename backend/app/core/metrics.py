@@ -18,11 +18,27 @@ _counters = {
     "response_ms_total": 0.0,
 }
 _recent = deque(maxlen=30)   # 최근 요청 (rid·method·path·status·ms)
+# 외부 소스(환율·뉴스·시총·F&G·체결강도 WS) 헬스 — 마지막 성공/실패 시각을 추적해
+# /system에서 "며칠째 죽은 소스"를 눈으로 보게 한다(외부 실패를 화면에 숨기지 않는 원칙의 운영판).
+_sources: dict[str, dict] = {}
 
 
 def incr(key: str, n: int = 1) -> None:
     with _lock:
         _counters[key] = _counters.get(key, 0) + n
+
+
+def record_source(name: str, ok: bool, error: str = "") -> None:
+    """외부 소스 호출 결과 기록(성공/실패 + 시각)."""
+    with _lock:
+        s = _sources.setdefault(name, {"ok": 0, "fail": 0, "last_ok": 0.0, "last_fail": 0.0, "last_error": ""})
+        if ok:
+            s["ok"] += 1
+            s["last_ok"] = time.time()
+        else:
+            s["fail"] += 1
+            s["last_fail"] = time.time()
+            s["last_error"] = error[:200]
 
 
 def record_request(rid: str, method: str, path: str, status: int, ms: float) -> None:
@@ -43,6 +59,18 @@ def snapshot() -> dict:
         misses = _counters["cache_misses"]
         served = hits + stale + misses
         reqs = _counters["requests"]
+        now = time.time()
+        sources = []
+        for name, s in sorted(_sources.items()):
+            healthy = s["last_ok"] >= s["last_fail"]   # 마지막 시도 기준 정상 여부
+            sources.append({
+                "name": name,
+                "healthy": healthy,
+                "ok": s["ok"], "fail": s["fail"],
+                "last_ok_age_sec": round(now - s["last_ok"]) if s["last_ok"] else None,
+                "last_fail_age_sec": round(now - s["last_fail"]) if s["last_fail"] else None,
+                "last_error": s["last_error"],
+            })
         return {
             "uptime_sec": round(time.time() - _started),
             "cache_hits": hits,
