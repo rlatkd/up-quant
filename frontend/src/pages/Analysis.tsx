@@ -12,6 +12,7 @@ import Spinner from '../components/ui/Spinner'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
 import InfoTooltip from '../components/InfoTooltip'
+import Caveat from '../components/Caveat'
 import { useTickers } from '../hooks/useTickers'
 import { useCoinStats } from '../hooks/useAnalysis'
 import {
@@ -219,6 +220,7 @@ export function PortfolioSection({ onSend }) {
             <AssetStatsTable assets={data.assets} />
           </div>
         </div>
+        <div className="mt-3"><Caveat kind="portfolio" /></div>
         </>
       )}
     </Card>
@@ -578,19 +580,10 @@ function MomentumSection() {
             <HoldingList title="현재 롱 (모멘텀 상위)" rows={data.long} color="text-red-500" />
             {!longOnly && <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />}
           </div>
-          <SurvivorshipNote />
+          <Caveat kind="momentum" />
         </>
       )}
     </Card>
-  )
-}
-
-// 생존편향 등 백테스트 한계 — 과거 amber 경고박스가 거슬린다는 피드백을 반영해, 작은 회색 한 줄 주석으로만.
-function SurvivorshipNote() {
-  return (
-    <p className="mt-3 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
-      ※ 현재 상장 종목만 대상이라 생존편향이 있으며, 인샘플·거래비용·슬리피지 가정에 따라 실제 성과와 다를 수 있습니다. 과거 성과가 미래를 보장하지 않습니다.
-    </p>
   )
 }
 
@@ -627,8 +620,8 @@ function PairsSection() {
     <Card>
       <CardHeader
         title={<>공적분 페어트레이딩<InfoTooltip width="w-80">두 코인의 로그가격이 장기적으로 같이 움직이면(<b>공적분</b>) 스프레드가 평균으로 회귀합니다. Engle-Granger 검정 p&lt;0.05 페어를 찾고, 스프레드 z점수 |z|&gt;2면 진입 신호(z↑=숏 스프레드, z↓=롱 스프레드).</InfoTooltip></>}
-        subtitle="statsmodels coint + ADF · 평균회귀 페어"
-        action={<span className="text-[11px] text-gray-400 dark:text-gray-500">{data.tested}쌍 검정 · {data.found}쌍 공적분</span>}
+        subtitle="statsmodels coint + ADF · 평균회귀 페어 · 헤지비율 β는 형성기간(OOS) 분리"
+        action={<span className="text-[11px] text-gray-400 dark:text-gray-500">{data.tested}쌍 검정 · {data.found}쌍 p&lt;0.05 · <b className="text-gray-600 dark:text-gray-300">{data.found_fdr ?? 0}쌍 FDR통과</b></span>}
       />
       {loading ? <Spinner /> : data.pairs.length === 0 ? (
         <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">공적분 페어 없음</div>
@@ -641,6 +634,7 @@ function PairsSection() {
                 <tr className="text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
                   <th className="px-3 py-2 text-left font-medium">페어</th>
                   <th className="px-3 py-2 text-right font-medium">p값</th>
+                  <th className="px-3 py-2 text-center font-medium">FDR</th>
                   <th className="px-3 py-2 text-right font-medium">헤지비율 β</th>
                   <th className="px-3 py-2 text-right font-medium">z점수</th>
                   <th className="px-3 py-2 text-center font-medium">신호</th>
@@ -656,6 +650,9 @@ function PairsSection() {
                       <div className="text-[11px] text-gray-400 dark:text-gray-500 font-normal">{p.korean_name1} · {p.korean_name2}</div>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.pvalue.toFixed(4)}</td>
+                    <td className="px-3 py-2 text-center">{p.fdr_pass
+                      ? <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-500/10 px-1.5 py-0.5 rounded">통과</span>
+                      : <span className="text-[10px] text-gray-400">—</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{p.hedge_ratio.toFixed(2)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums font-medium ${Math.abs(p.zscore) > 2 ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{p.zscore > 0 ? '+' : ''}{p.zscore.toFixed(2)}</td>
                     <td className="px-3 py-2 text-center"><SignalBadge signal={p.signal} /></td>
@@ -666,7 +663,7 @@ function PairsSection() {
               </tbody>
             </table>
           </div>
-          <SurvivorshipNote />
+          <Caveat kind="pairs" />
         </>
       )}
     </Card>
@@ -888,6 +885,7 @@ function VarRankSection() {
               ))}
             </tbody>
           </table>
+          <div className="mt-3"><Caveat kind="risk" /></div>
         </div>
       )}
     </Card>

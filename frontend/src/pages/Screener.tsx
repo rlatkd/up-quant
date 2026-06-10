@@ -5,6 +5,7 @@ import { useCoinStats } from '../hooks/useAnalysis'
 import InfoTooltip from '../components/InfoTooltip'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
+import { exportCsv } from '../utils/csv'
 
 const FIELDS = [
   { key: 'change_rate',   label: '등락률',       unit: '%'  },
@@ -31,12 +32,23 @@ const PRESETS = [
 
 let _uid = 0
 
+// 결과 표 기본 컬럼에 이미 있는 필드(중복 노출 안 함)
+const BASE_RESULT_FIELDS = new Set(['change_rate', 'acc_trade_24h', 'volatility', 'return_1m', 'w52_pos'])
+
 export default function Screener() {
   const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
   const { data: stats, loading: statsLoading, error: statsError, retry: statsRetry } = useCoinStats()
   const [conditions, setConditions]  = useState([])
   const [results, setResults]        = useState(null)
+  const [ranFields, setRanFields]    = useState<string[]>([])  // 마지막 실행에 쓴 조건 필드(결과 표 추가 컬럼용)
   const navigate = useNavigate()
+
+  // 거른 기준 중 기본 표에 없는 필드(BTC 베타·거래량 급증·변동성 z)는 결과 표에 컬럼으로 덧붙인다
+  // — 사용자가 방금 거른 값을 결과에서 바로 확인할 수 있게.
+  const extraCols = useMemo(
+    () => FIELDS.filter(f => ranFields.includes(f.key) && !BASE_RESULT_FIELDS.has(f.key)),
+    [ranFields],
+  )
 
   const merged = useMemo(() => {
     if (!tickers.length || !stats.length) return []
@@ -75,8 +87,10 @@ export default function Screener() {
   }
 
   function applyPreset(preset) {
-    setConditions(preset.conditions.map(c => ({ id: _uid++, ...c })))
-    setResults(null)
+    const conds = preset.conditions.map(c => ({ id: _uid++, ...c }))
+    setConditions(conds)
+    setResults(evaluate(conds))
+    setRanFields(conds.map(c => c.field))
   }
 
   function evaluate(conds) {
@@ -95,11 +109,13 @@ export default function Screener() {
 
   function handleRun() {
     setResults(evaluate(conditions))
+    setRanFields(conditions.map(c => c.field))
   }
 
   function handleReset() {
     setConditions([])
     setResults(null)
+    setRanFields([])
   }
 
   // 진입 즉시 '급등주' 프리셋 결과를 보여준다 (데이터 준비되면 1회)
@@ -110,6 +126,7 @@ export default function Screener() {
     const conds = PRESETS[0].conditions.map(c => ({ id: _uid++, ...c }))
     setConditions(conds)
     setResults(evaluate(conds))
+    setRanFields(conds.map(c => c.field))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merged])
 
@@ -210,8 +227,22 @@ export default function Screener() {
         <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-[#232d40] flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">스크리닝 결과</div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">
-              {results.length > 0 ? `${results.length}개 종목 매칭` : '매칭 없음'}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                {results.length > 0 ? `${results.length}개 종목 매칭` : '매칭 없음'}
+              </span>
+              {results.length > 0 && (
+                <button onClick={() => exportCsv('screener', results, [
+                  { key: 'market', label: '마켓' }, { key: 'korean_name', label: '한글명' },
+                  { key: 'trade_price', label: '현재가' }, { key: 'change_rate', label: '등락률%' },
+                  { key: 'acc_trade_24h', label: '거래대금(억)' }, { key: 'volatility', label: '변동성%' },
+                  { key: 'return_1m', label: '1개월%' }, { key: 'w52_pos', label: '52주위치%' },
+                  { key: 'btc_beta', label: 'BTC베타' }, { key: 'vol_surge', label: '거래량급증' }, { key: 'vol_zscore', label: '변동성z' },
+                ])}
+                  className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-[#2c3850] text-gray-500 dark:text-gray-400 hover:border-brand-400 hover:text-brand-500 cursor-pointer transition-colors">
+                  ⬇ CSV
+                </button>
+              )}
             </div>
           </div>
 
@@ -228,6 +259,7 @@ export default function Screener() {
                   <th className="px-4 py-2.5 text-right">변동성</th>
                   <th className="px-4 py-2.5 text-right">1개월 수익률</th>
                   <th className="px-4 py-2.5 text-right">52주 위치</th>
+                  {extraCols.map(c => <th key={c.key} className="px-4 py-2.5 text-right text-brand-600">{c.label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +303,11 @@ export default function Screener() {
                         <span className="text-xs text-gray-500 dark:text-gray-400 w-8 text-right">{coin.w52_pos}%</span>
                       </div>
                     </td>
+                    {extraCols.map(c => (
+                      <td key={c.key} className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-200 font-medium">
+                        {(coin[c.key] ?? 0).toFixed(2)}<span className="text-[10px] text-gray-400 ml-0.5">{c.unit}</span>
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { MetricCard, PngButton, Spinner } from './parts'
 import { raColor } from './helpers'
+import Caveat from '../../components/Caveat'
 
 // 단일 종목 전략(MA/RSI) 설정 + 결과.
 export default function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setParam, loading, handleRun, result, equityData, tradeData }) {
@@ -72,6 +73,15 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
               title="매매마다 차감하는 편도 수수료. 업비트 KRW 마켓 ~5bps(0.05%)"
               className="border border-gray-200 dark:border-[#2c3850] rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-brand-400" />
           </div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">
+              변동성 타게팅 (연율, 0=올인)
+              <span className="text-gray-300 dark:text-gray-600 ml-1" title="진입 시 직전 20일 실현변동성으로 비중을 축소(목표/실현, 상한 100%). 올인/올아웃 토이를 보완. 예: 0.6 = 연 60% 목표">ⓘ</span>
+            </label>
+            <input type="number" value={params.targetVol} min={0} max={2} step={0.1} onChange={e => setParam('targetVol', e.target.value)}
+              placeholder="0.6"
+              className="border border-gray-200 dark:border-[#2c3850] rounded px-2.5 py-1.5 text-sm w-32 focus:outline-none focus:border-brand-400" />
+          </div>
           <button onClick={handleRun} disabled={loading}
             className="mt-5 px-6 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {loading ? '실행 중...' : '백테스트 실행'}
@@ -90,7 +100,7 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
                 <MetricCard label="총 수익률"
                   value={(result.metrics.total_return >= 0 ? '+' : '') + result.metrics.total_return.toFixed(2) + '%'}
                   color={result.metrics.total_return >= 0 ? 'text-red-500' : 'text-blue-500'}
-                  sub={`수수료 ${result.metrics.fee_bps}bps + 슬리피지 ${result.metrics.slippage_bps}bps`} />
+                  sub={`수수료 ${result.metrics.fee_bps}bps + 슬리피지 ${result.metrics.slippage_bps}bps${result.metrics.target_vol > 0 ? ` · 평균비중 ${result.metrics.avg_position}%` : ''}`} />
                 <MetricCard label="매수보유 (buy&hold)"
                   value={(result.metrics.benchmark_return >= 0 ? '+' : '') + result.metrics.benchmark_return.toFixed(2) + '%'}
                   color={result.metrics.benchmark_return >= 0 ? 'text-red-500' : 'text-blue-500'} sub="같은 종목 단순 보유" />
@@ -113,6 +123,8 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
             <MetricCard label="칼마 (Calmar)" value={result.metrics.calmar.toFixed(2)} color={raColor(result.metrics.calmar)}
               sub="연율화 수익률 ÷ MDD (낙폭 대비 효율)" />
           </div>
+
+          <Caveat kind="backtest" />
 
           <div ref={eqRef} className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
             <div className="flex items-center justify-between mb-0.5">

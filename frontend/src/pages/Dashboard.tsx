@@ -6,9 +6,12 @@ import {
 } from '../hooks/useTrends'
 import { useTickers } from '../hooks/useTickers'
 import { useCoinStats } from '../hooks/useAnalysis'
+import { useGate } from '../hooks/useGate'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
 import InfoTooltip from '../components/InfoTooltip'
+import SignalsPanel from '../components/SignalsPanel'
+import { exportCsv } from '../utils/csv'
 
 const sym = (m: string) => (m || '').replace('KRW-', '')
 function rcolor(v: number) {
@@ -183,6 +186,15 @@ function PeriodTable() {
           ))}
         </div>
         <InfoTooltip>기간별: 1주~1년 수익률(일봉·월봉). 시가총액: 외부(CoinGecko) 시총 기준 정렬. 헤더 클릭 시 그 기간으로 정렬됩니다.</InfoTooltip>
+        <button onClick={() => exportCsv('digital_assets', rows, [
+          { key: 'market', label: '마켓' }, { key: 'korean_name', label: '한글명' },
+          { key: 'r1w', label: '1주%' }, { key: 'r1m', label: '1개월%' }, { key: 'r3m', label: '3개월%' },
+          { key: 'r6m', label: '6개월%' }, { key: 'r1y', label: '1년%' },
+          { key: 'market_cap', label: '시가총액(KRW)' }, { key: 'acc_trade_price_24h', label: '24h거래대금(KRW)' },
+        ])}
+          className="ml-auto text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-[#2c3850] text-gray-500 dark:text-gray-400 hover:border-brand-400 hover:text-brand-500 cursor-pointer transition-colors">
+          ⬇ CSV
+        </button>
       </div>
       {loading ? <div className="py-8 text-center text-sm text-gray-400">불러오는 중…</div> : (
         <div className="max-h-[560px] overflow-y-auto">
@@ -276,7 +288,7 @@ function AssetIndexTable() {
 function RankingGrid() {
   const { tickers } = useTickers()
   const { data: stats } = useCoinStats()
-  const { data: vp } = useVolumePower()
+  const { data: vp, loading: vpLoading } = useVolumePower()
   const { data: pr } = usePeriodReturns()
 
   const gainers = useMemo(() => [...tickers].sort((a, b) => b.change_rate - a.change_rate).slice(0, 5), [tickers])
@@ -291,12 +303,14 @@ function RankingGrid() {
       <RankList title="급하락" sub="오늘" rows={losers} valueFn={(r: any) => pct(r.change_rate * 100, 1)} valueColor={(r: any) => rcolor(r.change_rate)} />
       <RankList title="거래량 급증" sub="7일평균 대비" rows={surge} valueFn={(r: any) => r.vol_surge.toFixed(1) + '배'} valueColor={() => 'text-gray-700 dark:text-gray-200'} />
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-4">
-        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">체결강도 <span className="text-[10px] font-normal text-gray-400">매수 우위</span></div>
-        {vp.error ? <SourceError message={vp.error} /> : <PowerList rows={vp.buy} />}
+        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">체결강도 <span className="text-[10px] font-normal text-gray-400">당일 누적 · 매수 우위</span></div>
+        {vpLoading ? <div className="text-xs text-gray-400 py-3 text-center">불러오는 중…</div>
+          : vp.error ? <SourceError message={vp.error} /> : <PowerList rows={vp.buy} />}
       </div>
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-4">
-        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">체결강도 <span className="text-[10px] font-normal text-gray-400">매도 우위</span></div>
-        {vp.error ? <SourceError message={vp.error} /> : <PowerList rows={vp.sell} />}
+        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">체결강도 <span className="text-[10px] font-normal text-gray-400">당일 누적 · 매도 우위</span></div>
+        {vpLoading ? <div className="text-xs text-gray-400 py-3 text-center">불러오는 중…</div>
+          : vp.error ? <SourceError message={vp.error} /> : <PowerList rows={vp.sell} />}
       </div>
     </div>
   )
@@ -321,23 +335,26 @@ export default function Dashboard() {
   // 페이지가 쓰는 모든 데이터(자식 컴포넌트가 호출하는 것 포함, react-query 디둡)를 여기서 모아
   // 로딩/에러를 한 번에 판정한다 → 하나라도 로딩이면 헤더·푸터만 남기고 전체가 PageLoading,
   // 하드 에러면 전체가 PageError(다른 컴포넌트는 일절 렌더하지 않음).
+  // 핵심 데이터 + 외부 소스를 모두 부팅 프리페치로 데우므로, 한 화면으로 한 번에 마운트하기 위해
+  // 외부 소스(환율·뉴스·체결강도)도 게이트에 포함한다. 워밍 후엔 캐시 히트라 즉시, 죽은 소스는
+  // 백엔드가 4초 타임아웃 후 에러를 60초 캐시 → 게이트가 곧 통과되고 그 위젯만 SourceError를 띄운다.
   const indicesH = useIndices()
   const briefH = useBrief()
   const prH = usePeriodReturns()
   const assetH = useAssetIndices()
-  const vpH = useVolumePower()
-  const fxH = useFx()
-  const newsH = useNews()
   const tickersH = useTickers()
   const statsH = useCoinStats()
+  const fxH = useFx()
+  const newsH = useNews()
+  const vpH = useVolumePower()
   const [mode, setMode] = useState<'today' | 'prev'>('today')
 
   const indices = indicesH.data, brief = briefH.data, pr = prH.data
   const weekly = useMemo(() => [...(pr.rows || [])].filter((r: any) => r.r1w != null).sort((a: any, b: any) => b.r1w - a.r1w).slice(0, 10), [pr])
 
-  const hooks = [indicesH, briefH, prH, assetH, vpH, fxH, newsH, tickersH, statsH]
-  if (hooks.some(h => h.error)) return <PageError onRetry={() => hooks.forEach(h => h.retry?.())} />
-  if (hooks.some(h => h.loading)) return <PageLoading />
+  const gate = useGate(indicesH, briefH, prH, assetH, tickersH, statsH, fxH, newsH, vpH)
+  if (gate.error) return <PageError onRetry={gate.retry} />
+  if (gate.loading) return <PageLoading />
 
   return (
     <div className="space-y-5">
@@ -370,6 +387,9 @@ export default function Dashboard() {
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">{brief.as_of}</span>
         </div>
       )}
+
+      {/* 실행 가능한 시그널 (모멘텀·페어·국면·돌파) */}
+      <SignalsPanel />
 
       {/* 랭킹 그리드 (급상승·급하락·거래량급증·체결강도) */}
       <RankingGrid />

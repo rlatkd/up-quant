@@ -8,3 +8,4 @@ export const getPeriodReturns = () => api.get('/api/trends/period-returns').then
 export const getBrief         = () => api.get('/api/trends/brief').then(r => r.data)
 export const getFx            = () => api.get('/api/trends/fx').then(r => r.data)
 export const getNews          = () => api.get('/api/trends/news').then(r => r.data)
+export const getFearGreed     = () => api.get('/api/trends/fear-greed').then(r => r.data)

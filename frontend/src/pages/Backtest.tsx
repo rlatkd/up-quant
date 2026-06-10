@@ -22,7 +22,7 @@ export default function Backtest({ preset }) {
   // 포트폴리오 최적화에서 비중을 넘겨받았으면(preset) '포트폴리오 보유' 전략으로 진입.
   const [strategy, setStrategy] = useState(preset?.weights?.length ? 'portfolio' : 'ma')
   const [market,   setMarket]   = useState('KRW-BTC')
-  const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200, fee: 5 })
+  const [params,   setParams]   = useState({ fast: 5, slow: 20, period: 14, oversold: 30, overbought: 70, count: 200, fee: 5, targetVol: 0 })
   const [result,   setResult]   = useState(null)
   const [loading,  setLoading]  = useState(false)
 
@@ -33,7 +33,7 @@ export default function Backtest({ preset }) {
   async function handleRun() {
     setLoading(true)
     try {
-      const p = { market, count: params.count, fee_bps: params.fee }
+      const p = { market, count: params.count, fee_bps: params.fee, target_vol: params.targetVol }
       const data = strategy === 'ma'
         ? await runMaCross({ ...p, fast: params.fast, slow: params.slow })
         : await runRsi({ ...p, period: params.period, oversold: params.oversold, overbought: params.overbought })

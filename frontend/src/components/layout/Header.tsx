@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useWsConnected } from '../../contexts/useRealtime'
 import { PriceAlertMenu } from '../../contexts/PriceAlerts'
+import { useAuth } from '../../contexts/useAuth'
 import ReportModal from '../ReportModal'
 
 // 다크모드 토글 — html.dark 클래스 + localStorage 영속.
@@ -70,7 +71,8 @@ function NavGroup({ group }) {
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const active = group.match(pathname)
-  const cls = `flex items-center gap-1 px-5 h-full text-[15.5px] border-b-2 transition-colors cursor-pointer ${
+  // 각 메뉴 영역을 같은 폭으로 — 글자 길이에 따라 폭이 달라 보이던 것을 min-w + 중앙정렬로 통일.
+  const cls = `flex items-center justify-center gap-1 min-w-[96px] px-4 h-full text-[15.5px] border-b-2 transition-colors cursor-pointer ${
     active ? 'text-white font-bold border-white/80' : 'text-white/70 hover:text-white/90 font-semibold border-transparent'
   }`
 
@@ -114,6 +116,8 @@ function openWin(path: string, name: string) {
 function MoreMenu() {
   const [open, setOpen] = useState(false)
   const connected = useWsConnected()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   return (
     <div className="relative flex items-center"
       onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
@@ -136,6 +140,11 @@ function MoreMenu() {
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400' : 'bg-gray-400'}`} />
             {connected ? '실시간 연결됨' : '실시간 끊김 (재연결 중)'}
           </div>
+          <div className="my-1 border-t border-gray-100 dark:border-[#232d40]" />
+          <div className="px-4 py-1.5 text-[11px] text-gray-400 dark:text-gray-500">로그인: {user?.username || '—'}</div>
+          <button type="button"
+            onClick={async () => { setOpen(false); await logout(); navigate('/login') }}
+            className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50 cursor-pointer">로그아웃</button>
         </div>
       )}
     </div>

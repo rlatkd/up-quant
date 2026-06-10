@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { useTickers } from '../hooks/useTickers'
 import { useAdvanceDecline } from '../hooks/useAnalysis'
+import { useFearGreed } from '../hooks/useTrends'
 import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
@@ -27,6 +28,7 @@ function fmtKrwShort(v) {
 
 // 시장 요약 스트립 — 흩어져 있던 KPI·공포탐욕·상승하락 수를 숫자 한 줄로 응집(대시보드에서 이관).
 function SummaryStrip({ tickers }) {
+  const { data: fng } = useFearGreed()   // 외부(alternative.me) 실제 공포·탐욕 지수 — 실패 시 자체 폴백(source 명시)
   const total = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
   const rise = tickers.filter(t => t.change === 'RISE').length
   const fall = tickers.filter(t => t.change === 'FALL').length
@@ -36,9 +38,7 @@ function SummaryStrip({ tickers }) {
   const top10 = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
     .slice(0, 10).reduce((s, t) => s + t.acc_trade_price_24h, 0)
   const conc = total ? (top10 / total * 100).toFixed(1) : '0'
-  const riseRatio = tickers.length ? (rise / tickers.length) * 100 : 50
-  const changeScore = Math.min(100, Math.max(0, avg * 5 + 50))
-  const fg = Math.round(riseRatio * 0.6 + changeScore * 0.4)
+  const fgSelf = fng.source && fng.source.startsWith('자체')   // 외부 실패 폴백이면 표식
 
   const items = [
     { label: '24h 총 거래대금', node: <span>{fmtKrwShort(total)}<span className="text-[11px] text-gray-400 ml-0.5">KRW</span></span> },
@@ -46,7 +46,8 @@ function SummaryStrip({ tickers }) {
     { label: '상승 / 하락', node: <span><span className="text-red-500">{rise}</span><span className="text-gray-300 mx-1">/</span><span className="text-blue-500">{fall}</span></span> },
     { label: '52주 신고 / 신저', node: <span><span className="text-red-500">{w52h}</span><span className="text-gray-300 mx-1">/</span><span className="text-blue-500">{w52l}</span></span> },
     { label: '거래대금 집중도', node: <span>{conc}%<span className="text-[11px] text-gray-400 ml-1">상위10</span></span> },
-    { label: '공포·탐욕', node: <span className={fg >= 50 ? 'text-red-500' : 'text-blue-500'}>{fg}</span> },
+    // 실제 공포·탐욕 지수(alternative.me). 자체 폴백 시 '자체' 표식으로 출처를 정직하게 노출.
+    { label: `공포·탐욕${fgSelf ? ' (자체)' : ''}`, node: <span className={fng.value >= 50 ? 'text-red-500' : 'text-blue-500'}>{fng.value}<span className="text-[11px] text-gray-400 ml-1">{fng.label}</span></span> },
   ]
   return (
     <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y lg:divide-y-0 divide-gray-100 dark:divide-[#232d40]">

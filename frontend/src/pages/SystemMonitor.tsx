@@ -58,6 +58,44 @@ export default function SystemMonitor() {
         <Stat label="가동 시간" value={fmtUptime(data.uptime_sec)} sub="프로세스 시작 이후" />
       </div>
 
+      {/* 외부 소스 헬스 — 환율·뉴스·시총·F&G·체결강도 WS가 며칠째 죽었는지 한눈에(외부 실패를 숨기지 않는 원칙의 운영판) */}
+      {data.sources && data.sources.length > 0 && (
+        <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 dark:border-[#232d40] text-sm font-semibold text-gray-700 dark:text-gray-200">
+            외부 소스 상태 <span className="text-xs font-normal text-gray-400 dark:text-gray-500">· 마지막 성공/실패 시각</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-[#141b29] text-xs text-gray-400 dark:text-gray-500">
+                <th className="px-4 py-2 text-left font-medium">소스</th>
+                <th className="px-4 py-2 text-left font-medium">상태</th>
+                <th className="px-4 py-2 text-right font-medium">성공/실패</th>
+                <th className="px-4 py-2 text-right font-medium">마지막 성공</th>
+                <th className="px-4 py-2 text-left font-medium">최근 오류</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.sources.map((s: any) => (
+                <tr key={s.name} className="border-t border-gray-50 dark:border-[#232d40]">
+                  <td className="px-4 py-1.5 font-medium text-gray-700 dark:text-gray-200">{s.name}</td>
+                  <td className="px-4 py-1.5">
+                    <span className={`inline-flex items-center gap-1.5 ${s.healthy ? 'text-green-600' : 'text-red-500'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.healthy ? 'bg-green-500' : 'bg-red-500'}`} />
+                      {s.healthy ? '정상' : '실패'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{s.ok}/{s.fail}</td>
+                  <td className="px-4 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">
+                    {s.last_ok_age_sec == null ? '—' : s.last_ok_age_sec < 60 ? `${s.last_ok_age_sec}초 전` : s.last_ok_age_sec < 3600 ? `${Math.floor(s.last_ok_age_sec / 60)}분 전` : `${Math.floor(s.last_ok_age_sec / 3600)}시간 전`}
+                  </td>
+                  <td className="px-4 py-1.5 text-xs text-gray-400 dark:text-gray-500 truncate max-w-[200px]">{s.last_error || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 dark:border-[#232d40] text-sm font-semibold text-gray-700 dark:text-gray-200">
           최근 요청 <span className="text-xs font-normal text-gray-400 dark:text-gray-500">· 상관 ID(rid)로 3계층 로그 추적</span>
