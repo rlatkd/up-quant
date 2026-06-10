@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { getTickers, getMarketSummary, getTicker, getOrderbook, getTrades } from '../api/markets'
 import { useFetch } from './useFetch'
 
@@ -19,7 +19,7 @@ export function useTicker(market) {
     queryKey: ['markets', 'ticker', market],
     queryFn: () => getTicker(market),
     enabled: !!market,
-    placeholderData: null,
+    placeholderData: keepPreviousData,
   })
   return { ticker: q.data ?? null, loading: q.isLoading, error: q.isError, retry: () => { q.refetch() } }
 }

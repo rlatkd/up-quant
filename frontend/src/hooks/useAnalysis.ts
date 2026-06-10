@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { getCategoryMonthly, getCategoryDailyCumulative, getCoinStats, getCorrelation, getAdvanceDecline } from '../api/analysis'
 import { useFetch } from './useFetch'
 
@@ -22,13 +22,13 @@ export function useCoinStats() {
   return useFetch(['analysis', 'coin-stats'], getCoinStats, [])
 }
 
-// 종목별 상관관계 — market을 키에 포함해 종목 전환 시 자동 재요청·캐시.
+// 종목별 상관관계 — market을 키에 포함해 종목 전환 시 자동 재요청·캐시. keepPreviousData로 전환 시 옛 값 유지.
 export function useCorrelation(market) {
   const q = useQuery({
     queryKey: ['analysis', 'correlation', market],
     queryFn: () => getCorrelation(market),
     enabled: !!market,
-    placeholderData: [],
+    placeholderData: keepPreviousData,
   })
   return { data: q.data ?? [], loading: q.isLoading, error: q.isError, retry: () => { q.refetch() } }
 }

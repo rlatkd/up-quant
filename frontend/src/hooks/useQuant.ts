@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import * as quant from '../api/quant'
 
 // react-query 백킹 공용 — queryKey로 디둡·캐시(파라미터별 키 분리). 반환 계약은 기존과 동일
 // ({ data, loading, error, retry }). 무거운 퀀트 집계라 페이지 재방문 시 캐시 즉시 렌더가 특히 이득.
+// keepPreviousData: 종목/파라미터를 바꿔도 새 결과가 올 때까지 이전 결과를 보여줘 깜빡임을 없앤다.
 function useKeyed(queryKey, fetcher, initial) {
-  const q = useQuery({ queryKey, queryFn: fetcher, placeholderData: initial })
+  const q = useQuery({ queryKey, queryFn: fetcher, placeholderData: keepPreviousData })
   return { data: q.data ?? initial, loading: q.isLoading, error: q.isError, retry: () => { q.refetch() } }
 }
 

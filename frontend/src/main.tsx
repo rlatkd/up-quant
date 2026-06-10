@@ -10,8 +10,12 @@ import App from './App.jsx'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60_000,            // 60s 동안은 캐시를 신선으로 간주(재요청 안 함)
-      gcTime: 5 * 60_000,           // 미사용 캐시 5분 후 수거
+      // 데이터가 천천히 변하고(일봉 파생) 라이브 가격은 WS가 따로 덧씌우므로, staleTime을 길게 잡아
+      // 페이지를 옮길 때마다 백엔드를 다시 두드리지 않는다(백엔드 백그라운드 갱신 캐스케이드도 덜 깨움).
+      staleTime: 5 * 60_000,        // 5분 — 이 안엔 재요청 안 함(즉시 캐시 렌더)
+      // 페이지를 떠난 캐시를 오래 보관 → 한참 뒤 재방문해도 '옛 화면 즉시' 표시 후 백그라운드 갱신
+      // (5분이면 떠났다 돌아올 때 캐시가 버려져 로딩이 떴음). 메모리보다 UX 우선.
+      gcTime: 60 * 60_000,          // 1시간
       refetchOnWindowFocus: false,  // 탭 포커스마다 재요청하지 않음(시세는 WS가 갱신)
       retry: 1,
     },
