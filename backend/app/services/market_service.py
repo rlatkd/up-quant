@@ -27,9 +27,10 @@ def valid_markets() -> list[str]:
     return [m for m in config.MARKETS if m in names]
 
 
-# 스파크라인(1시간봉 24개)은 대시보드 시세표(상위 10)·마켓 상단 카드(상위 4)만 쓰는 시각 요소라,
-# 거래대금 상위 N종만 채운다. 261종 전부 받으면 콜드/갱신마다 불필요한 팬아웃이 커진다.
-_SPARK_LIMIT = 30
+# 스파크라인(1시간봉 24개) — 코인목록 전체 행이 쓰므로 전 종목 채운다. 부팅 프리페치에서 1회 워밍하고
+# TTL을 길게(30분) 둬, 사용자 네비게이션은 캐시 히트로 비용 0이고 백그라운드 재페치 빈도도 낮다.
+# (과거엔 상위 30만 채웠으나, 코인목록에 전 종목 미니 스파크라인을 그리려면 전부 필요)
+_SPARK_LIMIT = 10_000   # 사실상 전 종목
 
 
 def _sparkline(market: str) -> list[float]:
@@ -43,16 +44,12 @@ def _sparkline(market: str) -> list[float]:
     return closes or [0.0]
 
 
-def get_tickers() -> list[Ticker]:
+def _build_tickers() -> list[Ticker]:
     markets = valid_markets()
     if not markets:
         return []
     names = _korean_names()
-    raw = cached(
-        f"ticker:{','.join(markets)}",
-        config.TTL_TICKER,
-        lambda: upbit_rest.get_tickers(markets),
-    )
+    raw = upbit_rest.get_tickers(markets)
 
     # "오늘 52주 고/저 경신" 판정 기준일(KST). 현재가가 고/저를 정확히 일치하는
     # 순간은 거의 없어, 업비트가 주는 달성일(highest/lowest_52_week_date)로 판정한다.
@@ -89,17 +86,31 @@ def get_tickers() -> list[Ticker]:
     return result
 
 
+def get_tickers() -> list[Ticker]:
+    # 조립된 Ticker 리스트 전체를 캐시한다. 과거엔 raw 업비트 응답만 캐시하고 매 호출마다 261개
+    # 객체 변환·정렬·스파크라인 주입을 반복했는데, get_tickers는 여러 라우터가 내부적으로
+    # 자주 호출(coin_stats·trends·signals·brief 등)하므로 그 CPU가 낭비였다. SWR 캐시라 만료돼도
+    # 즉시 옛 리스트 반환 + 백그라운드 1회 재조립. (호출부는 반환 리스트를 변형하지 않음)
+    return cached("tickers_assembled", config.TTL_TICKER, _build_tickers)
+
+
 def get_ticker(market: str) -> Ticker | None:
     return next((t for t in get_tickers() if t.market == market), None)
 
 
 def get_market_summary() -> MarketSummary:
+    from app.services import marketcap_service  # 지연 import(순환 방지)
     tickers = get_tickers()
     up = sum(1 for t in tickers if t.change == "RISE")
     down = sum(1 for t in tickers if t.change == "FALL")
     total = sum(t.acc_trade_price_24h for t in tickers)
-    btc = next((t for t in tickers if t.market == "KRW-BTC"), None)
-    dom = (btc.acc_trade_price_24h / total * 100) if btc and total else 0
+    # 도미넌스는 시총 기준(CoinGecko /global)을 우선, 외부 실패 시 거래대금 비중으로 폴백.
+    glob = marketcap_service.get_global()
+    if glob.get("btc_dominance"):
+        dom = float(glob["btc_dominance"])
+    else:
+        btc = next((t for t in tickers if t.market == "KRW-BTC"), None)
+        dom = (btc.acc_trade_price_24h / total * 100) if btc and total else 0
     return MarketSummary(
         total_volume=round(total),
         up_count=up,

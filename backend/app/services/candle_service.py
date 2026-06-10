@@ -63,6 +63,11 @@ def get_candles(market: str, interval: str = "days", count: int = 60) -> list[Ca
     if interval == "weeks" and count <= _CANON:
         full = cached(f"candle:{market}:weeks", config.TTL_CANDLE_LONG, lambda: _fetch(market, "weeks", _CANON))
         return full[-count:] if count < len(full) else full
-    # 분봉(인트라데이) 등은 짧은 TTL — 라이브 차트 신선도 우선.
+    # 분봉(인트라데이) — 60분/240분은 시간 단위로만 갱신되므로 수 분 TTL, 짧은 분봉은 30초(라이브).
+    ttl = config.TTL_CANDLE
+    if interval.startswith("minutes/"):
+        unit = interval.split("/", 1)[1]
+        if unit in ("60", "240"):
+            ttl = config.TTL_CANDLE_INTRADAY
     key = f"candle:{market}:{interval}:{count}"
-    return cached(key, config.TTL_CANDLE, lambda: _fetch(market, interval, count))
+    return cached(key, ttl, lambda: _fetch(market, interval, count))
