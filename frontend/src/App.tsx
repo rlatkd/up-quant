@@ -1,9 +1,12 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { RealtimeProvider } from './contexts/Realtime'
 import { PriceAlertProvider } from './contexts/PriceAlerts'
+import { AuthProvider } from './contexts/Auth'
+import { useAuth } from './contexts/useAuth'
 import Layout from './components/layout/Layout'
 import PageLoading from './components/ui/PageLoading'
+import Login from './pages/Login'
 
 // 라우트 기반 코드 스플리팅 — 무거운 페이지(recharts·lightweight-charts·d3-force·퀀트 차트)를
 // 초기 번들에서 분리해 첫 로드를 가볍게. 각 페이지는 진입 시 청크가 lazy 로드된다.
@@ -19,14 +22,37 @@ const SystemMonitor = lazy(() => import('./pages/SystemMonitor'))
 const Help = lazy(() => import('./pages/Help'))
 const Guide = lazy(() => import('./pages/Guide'))
 
+// 인증 가드 — 세션 확인 중엔 전체 로딩, 미인증이면 로그인으로(원래 가려던 경로 보존).
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, checking } = useAuth()
+  const location = useLocation()
+  if (checking) return <PageLoading />
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />
+  return <>{children}</>
+}
+
+// 보호된 본문 셸 — 인증된 사용자에게만 실시간(WS)·알림 Provider와 Layout(헤더·푸터·Outlet)을 마운트.
+// WS도 인증을 요구하므로 RealtimeProvider를 가드 안에 둔다(미인증 시 소켓 자체를 열지 않음).
+function ProtectedShell() {
+  return (
+    <RequireAuth>
+      <RealtimeProvider>
+        <PriceAlertProvider>
+          <Layout />
+        </PriceAlertProvider>
+      </RealtimeProvider>
+    </RequireAuth>
+  )
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <RealtimeProvider>
-      <PriceAlertProvider>
+      <AuthProvider>
       <Suspense fallback={<PageLoading />}>
       <Routes>
-        <Route element={<Layout />}>
+        <Route path="/login" element={<Login />} />
+        <Route element={<ProtectedShell />}>
           {/* 코인 목록이 메인('/'·로고 클릭 시 진입). master-detail — market 없으면 디폴트 KRW-BTC */}
           <Route path="/" element={<CoinList />} />
           <Route path="/coins" element={<CoinList />} />
@@ -59,13 +85,12 @@ function App() {
           <Route path="/compare" element={<Navigate to="/tools/compare" replace />} />
           <Route path="/backtest" element={<Navigate to="/tools/backtest" replace />} />
         </Route>
-        {/* 도움말·분석 가이드는 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더 */}
-        <Route path="/help" element={<Help />} />
-        <Route path="/guide" element={<Guide />} />
+        {/* 도움말·분석 가이드는 새 창(window.open)으로 띄우므로 Layout(헤더) 밖 단독 렌더. 인증은 동일 적용 */}
+        <Route path="/help" element={<RequireAuth><Help /></RequireAuth>} />
+        <Route path="/guide" element={<RequireAuth><Guide /></RequireAuth>} />
       </Routes>
       </Suspense>
-      </PriceAlertProvider>
-      </RealtimeProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
