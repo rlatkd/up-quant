@@ -2,27 +2,36 @@ import asyncio
 import json
 import logging
 import ssl
+import threading
 import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
 import certifi
 import websockets
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.core import metrics
+from app.core import metrics, ratelimit
 from app.core.config import settings
 from app.core.logging import request_id, setup_logging
-from app.routers import markets, candles, analysis, backtest, quant, system, report, trends
+from app.core.security import current_user, ws_authenticate
+from app.routers import (
+    markets, candles, analysis, backtest, quant, system, report, trends, signals, auth,
+)
+
+# 보호 라우터 일괄 가드 — 유효한 access 토큰(쿠키/Bearer)이 없으면 401.
+_AUTH = [Depends(current_user)]
 
 setup_logging()
 logger = logging.getLogger("upquant")
 api_log = logging.getLogger("api")
 
 
-def _prefetch() -> None:
+def _prefetch(quiet: bool = False) -> None:
     """부팅 직후 캐시 워밍. 이후 모든 화면은 stale-while-revalidate로 즉시 응답한다.
+    (quiet=True는 주기 재워밍 호출 — 완료 로그를 생략한다.)
     핵심 원칙: 대량 팬아웃(수백 콜)은 서버 기동 시 1회만 하고, 이후 어떤 클라이언트가
     들어와도 캐시 히트로 즉시 응답한다. (실패해도 부팅엔 영향 없음)
     - get_tickers(): 현재가 + 종목별 스파크라인(시간봉)
@@ -42,7 +51,16 @@ def _prefetch() -> None:
         trends_service.get_indices()         # 일봉 + 60분봉(인트라데이) 워밍
         trends_service.get_asset_indices()    # 시장/전략/테마/섹터 지수
         trends_service.get_period_returns()   # 외부 시총(CoinGecko) 포함
-        trends_service.get_brief()
+        trends_service.get_brief()            # 도미넌스(CoinGecko /global) 포함
+        from app.services import signal_service, fx_service, news_service, fng_service, marketcap_service
+        signal_service.get_signals()          # 시그널 집계(모멘텀·페어·국면 캐시 합성)
+        # 외부 소스도 부팅 때 데워 둔다 → 첫 페이지 진입도 캐시 히트(콜드 빈화면 없음). 실패는
+        # 에러 결과를 60초만 캐시하므로 부팅은 안 막히고, 진입 시 SWR이 재시도한다.
+        fx_service.get_fx()
+        news_service.get_news()
+        fng_service.get_fear_greed()
+        marketcap_service.get_caps()
+        marketcap_service.get_global()
         # 체결강도(WS 1회 수집)는 호출 시 갱신 — 프리페치 제외(WS 1회 ~2초)
         # 퀀트 전역(파라미터 없는/기본) 분석 워밍.
         quant_service.get_network()
@@ -54,13 +72,58 @@ def _prefetch() -> None:
         quant_service.get_regime()
         quant_service.get_portfolio(["KRW-BTC", "KRW-ETH", "KRW-XRP"])
         quant_service.get_garch("KRW-BTC")
-        logger.info(
-            "prefetch 완료: tickers %d종 + coin_stats %d종 + 카테고리 월봉(%d개월·일봉누적) "
-            "+ 퀀트 9종(네트워크·PCA·클러스터·덴드로·모멘텀·페어·국면·포트폴리오·GARCH) 캐시 워밍",
-            n, m, c,
-        )
+        if not quiet:
+            logger.info(
+                "prefetch 완료: tickers %d종 + coin_stats %d종 + 카테고리 월봉(%d개월·일봉누적) "
+                "+ 퀀트 9종(네트워크·PCA·클러스터·덴드로·모멘텀·페어·국면·포트폴리오·GARCH) 캐시 워밍",
+                n, m, c,
+            )
     except Exception as e:  # noqa: BLE001
         logger.warning("prefetch 실패 (서버는 정상 기동): %s", e)
+
+
+# 주기 재워밍 — 무거운 집계를 만료 직전에 다시 데워 신선도·LRU를 유지한다. 단 한꺼번에 다 데우면
+# 그 순간 백그라운드 재검증이 몰리므로(스로틀 점유), 그룹을 잘게 나눠 _WARM_INTERVAL을 분할해
+# 한 그룹씩 돌린다(분산). 포그라운드 우선 스로틀(upbit_rest)과 합쳐 사용자 요청을 안 막는다.
+# 스레드 이름 'periodic-warm'이라 이 안에서 도는 모든 업비트 호출은 '백그라운드'로 양보된다.
+_WARM_INTERVAL = 240  # 초 — 한 사이클(전 그룹) 도는 데 걸리는 시간
+
+
+def _warm_groups() -> list:
+    from app.services import (market_service, analysis_service, quant_service,
+                              trends_service, signal_service, fx_service, news_service,
+                              fng_service, marketcap_service)
+    return [
+        lambda: (market_service.get_tickers(), analysis_service.get_coin_stats()),
+        lambda: (analysis_service.get_category_monthly(),
+                 analysis_service.get_category_daily_cumulative(),
+                 analysis_service.get_advance_decline()),
+        lambda: (trends_service.get_indices(), trends_service.get_asset_indices(),
+                 trends_service.get_period_returns(), trends_service.get_brief()),
+        lambda: (fx_service.get_fx(), news_service.get_news(),
+                 fng_service.get_fear_greed(), marketcap_service.get_caps(),
+                 marketcap_service.get_global()),
+        lambda: (quant_service.get_network(), quant_service.get_pca(),
+                 quant_service.get_clusters(), quant_service.get_dendrogram()),
+        lambda: (quant_service.get_momentum(), quant_service.get_pairs(),
+                 quant_service.get_regime(),
+                 quant_service.get_portfolio(["KRW-BTC", "KRW-ETH", "KRW-XRP"]),
+                 quant_service.get_garch("KRW-BTC")),
+        lambda: signal_service.get_signals(),
+    ]
+
+
+def _periodic_warm() -> None:
+    groups = _warm_groups()
+    gap = _WARM_INTERVAL / len(groups)   # 그룹 사이 간격으로 분산
+    idx = 0
+    while True:
+        time.sleep(gap)
+        try:
+            groups[idx]()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("주기 워밍 실패(무시): %s", e)
+        idx = (idx + 1) % len(groups)
 
 
 # 프리페치 워밍 완료 여부 — /health(readiness)에서 노출. dev 스킵 시엔 곧장 ready로 둔다.
@@ -81,6 +144,8 @@ async def lifespan(app: FastAPI):
     # 동기 httpx 호출이라 to_thread로 이벤트루프 밖에서 실행하되, 완료까지 대기한다.
     await asyncio.to_thread(_prefetch)
     _ready = True
+    # 주기 재워밍 데몬 — 무거운 집계를 만료 직전에 갱신해 신선도·LRU 유지(콜드 재팬아웃 방지).
+    threading.Thread(target=_periodic_warm, daemon=True, name="periodic-warm").start()
     yield
 
 
@@ -89,10 +154,27 @@ app = FastAPI(title="UPquant", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_credentials=True,           # HttpOnly 쿠키 인증을 위해 필수(이때 allow_origins는 '*' 불가 → env로 명시)
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-Id"],  # 프론트가 상관관계 ID를 읽을 수 있도록 노출
 )
+
+
+@app.middleware("http")
+async def rate_limit_and_headers(request: Request, call_next):
+    """전역 인바운드 레이트리밋(IP당) + 보안 헤더. 봇/해킹 요청 폭주를 앱 레벨에서 1차 차단해
+    AWS 비용 누수를 막는다(엣지 WAF/CloudFront가 1차선, 이건 backstop)."""
+    if request.url.path != "/health" and not ratelimit.allow_request(ratelimit.client_ip(request)):
+        return JSONResponse({"detail": "요청이 너무 많습니다. 잠시 후 다시 시도하세요."}, status_code=429)
+    response = await call_next(request)
+    # 보안 헤더 — 클릭재킹·MIME 스니핑·레퍼러 누수 방지. HTTPS 배포 시 HSTS도 추가.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.cookie_secure:  # HTTPS(배포) 환경에서만 HSTS
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.middleware("http")
@@ -117,14 +199,17 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-app.include_router(markets.router)
-app.include_router(candles.router)
-app.include_router(analysis.router)
-app.include_router(backtest.router)
-app.include_router(quant.router)
-app.include_router(system.router)
-app.include_router(report.router)
-app.include_router(trends.router)
+app.include_router(auth.router)  # 인증(로그인/리프레시/me) — 가드 없음
+# 데이터 라우터는 전부 로그인 가드(유효 토큰 없으면 401). /health만 예외(가드 밖, readiness용).
+app.include_router(markets.router, dependencies=_AUTH)
+app.include_router(candles.router, dependencies=_AUTH)
+app.include_router(analysis.router, dependencies=_AUTH)
+app.include_router(backtest.router, dependencies=_AUTH)
+app.include_router(quant.router, dependencies=_AUTH)
+app.include_router(system.router, dependencies=_AUTH)
+app.include_router(report.router, dependencies=_AUTH)
+app.include_router(trends.router, dependencies=_AUTH)
+app.include_router(signals.router, dependencies=_AUTH)
 
 
 @app.get("/health")
@@ -208,6 +293,10 @@ _ticker_hub = TickerHub()
 
 @app.websocket("/ws/tickers")
 async def ws_tickers(client: WebSocket):
+    # 인증 — 미인증 소켓이 fan-out 루프를 띄워 비용/부하를 키우는 것을 차단(쿠키 또는 ?token=).
+    if ws_authenticate(client) is None:
+        await client.close(code=1008)  # policy violation
+        return
     await client.accept()
     await _ticker_hub.add(client)
     try:
@@ -224,6 +313,9 @@ async def ws_tickers(client: WebSocket):
 async def ws_market(client: WebSocket, market: str):
     """코인 상세용 — 한 종목의 호가(orderbook)·체결(trade)을 실시간 중계.
     종목별 on-demand(상세를 열 때만)라 클라이언트당 1연결. ticker(전체)와 달리 공유 허브가 불필요."""
+    if ws_authenticate(client) is None:
+        await client.close(code=1008)  # 미인증 차단
+        return
     await client.accept()
     # path의 market을 검증 없이 업비트로 전달하지 않는다 — 상장된 KRW 마켓만 허용(미검증 입력 업스트림 전달 차단).
     from app.services import market_service

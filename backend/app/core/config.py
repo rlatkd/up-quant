@@ -17,6 +17,22 @@ class Settings(BaseSettings):
     # 부팅 프리페치(대량 워밍) 건너뛰기 — dev 리로드마다 1~2분 대기를 피하려면 1로 설정.
     skip_prefetch: bool = False
 
+    # ── 인증/보안 ──────────────────────────────────────────────
+    # JWT 서명 시크릿. 배포 시 반드시 AUTH_SECRET 환경변수로 강한 랜덤값을 주입(아래 기본값은 dev 전용).
+    auth_secret: str = "dev-insecure-change-me-please-set-AUTH_SECRET"
+    auth_access_ttl_min: int = 30        # access 토큰 만료(분)
+    auth_refresh_ttl_min: int = 60 * 24 * 7  # refresh 토큰 만료(7일)
+    # 하드코딩 단일 계정(대학원 과제용 — 학생/교수만 접근). 비번은 bcrypt 해시로 검증.
+    auth_username: str = "test"
+    auth_password: str = "test"
+    # 쿠키 Secure 플래그 — 배포(HTTPS)에선 True, 로컬 http dev에선 False.
+    cookie_secure: bool = False
+    # 전역 인바운드 레이트리밋(IP당) — 해킹/봇 요청 폭주로 AWS 비용이 새는 것을 앱 레벨에서 1차 차단.
+    rate_limit_per_min: int = 240        # IP당 분당 허용 요청(버스트 허용, 초과 시 429)
+    login_max_attempts: int = 5          # 로그인 실패 허용 횟수(윈도우 내)
+    login_window_sec: int = 300          # 로그인 실패 카운트 윈도우(초)
+    login_lock_sec: int = 600            # 초과 시 잠금(초)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, v):
@@ -54,14 +70,21 @@ USE_ALL_KRW_MARKETS = True
 # ── 캐시 TTL (초) ───────────────────────────────────────────
 TTL_MARKET_ALL = 3600   # 마켓 목록/한글명 (거의 안 변함)
 TTL_TICKER     = 5      # 현재가
-TTL_CANDLE     = 30     # 분봉(인트라데이) — 라이브 차트라 짧게(WS가 최신가 덧씌움)
-TTL_CANDLE_DAYS = 600   # 일봉 (통계 공용 — 장시간 캐시로 전체 유니버스 부하 억제)
+TTL_CANDLE     = 30     # 짧은 분봉(1/3/5/15/30분) — 라이브 차트라 짧게(WS가 최신가 덧씌움)
+# 60분·240분봉은 시간 단위로만 갱신되는데 과거엔 30초 TTL이라, 대시보드 인트라데이 지수가
+# 재계산될 때마다 수십 종 60분봉을 콜드로 다시 받는 숨은 팬아웃이 있었다 → 수 분 TTL로 완화.
+TTL_CANDLE_INTRADAY = 300  # 60분/240분봉 (인트라데이 지수·라이브 차트 공용, WS가 최신가 덧씌움)
+# 일봉은 하루에 한 번만 확정된다(장중엔 당일 마지막 봉만 갱신, 그건 WS 라이브가 담당). 과거 600초는
+# 과하게 짧아 30분~수십분마다 261종 일봉 재검증 팬아웃이 백그라운드로 돌았다 → 1시간으로 늘려 빈도 급감.
+TTL_CANDLE_DAYS = 3600  # 일봉 (통계 공용 — 1시간, 장중 거의 안 변함)
 # 주봉·월봉 — 장중 거의 안 변하는데도 과거엔 분봉과 같은 30s라, 이를 소비하는 집계(기간수익률 TTL 300·
 # 섹터 월봉 TTL 1800)가 재검증될 때마다 261종 월봉을 콜드로 다시 받았다(숨은 팬아웃). 일봉처럼 canonical
 # 캐시 + 장기 TTL로 맞춰, 집계 재검증이 하위 캔들을 콜드로 다시 받지 않게 한다.
 TTL_CANDLE_LONG = 1800  # 주봉/월봉 (집계 공용)
 TTL_COIN_STATS = 300    # 코인 통계(변동성·수익률·베타·z-score) — 일봉 파생이라 거의 안 변함. 261종 루프 비싸서 길게.
-TTL_SPARKLINE  = 300    # 코인목록 1일 스파크라인 (1시간봉 24개)
+# 스파크라인은 1시간봉이라 1시간에 한 번만 의미있게 바뀜 → 5분은 과하게 짧음(전체 종목 프리페치 시
+# 5분마다 261종 재페치 부담). 30분으로 늘려 백그라운드 재페치 빈도를 낮춘다.
+TTL_SPARKLINE  = 1800   # 코인목록 1일 스파크라인 (1시간봉 24개 — 30분)
 TTL_ORDERBOOK  = 3      # 호가
 TTL_TRADES     = 3      # 체결
 TTL_CATEGORY   = 1800   # 카테고리 월별/누적 수익률 (월봉 261종 집계 — 콜드 비용 커서 장기 캐시)
