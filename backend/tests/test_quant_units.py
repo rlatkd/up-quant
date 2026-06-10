@@ -9,10 +9,18 @@ from app.schemas.candle import CandleItem
 from app.services import candle_service, quant_service
 
 
+def _synthetic_prices(spread):
+    # 2-leg PnL용 가격 — p2는 완만 상승, p1은 spread를 로그가격 차로 재현(beta=1): log p1 = log p2 + spread.
+    p2 = 100.0 * np.exp(0.001 * np.arange(spread.size))
+    p1 = p2 * np.exp(spread)
+    return p1, p2
+
+
 def test_pair_backtest_no_trades_in_formation():
     # 형성기간(trade_start 이전)은 β 추정용이라 매매·평가가 없어야 한다 → 자산곡선이 그대로 100.
     spread = np.concatenate([np.linspace(-3.0, 3.0, 30), np.sin(np.linspace(0, 10, 30))])
-    z, eq, ret, trades, win = quant_service._pair_backtest(spread, trade_start=30)
+    p1, p2 = _synthetic_prices(spread)
+    z, eq, ret, trades, win = quant_service._pair_backtest(p1, p2, spread, beta=1.0, trade_start=30)
     assert all(abs(v - 100.0) < 1e-9 for v in eq[:30])   # 형성기간 자산 불변(거래 없음)
     assert z.shape[0] == spread.size                      # z는 전 구간 계산(신호 판정용)
 
@@ -20,7 +28,8 @@ def test_pair_backtest_no_trades_in_formation():
 def test_pair_backtest_trade_start_zero_trades_whole_window():
     # trade_start=0이면 전 구간 매매(과거 동작과 동일) — 회귀 안전망.
     spread = np.concatenate([np.full(20, 0.0), np.full(5, 5.0), np.full(20, 0.0)])
-    _, _, _, trades, _ = quant_service._pair_backtest(spread, trade_start=0)
+    p1, p2 = _synthetic_prices(spread)
+    _, _, _, trades, _ = quant_service._pair_backtest(p1, p2, spread, beta=1.0, trade_start=0)
     assert trades >= 1
 
 

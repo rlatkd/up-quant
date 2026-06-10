@@ -50,6 +50,18 @@ def test_lru_evicts_oldest_over_capacity(monkeypatch):
     assert "k0" not in cache._locks and "k1" not in cache._locks   # 락도 동반 정리
 
 
+def test_read_hit_refreshes_lru_position(monkeypatch):
+    # 읽기 적중도 LRU 꼬리로 이동시켜, 자주 '읽기만' 하는 핫 키가 축출되지 않게 한다.
+    cache.clear()
+    monkeypatch.setattr(cache, "_MAX_KEYS", 3)
+    for i in range(3):
+        cache.cached(f"k{i}", 60, lambda i=i: i)     # k0,k1,k2 (신선)
+    cache.cached("k0", 60, lambda: 0)                # k0를 '읽기'만 → 꼬리로 이동(최근 사용)
+    cache.cached("k3", 60, lambda: 3)                # 새 키 → 가장 오래된 k1 축출, k0은 생존
+    assert "k0" in cache._store
+    assert "k1" not in cache._store
+
+
 def test_revalidation_refreshes_lru_position(monkeypatch):
     cache.clear()
     monkeypatch.setattr(cache, "_MAX_KEYS", 3)

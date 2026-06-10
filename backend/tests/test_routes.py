@@ -9,6 +9,14 @@ from app.main import app
 client = TestClient(app)  # with 미사용 → lifespan(프리페치) 미실행
 
 
+def _auth_client() -> TestClient:
+    """로그인해 인증 쿠키를 가진 클라이언트(보호 라우트 호출용)."""
+    c = TestClient(app)
+    r = c.post("/api/auth/login", data={"username": "test", "password": "test"})
+    assert r.status_code == 200
+    return c
+
+
 def test_health_ok():
     r = client.get("/health")
     assert r.status_code == 200
@@ -17,11 +25,22 @@ def test_health_ok():
     assert "ready" in body  # readiness 플래그 노출
 
 
-def test_system_metrics_inmemory():
-    r = client.get("/api/system/metrics")
+def test_protected_route_requires_auth():
+    # 미인증이면 데이터 라우트는 401(전역 가드).
+    assert client.get("/api/system/metrics").status_code == 401
+
+
+def test_login_and_access():
+    c = _auth_client()
+    r = c.get("/api/system/metrics")
     assert r.status_code == 200
-    # 캐시/요청 메트릭 구조가 깨지지 않았는지(키 존재)만 가볍게 확인
     assert isinstance(r.json(), dict)
+    # /me로 사용자 확인
+    assert c.get("/api/auth/me").json()["username"] == "test"
+
+
+def test_login_bad_credentials():
+    assert client.post("/api/auth/login", data={"username": "test", "password": "wrong"}).status_code == 401
 
 
 def test_expected_routes_registered():
