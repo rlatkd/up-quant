@@ -20,8 +20,9 @@ def ma_cross(
     slow: int   = Query(20,  ge=5, le=200),
     count: int  = Query(200, ge=60, le=500),
     fee_bps: float = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
+    target_vol: float = Query(0.0, ge=0, le=2, description="변동성 타게팅 목표(연율, 0=올인)"),
 ):
-    return backtest_service.run_ma_cross(market, fast, slow, count, fee_bps)
+    return backtest_service.run_ma_cross(market, fast, slow, count, fee_bps, target_vol)
 
 
 @router.get("/rsi", response_model=BacktestResult)
@@ -32,8 +33,9 @@ def rsi_strategy(
     overbought: float = Query(70.0, ge=55, le=90),
     count: int      = Query(200,  ge=60, le=500),
     fee_bps: float  = Query(5.0, ge=0, le=100, description="편도 거래비용(bps, 1bps=0.01%)"),
+    target_vol: float = Query(0.0, ge=0, le=2, description="변동성 타게팅 목표(연율, 0=올인)"),
 ):
-    return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count, fee_bps)
+    return backtest_service.run_rsi_strategy(market, period, oversold, overbought, count, fee_bps, target_vol)
 
 
 @router.get("/compare", response_model=StrategyCompareResult)

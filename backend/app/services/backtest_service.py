@@ -37,19 +37,36 @@ def _sma(prices: list[float], period: int) -> list[float | None]:
 
 
 def _rsi(prices: list[float], period: int = 14) -> list[float | None]:
-    result: list[float | None] = [None] * period
-    for i in range(period, len(prices)):
-        window = prices[i - period:i]
-        gains = [max(0, window[j] - window[j - 1]) for j in range(1, len(window))]
-        losses = [max(0, window[j - 1] - window[j]) for j in range(1, len(window))]
-        avg_gain = sum(gains) / (period - 1) if gains else 0
-        avg_loss = sum(losses) / (period - 1) if losses else 0
-        if avg_loss == 0:
-            result.append(100.0)
-        else:
-            rs = avg_gain / avg_loss
-            result.append(round(100 - 100 / (1 + rs), 2))
+    """Wilder RSI(표준). 첫 period개 변화의 단순평균으로 시드한 뒤 지수평활(α=1/period)로 갱신.
+    과거엔 매 봉 윈도우 단순평균이라 업비트/TradingView 등 표준 도구와 값이 달랐음 → Wilder로 통일."""
+    n = len(prices)
+    result: list[float | None] = [None] * n
+    if n <= period:
+        return result
+    deltas = [prices[i] - prices[i - 1] for i in range(1, n)]   # 가격 인덱스 i의 변화 = deltas[i-1]
+    gains = [d if d > 0 else 0.0 for d in deltas]
+    losses = [-d if d < 0 else 0.0 for d in deltas]
+    avg_gain = sum(gains[:period]) / period                    # 첫 period개 변화의 단순평균(시드)
+    avg_loss = sum(losses[:period]) / period
+    result[period] = 100.0 if avg_loss == 0 else round(100 - 100 / (1 + avg_gain / avg_loss), 2)
+    for i in range(period + 1, n):
+        avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period   # Wilder 평활
+        avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
+        result[i] = 100.0 if avg_loss == 0 else round(100 - 100 / (1 + avg_gain / avg_loss), 2)
     return result
+
+
+def _position_size(closes: list[float], i: int, target_vol: float, win: int = 20) -> float:
+    """진입 시 포지션 비중 — 변동성 타게팅(Moreira·Muir 2017). 직전 win일 실현변동성을 연율화해
+    target_vol/실현변동성(상한 1.0)으로 축소. target_vol<=0이면 올인(1.0). 올인/올아웃 토이의 보완."""
+    if target_vol <= 0:
+        return 1.0
+    lo = max(1, i - win + 1)
+    rets = [closes[j] / closes[j - 1] - 1 for j in range(lo, i + 1) if closes[j - 1] > 0]
+    if len(rets) < 2:
+        return 1.0
+    av = pstdev(rets) * _ANNUALIZE_SQRT      # 연율 실현변동성
+    return min(1.0, target_vol / av) if av > 0 else 1.0
 
 
 def _compute_mdd(equity: list[float]) -> float:
@@ -134,6 +151,7 @@ def run_ma_cross(
     slow: int = 20,
     count: int = 200,
     fee_bps: float = 5.0,
+    target_vol: float = 0.0,
 ) -> BacktestResult:
     candles = candle_service.get_candles(market, "days", count)
     closes = [c.close for c in candles]
@@ -148,10 +166,13 @@ def run_ma_cross(
 
     position = False
     buy_price = 0.0
+    pos_size = 1.0                # 진입 비중(변동성 타게팅 시 <1.0, 나머지는 현금)
     equity_val = 100.0
     equity: list[EquityPoint] = []
     trades: list[TradeRecord] = []
     wins = 0
+    size_sum = 0
+    size_days = 0
 
     # 벤치마크 2종: 같은 종목 매수보유(buy&hold) + BTC 매수보유(시장 대표). 전략의 초과수익(알파) 가시화.
     btc_val_at, btc_ret = _btc_benchmark(times, count)
@@ -170,21 +191,24 @@ def run_ma_cross(
             if not position and f2 <= s2 and f1 > s1:
                 position = True
                 buy_price = closes[i]
-                equity_val *= (1 - fee)            # 진입 거래비용
+                pos_size = _position_size(closes, i, target_vol)   # 변동성 타게팅 비중
+                equity_val *= (1 - fee * pos_size)            # 진입 거래비용(거래한 비중만큼)
                 trades.append(TradeRecord(time=times[i], side="BUY", price=closes[i], pnl=0.0))
             # 데드크로스(직전봉 확정) → 당일 매도
             elif position and f2 >= s2 and f1 < s1:
                 pnl = (closes[i] - buy_price) / buy_price * 100
-                equity_val *= (1 + pnl / 100) * (1 - fee)   # 실현 후 청산 거래비용
+                equity_val *= (1 + pos_size * pnl / 100) * (1 - fee * pos_size)   # 실현(비중 반영) 후 청산 비용
                 if pnl > 0:
                     wins += 1
                 trades.append(TradeRecord(time=times[i], side="SELL", price=closes[i], pnl=round(pnl, 2)))
                 position = False
 
-        # 포지션 보유 중이면 평가 반영
+        # 포지션 보유 중이면 평가 반영(비중 반영)
         if position:
             unrealized = (closes[i] - buy_price) / buy_price
-            equity.append(_ep(i, equity_val * (1 + unrealized)))
+            equity.append(_ep(i, equity_val * (1 + pos_size * unrealized)))
+            size_sum += pos_size
+            size_days += 1
         else:
             equity.append(_ep(i, equity_val))
 
@@ -194,6 +218,7 @@ def run_ma_cross(
     mdd = _compute_mdd(equity_values)
     sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
     bench_return = round(closes[-1] / base * 100 - 100, 2) if closes else 0.0
+    avg_position = round(size_sum / size_days * 100, 1) if size_days else 100.0
 
     return BacktestResult(
         equity=equity,
@@ -210,6 +235,8 @@ def run_ma_cross(
             calmar=calmar,
             fee_bps=fee_bps,
             slippage_bps=slip_bps,
+            target_vol=target_vol,
+            avg_position=avg_position,
         ),
     )
 
@@ -221,6 +248,7 @@ def run_rsi_strategy(
     overbought: float = 70.0,
     count: int = 200,
     fee_bps: float = 5.0,
+    target_vol: float = 0.0,
 ) -> BacktestResult:
     candles = candle_service.get_candles(market, "days", count)
     closes = [c.close for c in candles]
@@ -234,10 +262,13 @@ def run_rsi_strategy(
 
     position = False
     buy_price = 0.0
+    pos_size = 1.0
     equity_val = 100.0
     equity: list[EquityPoint] = []
     trades: list[TradeRecord] = []
     wins = 0
+    size_sum = 0
+    size_days = 0
 
     btc_val_at, btc_ret = _btc_benchmark(times, count)
 
@@ -256,13 +287,14 @@ def run_rsi_strategy(
         if not position and r < oversold:
             position = True
             buy_price = closes[i]
-            equity_val *= (1 - fee)            # 진입 거래비용
+            pos_size = _position_size(closes, i, target_vol)
+            equity_val *= (1 - fee * pos_size)            # 진입 거래비용(거래 비중만큼)
             trades.append(TradeRecord(time=times[i], side="BUY", price=closes[i], pnl=0.0))
 
         # RSI 과매수 → 매도
         elif position and r > overbought:
             pnl = (closes[i] - buy_price) / buy_price * 100
-            equity_val *= (1 + pnl / 100) * (1 - fee)   # 실현 후 청산 거래비용
+            equity_val *= (1 + pos_size * pnl / 100) * (1 - fee * pos_size)   # 실현(비중) 후 청산 비용
             if pnl > 0:
                 wins += 1
             trades.append(TradeRecord(time=times[i], side="SELL", price=closes[i], pnl=round(pnl, 2)))
@@ -270,7 +302,9 @@ def run_rsi_strategy(
 
         if position:
             unrealized = (closes[i] - buy_price) / buy_price
-            equity.append(_ep(i, equity_val * (1 + unrealized)))
+            equity.append(_ep(i, equity_val * (1 + pos_size * unrealized)))
+            size_sum += pos_size
+            size_days += 1
         else:
             equity.append(_ep(i, equity_val))
 
@@ -280,6 +314,7 @@ def run_rsi_strategy(
     mdd = _compute_mdd(equity_values)
     sharpe, sortino, calmar = _compute_risk_adjusted(equity_values, mdd)
     bench_return = round(closes[-1] / base * 100 - 100, 2) if closes else 0.0
+    avg_position = round(size_sum / size_days * 100, 1) if size_days else 100.0
 
     return BacktestResult(
         equity=equity,
@@ -296,6 +331,8 @@ def run_rsi_strategy(
             calmar=calmar,
             fee_bps=fee_bps,
             slippage_bps=slip_bps,
+            target_vol=target_vol,
+            avg_position=avg_position,
         ),
     )
 

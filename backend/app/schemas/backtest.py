@@ -28,6 +28,8 @@ class BacktestMetrics(BaseModel):
     sharpe: float         # 샤프 = (평균/표준편차) × √365 — 변동성 단위당 수익
     sortino: float        # 소르티노 = (평균/하방표준편차) × √365 — 손실 변동성만 패널티
     calmar: float         # 칼마 = 연율화 수익률 / MDD — 낙폭 대비 수익
+    target_vol: float = 0.0   # 변동성 타게팅 목표(연율, 0=미사용=올인). >0이면 진입 시 비중을 축소
+    avg_position: float = 100.0  # 보유 구간 평균 투자비중(%) — 사이징이 얼마나 줄였는지
 
 
 class BacktestResult(BaseModel):

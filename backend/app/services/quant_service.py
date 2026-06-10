@@ -608,6 +608,9 @@ _PAIR_CANDLES = 150
 _PAIR_MIN_LEN = 120
 _PAIR_CORR_GATE = 0.5     # 이 이상 상관인 페어만 검정(연산 절감 + 무의미 페어 제외)
 _PAIR_PVAL = 0.05
+_PAIR_FDR_ALPHA = 0.1     # 다중검정(BH-FDR) 목표 거짓발견율 — 수백 페어를 α=0.05로 개별검정하면
+                          # 우연한 공적분이 다수 통과(data snooping). Benjamini-Hochberg로 보정해 표기.
+_PAIR_FEE_BPS = 5.0       # 편도 거래비용(bps) — 페어 진입/청산 회전(두 다리)에 부과
 _PAIR_Z = 2.0             # |z|>2 진입
 _PAIR_BT_ENTRY = 2.0      # 사후검증 진입 임계 |z|
 _PAIR_BT_EXIT = 0.5       # 사후검증 청산 임계 |z|
@@ -616,10 +619,25 @@ _PAIR_FORMATION = 0.5     # 형성기간 비율 — 앞 절반으로 헤지비�
                           # (β를 전 구간으로 적합하면 미래를 포함해 사후성과가 낙관 편향 → out-of-sample로)
 
 
-def _pair_backtest(spread: np.ndarray, trade_start: int = 0):
-    """로그 스프레드 평균회귀 백테스트(롤링 z 진입/청산). 스프레드 변화를 손익 프록시로 누적.
-    trade_start 이후 구간만 매매·집계한다(그 이전은 β 형성기간이라 평가 제외 — out-of-sample).
-    반환: (z_array, equity_array, total_return%, n_trades, win_rate%). 직전봉 z로 당일 포지션 결정(룩어헤드 최소화)."""
+def _bh_threshold(pvals: list[float], alpha: float) -> float:
+    """Benjamini-Hochberg FDR 임계 p값. 정렬 p_(k) ≤ (k/m)·α 를 만족하는 최대 k의 p_(k).
+    이 값 이하 p를 가진 검정만 'FDR 통과'로 본다(다중검정 거짓발견 통제). 통과 없으면 0."""
+    m = len(pvals)
+    if m == 0:
+        return 0.0
+    thr = 0.0
+    for k, p in enumerate(sorted(pvals), start=1):
+        if p <= k / m * alpha:
+            thr = p
+    return thr
+
+
+def _pair_backtest(p1: np.ndarray, p2: np.ndarray, spread: np.ndarray, beta: float,
+                   trade_start: int = 0, fee: float = _PAIR_FEE_BPS / 10000.0):
+    """실제 2-leg 페어 백테스트. 신호는 로그스프레드 롤링 z(진입 |z|>2·청산 |z|<0.5),
+    손익은 달러중립 두 다리: 롱스프레드 = 자산1 매수 + β·자산2 공매도, 일간 수익 (r1 − β·r2)/(1+|β|).
+    trade_start 이후만 매매·집계(이전은 β 형성기간 — out-of-sample). 진입·청산 회전(두 다리)에 거래비용.
+    반환: (z_array, equity_array, total_return%, n_trades, win_rate%). 직전봉 z로 당일 포지션 결정(룩어헤드 회피)."""
     T = spread.size
     win = min(_PAIR_BT_WIN, max(5, T // 3))
     z = np.zeros(T)
@@ -628,6 +646,7 @@ def _pair_backtest(spread: np.ndarray, trade_start: int = 0):
         sd = seg.std()
         z[t] = (spread[t] - seg.mean()) / sd if sd > 0 else 0.0
 
+    gross = 1.0 + abs(beta)      # 두 다리 명목 합 — 달러중립 자본 1단위당 수익으로 정규화하는 분모
     pos = 0                      # +1 롱 스프레드 / -1 숏 스프레드 / 0 현금
     cur = 100.0
     eq = np.full(T, 100.0)
@@ -635,18 +654,24 @@ def _pair_backtest(spread: np.ndarray, trade_start: int = 0):
     entry_eq = 100.0
     start = max(1, trade_start)  # 거래기간 시작(형성기간은 평가 제외)
     for t in range(start, T):
-        cur *= (1 + pos * float(spread[t] - spread[t - 1]))   # 직전 포지션의 당일 손익(로그 스프레드 변화)
-        eq[t] = cur
+        if pos != 0 and p1[t - 1] > 0 and p2[t - 1] > 0:
+            r1 = p1[t] / p1[t - 1] - 1.0
+            r2 = p2[t] / p2[t - 1] - 1.0
+            cur *= (1 + pos * (r1 - beta * r2) / gross)   # 직전 포지션의 당일 2-leg 손익
         zt = z[t - 1]            # 직전봉 z로 신호 판정(동봉 룩어헤드 회피)
         if pos == 0:
             if zt < -_PAIR_BT_ENTRY:
+                cur *= (1 - 2 * fee)          # 두 다리 진입 비용
                 pos, trades, entry_eq = 1, trades + 1, cur
             elif zt > _PAIR_BT_ENTRY:
+                cur *= (1 - 2 * fee)
                 pos, trades, entry_eq = -1, trades + 1, cur
         elif abs(zt) < _PAIR_BT_EXIT:
+            cur *= (1 - 2 * fee)             # 두 다리 청산 비용
             if cur > entry_eq:
                 wins += 1
             pos = 0
+        eq[t] = cur
     win_rate = round(wins / trades * 100, 1) if trades else 0.0
     return z, eq, round(float(cur - 100), 2), trades, win_rate
 
@@ -664,48 +689,60 @@ def _compute_pairs(top: int) -> PairsResult:
     n = len(kept)
     T = closes.shape[0]
     split = int(T * _PAIR_FORMATION)                        # 형성기간/거래기간 경계
-    rows: list[CointPair] = []
-    tested = 0
+    fee = _PAIR_FEE_BPS / 10000.0
+
+    # 1단계 — 게이트 통과 페어 전부 공적분 검정해 p값을 모은다. FDR은 '검정 전체 분포'로 보정해야
+    # 의미가 있으므로(p<0.05만 모으면 분모를 모름), 일단 테스트한 모든 p를 수집한다.
+    tested_pairs: list[tuple[int, int, float]] = []
     for i in range(n):
         for j in range(i + 1, n):
             if abs(dcorr[i, j]) < _PAIR_CORR_GATE:
                 continue
-            tested += 1
-            s1, s2 = logp[:, i], logp[:, j]
             try:
-                _, pval, _ = coint(s1, s2)                  # 공적분 검정은 전 구간(페어 '선정'용 통계검정 — 성과주장 아님)
+                _, pval, _ = coint(logp[:, i], logp[:, j])   # 페어 '선정'용 통계검정(성과주장 아님)
             except Exception:
                 continue
-            if pval > _PAIR_PVAL:
-                continue
-            # 헤지비율 β는 형성기간(앞 절반)으로만 추정 → 거래기간(뒤 절반)은 out-of-sample.
-            beta = sm.OLS(s1[:split], sm.add_constant(s2[:split])).fit().params  # [α, β]
-            spread = s1 - (beta[0] + beta[1] * s2)
-            oos = spread[split:]                            # 현재 신호 z는 거래기간 분포 기준
-            sd = oos.std()
-            z = float((spread[-1] - oos.mean()) / sd) if sd else 0.0
-            signal = "LONG_SPREAD" if z < -_PAIR_Z else "SHORT_SPREAD" if z > _PAIR_Z else "NEUTRAL"
-            # 사후검증 — 거래기간(OOS)에서만 평균회귀 전략을 돌려 "이 페어가 형성기간 밖에서도 통했는지" 요약.
-            _, _, bt_ret, bt_trades, bt_win = _pair_backtest(spread, trade_start=split)
-            rows.append((
-                i, j, beta,
-                CointPair(
-                    market1=kept[i], korean_name1=nmap.get(kept[i], kept[i]),
-                    market2=kept[j], korean_name2=nmap.get(kept[j], kept[j]),
-                    pvalue=round(float(pval), 4), correlation=round(float(dcorr[i, j]), 3),
-                    hedge_ratio=round(float(beta[1]), 3), zscore=round(z, 2), signal=signal,
-                    bt_return=bt_ret, bt_trades=bt_trades, bt_winrate=bt_win,
-                ),
-            ))
+            tested_pairs.append((i, j, float(pval)))
+    tested = len(tested_pairs)
+    fdr_thr = _bh_threshold([p for _, _, p in tested_pairs], _PAIR_FDR_ALPHA)  # 다중검정 보정 임계
+
+    # 2단계 — p<0.05 페어를 채택(표시)하되, FDR 통과 여부를 함께 표기한다.
+    rows = []
+    for i, j, pval in tested_pairs:
+        if pval > _PAIR_PVAL:
+            continue
+        # 헤지비율 β는 형성기간(앞 절반)으로만 추정 → 거래기간(뒤 절반)은 out-of-sample.
+        beta = sm.OLS(logp[:split, i], sm.add_constant(logp[:split, j])).fit().params  # [α, β]
+        spread = logp[:, i] - (beta[0] + beta[1] * logp[:, j])
+        oos = spread[split:]                                # 현재 신호 z는 거래기간 분포 기준
+        sd = oos.std()
+        z = float((spread[-1] - oos.mean()) / sd) if sd else 0.0
+        signal = "LONG_SPREAD" if z < -_PAIR_Z else "SHORT_SPREAD" if z > _PAIR_Z else "NEUTRAL"
+        # 사후검증 — 거래기간(OOS)에서 실제 2-leg 평균회귀 전략 요약.
+        _, _, bt_ret, bt_trades, bt_win = _pair_backtest(
+            closes[:, i], closes[:, j], spread, float(beta[1]), trade_start=split, fee=fee)
+        rows.append((
+            i, j, beta,
+            CointPair(
+                market1=kept[i], korean_name1=nmap.get(kept[i], kept[i]),
+                market2=kept[j], korean_name2=nmap.get(kept[j], kept[j]),
+                pvalue=round(float(pval), 4), correlation=round(float(dcorr[i, j]), 3),
+                hedge_ratio=round(float(beta[1]), 3), zscore=round(z, 2), signal=signal,
+                fdr_pass=bool(fdr_thr > 0 and pval <= fdr_thr),
+                bt_return=bt_ret, bt_trades=bt_trades, bt_winrate=bt_win,
+            ),
+        ))
     rows.sort(key=lambda r: r[3].pvalue)
     pairs = [r[3] for r in rows[:25]]
+    found_fdr = sum(1 for r in rows if r[3].fdr_pass)
 
     # 최우수(최저 p값) 페어의 상세 곡선(스프레드 z + 자산곡선) — 프론트 차트용. 거래기간(OOS)만 매매.
     best = None
     if rows:
         bi, bj, bbeta, _ = rows[0]
         spread = logp[:, bi] - (bbeta[0] + bbeta[1] * logp[:, bj])
-        z_arr, eq_arr, _, _, _ = _pair_backtest(spread, trade_start=split)
+        z_arr, eq_arr, _, _, _ = _pair_backtest(
+            closes[:, bi], closes[:, bj], spread, float(bbeta[1]), trade_start=split, fee=fee)
         base = candle_service.get_candles(kept[bi], "days", count=_PAIR_CANDLES)[-closes.shape[0]:]
         times = [int(c.timestamp // 1000) for c in base]
         best = PairBacktestDetail(
@@ -718,7 +755,8 @@ def _compute_pairs(top: int) -> PairsResult:
                 for t, zz, e in zip(times, z_arr, eq_arr)
             ],
         )
-    return PairsResult(pairs=pairs, tested=tested, found=len(rows), n_obs=int(closes.shape[0]), best=best)
+    return PairsResult(pairs=pairs, tested=tested, found=len(rows), found_fdr=found_fdr,
+                       fdr_alpha=_PAIR_FDR_ALPHA, n_obs=int(closes.shape[0]), best=best)
 
 
 def get_pairs(top: int = _PAIR_TOP) -> PairsResult:

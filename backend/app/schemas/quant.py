@@ -192,7 +192,8 @@ class CointPair(BaseModel):
     hedge_ratio: float   # OLS 헤지비율 β (market1 ≈ α + β·market2)
     zscore: float        # 현재 스프레드 z점수(평균회귀 신호)
     signal: str          # LONG_SPREAD | SHORT_SPREAD | NEUTRAL
-    # 사후검증(forward test) — 같은 윈도우에서 스프레드 평균회귀 전략을 돌린 요약(롤링 z로 진입/청산).
+    fdr_pass: bool = False    # Benjamini-Hochberg FDR(다중검정 보정) 통과 여부 — 우연한 공적분 거름
+    # 사후검증(forward test) — 거래기간(OOS)에서 실제 2-leg(자산1 − β·자산2 달러중립) 평균회귀 전략 요약.
     bt_return: float = 0.0    # 백테스트 누적수익률(%)
     bt_trades: int = 0        # 진입 횟수
     bt_winrate: float = 0.0   # 익절 비율(%)
@@ -219,7 +220,9 @@ class PairBacktestDetail(BaseModel):
 class PairsResult(BaseModel):
     pairs: list[CointPair]   # p값 오름차순(공적분 강한 순)
     tested: int              # 검정한 페어 수
-    found: int               # 공적분(p<0.05) 페어 수
+    found: int               # 공적분(p<0.05, 미보정) 페어 수
+    found_fdr: int = 0       # 다중검정(BH-FDR α) 보정 후에도 살아남은 페어 수 — 진짜 신뢰할 발견
+    fdr_alpha: float = 0.1   # FDR 목표 거짓발견율
     n_obs: int
     best: PairBacktestDetail | None = None   # 최우수 페어 사후검증 상세(차트용)
 
