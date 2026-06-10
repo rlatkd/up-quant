@@ -166,22 +166,25 @@ _CORR_MIN_OVERLAP = 40
 
 
 def get_correlation(market: str) -> list[CorrelationItem]:
-    # 섹터 스냅샷(_CATEGORIES)엔 상폐 코드(예: KRW-DRIFT)가 남아 있을 수 있다 →
-    # 라이브 마켓(/market/all 교집합)과 교집합만 순회해 404를 원천 차단한다.
+    # 상관은 가격 레벨이 아니라 '일간 수익률'로 계산한다. 두 코인의 종가(레벨)끼리 피어슨을 구하면
+    # 둘 다 추세를 가질 때 상관이 무조건 높게 나오는 허위상관(spurious correlation)이 생긴다 →
+    # quant_service(네트워크·PCA)와 동일하게 수익률 상관으로 통일.
+    # 유니버스는 라이브 KRW 마켓 전체(/market/all 교집합)라 상폐 코드 404를 원천 차단하고
+    # 섹터 스냅샷에 없는 신규 상장도 포함한다.
     live = set(market_service.valid_markets())
-    all_markets = [m for m in _CATEGORIES.keys() if m != market and m in live]
+    all_markets = [m for m in live if m != market]
     base_candles = candle_service.get_candles(market, "days", 60)
-    base_closes  = [c.close for c in base_candles]
+    base_rets = _daily_returns([c.close for c in base_candles])
 
     ticker_map = {t.market: t for t in market_service.get_tickers()}
     result = []
     for m in all_markets:
         candles = candle_service.get_candles(m, "days", 60)
-        closes  = [c.close for c in candles]
-        n = min(len(base_closes), len(closes))
+        rets = _daily_returns([c.close for c in candles])
+        n = min(len(base_rets), len(rets))
         if n < _CORR_MIN_OVERLAP:  # 공통 관측이 너무 적으면 상관 노이즈 → 제외
             continue
-        corr = _pearson(base_closes[-n:], closes[-n:])
+        corr = _pearson(base_rets[-n:], rets[-n:])
         t = ticker_map.get(m)
         result.append(CorrelationItem(
             market=m,
