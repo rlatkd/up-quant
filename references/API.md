@@ -16,6 +16,13 @@ UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open 
 
 ## 공통 사항
 
+### 인증 (Phase 31)
+**모든 `/api/*` 데이터 엔드포인트와 `/ws/*`는 로그인(JWT)을 요구**합니다. `/health`와 `/api/auth/*`만 공개.
+- `POST /api/auth/login`(또는 `/token`, form: `username`/`password`) → 성공 시 **access/refresh JWT를 HttpOnly·Secure·SameSite=Strict 쿠키**로 설정. 본문은 `{username}`.
+- `POST /api/auth/refresh` → refresh 쿠키로 새 access 쿠키. `POST /api/auth/logout` → 쿠키 삭제. `GET /api/auth/me` → `{username}`(미인증 401).
+- `GET /api/auth/ws-ticket` → `{ticket}`(60초 단기 토큰). WS는 브라우저가 핸드셰이크 쿠키를 안 보낼 수 있어 이 티켓을 `?token=`으로 붙인다.
+- 계정은 하드코딩 `test/test`(과제용, env로 변경). 미인증 시 `401`. 로그인 실패 누적·요청 폭주는 레이트리밋(429).
+
 ### 지원 마켓 (분석 유니버스 ~261종)
 분석 유니버스는 **업비트 KRW 마켓 전체(~261종)** — `config.USE_ALL_KRW_MARKETS`. 부팅 시 `/v1/market/all`과 교집합만 사용(상장폐지 종목 자동 제외. 예: KRW-MATIC은 POL 마이그레이션으로 폐지 → KRW-POL).
 
@@ -110,7 +117,7 @@ Advance-Decline 라인 — 시장 폭(breadth)의 추세. 거래대금 상위 10
 ## 4. Backtest — `/api/backtest`
 
 ### `GET /api/backtest/ma-cross`
-이동평균 교차(골든/데드 크로스) 전략 백테스트.
+이동평균 교차(골든/데드 크로스) 전략 백테스트. **신호는 직전 완결봉 크로스로 판정 후 당일 종가 체결(익일 체결, 룩어헤드 제거).**
 - **쿼리 파라미터**:
 
   | 이름 | 타입 | 기본값 | 범위 | 설명 |
@@ -119,8 +126,10 @@ Advance-Decline 라인 — 시장 폭(breadth)의 추세. 거래대금 상위 10
   | `fast` | int | `5` | 2~50 | 단기 이동평균 기간 |
   | `slow` | int | `20` | 5~200 | 장기 이동평균 기간 |
   | `count` | int | `200` | 60~500 | 일봉 캔들 개수 |
+  | `fee_bps` | float | `5.0` | 0~100 | 편도 거래비용(bps) |
+  | `target_vol` | float | `0.0` | 0~2 | 변동성 타게팅 목표(연율, 0=올인). >0이면 진입 시 직전20일 실현변동성으로 비중 축소(Phase 31) |
 
-- **응답**: `BacktestResult`
+- **응답**: `BacktestResult`(`metrics.target_vol`·`avg_position` 포함)
 
 ### `GET /api/backtest/rsi`
 RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
@@ -133,6 +142,8 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
   | `oversold` | float | `30.0` | 10~45 | 과매도 기준 (이하에서 매수) |
   | `overbought` | float | `70.0` | 55~90 | 과매수 기준 (이상에서 매도) |
   | `count` | int | `200` | 60~500 | 일봉 캔들 개수 |
+  | `fee_bps` | float | `5.0` | 0~100 | 편도 거래비용(bps) |
+  | `target_vol` | float | `0.0` | 0~2 | 변동성 타게팅(0=올인). RSI도 Wilder 평활(Phase 31) |
 
 - **응답**: `BacktestResult`
 
@@ -194,8 +205,12 @@ LLM(Gemini) 투자 전략 리포트 — 시장 데이터(프리페치 재사용)
 - **응답**: `ReportResult` — `report_type`·`title`·`markdown`·`model`·`generated_at`(unix초)·`enabled`(실제 LLM 호출 여부)·`note`
 
 ### `GET /api/system/metrics`
-관측성 메트릭(외부 의존성 없는 자체 구현). 캐시 적중률·외부 호출수·평균 응답시간·최근 요청(rid).
-- **응답**: `{ uptime_sec, cache_hit_rate(%), cache_hits/stale_serves/misses, cache_keys, upbit_calls/errors, cache_revalidate_errors, requests, avg_response_ms, recent[{rid, method, path, status, ms}] }`
+관측성 메트릭(외부 의존성 없는 자체 구현). 캐시 적중률·외부 호출수·평균 응답시간·최근 요청(rid) + **외부 소스 헬스(Phase 31)**.
+- **응답**: `{ uptime_sec, cache_hit_rate(%), cache_hits/stale_serves/misses, cache_keys, upbit_calls/errors, cache_revalidate_errors, requests, avg_response_ms, recent[{rid, method, path, status, ms}], sources[{name, healthy, ok, fail, last_ok_age_sec, last_fail_age_sec, last_error}] }`
+
+### `GET /api/signals` (Phase 31)
+실행 가능한 시그널 집계 — 모멘텀 롱·공적분 페어 z>2·HMM 국면 전환·52주 돌파/급등을 합성(기존 캐시 재사용, 추가 팬아웃 0).
+- **응답**: `SignalsResult` — `{ as_of, regime_label, regime_changed, items[{kind(momentum|pair|regime|breakout), market, korean_name, title, detail, value, action(deep-link 경로)}], n }`
 
 ---
 
@@ -225,9 +240,10 @@ REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업�
 | `GET /asset-indices` | `AssetIndices` — `rows[{key,label,desc,tab(시장\|전략\|테마\|섹터),value,d1,m1,m3,n}]`. 자체 동일가중 지수(전략=모멘텀Top5·저변동Top5, 테마=level2, 섹터=level1) |
 | `GET /volume-power` | `VolumePower` — `buy[]`·`sell[]`(`{market,korean_name,power}`). 체결강도=매수/매도×100 (업비트 **WS 티커 `acc_ask/bid_volume`** 1회 스냅샷, 스테이블·저유동 제외). `error?` |
 | `GET /period-returns` | `PeriodReturns` — `rows[{market,korean_name,acc_trade_price_24h,r1w,r1m,r3m,r6m,r1y,market_cap,market_cap_rank}]`. 일봉(≤6m)·월봉(1y) + **시총(CoinGecko 외부)** |
-| `GET /brief` | `MarketBrief` — `{text,as_of,rise,fall,avg_change,dominance,total_volume}`. 자체 생성 시황 한 줄 |
-| `GET /fx` | `FxResult` — `rates[{pair,label,unit,price,change,change_rate}]`·`as_of`·`error?`. **외부 open.er-api.com** 프록시(10분 캐시) |
+| `GET /brief` | `MarketBrief` — `{text,as_of,rise,fall,avg_change,dominance,dominance_label,total_volume}`. 자체 시황 한 줄. **도미넌스는 시총 기준(CoinGecko /global) 우선·라벨로 출처 명시** |
+| `GET /fx` | `FxResult` — `rates[{pair,label,unit,price,change,change_rate}]`·`as_of`·`error?`. **외부 open.er-api.com** 프록시(성공 10분/에러 60초 캐시) |
 | `GET /news` | `NewsResult` — `items[{title,url,source,published,ts}]`·`error?`. **외부 한국 크립토 RSS**(헤드라인+링크만) |
+| `GET /fear-greed` | `FearGreed` — `{value,label,classification,as_of,source,error?}`. **외부 alternative.me** 실제 공포·탐욕(실패 시 자체 시장 폭 폴백·`source='자체(시장 폭)'`)(Phase 31) |
 
 ---
 

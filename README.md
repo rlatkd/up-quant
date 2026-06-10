@@ -138,8 +138,9 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 | **arch** | GARCH(1,1) 변동성 예측 · VaR |
 | **hmmlearn** | 가우시안 HMM 시장 국면 탐지 |
 | **networkx** | 상관 네트워크 최소신장트리(MST) |
+| **PyJWT · bcrypt · python-multipart** | 인증 — OAuth2 Password 플로우 + JWT(HttpOnly 쿠키) · 비밀번호 해싱 |
 
-> 외부 의존성 없는 인메모리 TTL 캐시(`core/cache.py`, stale-while-revalidate · single-flight), `contextvars` 기반 요청 ID 로깅(`core/logging.py`), 업비트 WS 중계 허브(`main.py:TickerHub`)를 자체 구현했습니다. WS는 `certifi` 기반 SSL 컨텍스트로 TLS를 검증합니다. 수치 코어·캐시·설정·라우터는 `pytest`(`backend/tests/`)로 검증하며 GitHub Actions CI(`.github/workflows/ci.yml`)에서 백엔드 테스트 + 프론트 lint·typecheck·build를 돌립니다.
+> 외부 의존성 없는 인메모리 TTL 캐시(`core/cache.py`, stale-while-revalidate · single-flight · 포그라운드 우선 스로틀), `contextvars` 기반 요청 ID 로깅(`core/logging.py`), 업비트 WS 중계 허브(`main.py:TickerHub`), **JWT 인증(`core/security.py`) + 레이트리밋(`core/ratelimit.py`)**을 자체 구현했습니다. WS는 `certifi` 기반 SSL 컨텍스트로 TLS를 검증합니다. 모든 `/api/*`·`/ws/*`는 로그인 가드(`Depends(current_user)`) 뒤에 있습니다. 수치 코어·캐시·설정·라우터·인증은 `pytest`(`backend/tests/`, 43개)로 검증하며 GitHub Actions CI에서 백엔드 테스트 + 프론트 lint·typecheck·**vitest**·build를 돌립니다.
 
 ### Frontend (Node · React 19 + Vite + TypeScript)
 
@@ -205,7 +206,8 @@ clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재
 | **업비트 데이터랩 '코인 분류'** | 웹 스크래핑 (1회, 정적 스냅샷) | 약 260종 섹터(대분류 5)·테마(level2) | 섹터·테마 성과·분류 |
 | **환율** (open.er-api.com) | 외부 무료 API (백엔드 프록시·캐시) | USD·JPY·CNY·EUR / KRW | 트렌드 대시보드 '오늘의 환율' |
 | **뉴스** (한국 크립토 RSS) | 외부 RSS 통합 (헤드라인+링크만) | 최신 기사 제목·링크 | 트렌드 대시보드 '최신 뉴스' |
-| **시가총액** (CoinGecko) | 외부 무료 API (상위 500) | 시총·순위 (심볼 매핑) | 트렌드 대시보드 '시가총액' 탭 |
+| **시가총액 · 도미넌스** (CoinGecko) | 외부 무료 API (`/coins/markets` 상위 500 · `/global`) | 시총·순위 · **BTC 시총 도미넌스** | '시가총액' 탭 · 시황 도미넌스(시총 기준, 실패 시 거래대금 비중 폴백) |
+| **공포·탐욕** (alternative.me) | 외부 무료 API | Crypto Fear & Greed Index | 시장 요약(실패 시 자체 시장 폭 프록시 폴백·출처 표시) |
 
 - **분석 유니버스 = KRW 마켓 전체**(약 261종, `config.USE_ALL_KRW_MARKETS`). 부팅 시 `/market/all`과 교집합만 사용해 상장폐지 종목을 자동 제외합니다(예: MATIC → POL).
 - 시세 API는 코인의 카테고리를 주지 않으므로, 데이터랩 '코인 분류' 페이지(Next.js RSC 페이로드)를 **1회 스크랩**해 정적 스냅샷(`upbit_sectors.json`)으로 보관합니다 — **5개 대분류**: `스마트 컨트랙트 플랫폼` · `인프라` · `디파이` · `문화/엔터테인먼트` · `밈`.
@@ -358,12 +360,15 @@ npm run dev
 > 프론트엔드는 `http://localhost:8000`을 백엔드로 호출하며(REST + WebSocket), 백엔드 CORS는 `http://localhost:5173`을 허용합니다. **두 서버를 함께 실행**해야 합니다.
 > **배포·다른 호스트**에서는 백엔드 주소를 `frontend/.env`의 `VITE_API_BASE`(REST)·`VITE_WS_BASE`(WebSocket, 미지정 시 `VITE_API_BASE`에서 `http→ws` 자동 유도)로 주입합니다(`frontend/.env.example` 참고). 백엔드는 `CORS_ORIGINS` 환경변수로 허용 오리진을 지정합니다.
 
+> **로그인(인증)**: 모든 `/api/*`·`/ws/*`는 로그인을 요구합니다. 첫 화면이 로그인 페이지로, **`test` / `test`** 로 로그인합니다(과제용 하드코딩). 배포 시엔 `AUTH_SECRET`(강한 랜덤)·`COOKIE_SECURE=1`·`CORS_ORIGINS`를 환경변수로 주입하세요. 앱 레벨 레이트리밋은 backstop이며, 실제 DDoS/비용 방어선은 엣지(CloudFront/WAF)입니다.
+
 | 명령 (frontend) | 설명 |
 |------|------|
 | `npm run dev` | 개발 서버 (HMR) |
 | `npm run build` | 프로덕션 빌드 |
 | `npm run lint` | ESLint 검사 |
 | `npm run typecheck` | TypeScript 타입 검사 (`tsc --noEmit`) |
+| `npm run test` | 단위 테스트 (vitest) |
 
 ---
 
@@ -411,20 +416,23 @@ npm run dev
 
 | 데이터 | TTL | 만료 시 fan-out |
 |--------|-----|-----------------|
-| 현재가(ticker) | 5s | 1콜 (전 종목 일괄) |
+| 현재가(ticker, 조립 결과 캐시) | 5s | 1콜 (전 종목 일괄) |
 | 호가 · 체결 | 3s | 1콜 |
-| 분봉(인트라데이) | 30s | 1콜 |
-| 스파크라인 (1시간봉, 거래대금 상위 30종만) | 300s | 30콜 |
-| 일봉 (통계·정량분석 공용, canonical 200) | 600s | 261콜 |
-| **주봉·월봉 (canonical, 집계 공용)** | **1800s** | 261콜 |
-| 카테고리 월봉 집계 | 1800s | (월봉 캐시 재사용) |
+| 분봉(1~30분, 인트라데이) | 30s | 1콜 |
+| **60·240분봉 (인트라데이 지수·라이브 차트)** | **300s** | 1콜 |
+| **스파크라인 (1시간봉, 전 종목)** | **1800s** | 261콜(부팅 1회) |
+| **일봉 (통계·정량분석 공용, canonical 200)** | **3600s** | 261콜 |
+| 주봉·월봉 (canonical, 집계 공용) | 1800s | 261콜 |
+| 외부 소스(환율·뉴스·시총·도미넌스·F&G) | 성공 600~3600s / **에러 60s** | 1콜 |
 | 마켓목록 · 한글명 | 3600s | 1콜 |
 
-> **Phase 30 — 주봉/월봉도 일봉처럼 canonical(월봉 61·주봉 200) 1회 fetch + 장기 TTL(1800s)로 통일.** 과거엔 분/주/월이 모두 30s라, 이를 소비하는 집계(기간수익률·섹터 월봉)가 재검증될 때마다 261종 월봉을 콜드로 다시 받는 **숨은 팬아웃**이 있었음. 분봉만 30s 유지(라이브 차트, WS가 최신가 덧씌움).
+> **Phase 32 — TTL 재조정으로 숨은 팬아웃 제거.** 일봉은 하루 1회 확정(장중엔 WS가 라이브)이라 600s→**1시간**, 60·240분봉은 시간 단위 갱신인데 30s라 인트라데이 지수 재계산마다 콜드 재팬아웃→**5분**, 스파크라인은 코인목록 전 행이 쓰므로 전 종목 프리페치+30분. **외부 소스 에러는 60초만 캐시**(죽은 소스에 매 진입 재-매달림 방지) + httpx 타임아웃 4초.
 >
-> **프론트(Phase 30)는 react-query로 클라이언트 캐시도 둠** — 같은 엔드포인트를 여러 컴포넌트가 호출해도 1회(디둡), 페이지 재방문 시 staleTime(60s) 내면 캐시에서 즉시 렌더(재요청 없음). 백엔드 캐시와 2단으로 동작.
+> **포그라운드 우선 스로틀(Phase 32)**: 백그라운드 워밍/재검증이 261종 팬아웃을 동시에 쏟으면 사용자(포그라운드) 요청이 전역 업비트 스로틀 줄 뒤에서 수십 초 대기하던 문제 → 백그라운드 호출을 직렬화 + 포그라운드 대기 시 양보, 사용자 요청은 다음 슬롯(~0.12s)만 대기. 주기 재워밍도 240s를 7그룹으로 분산.
+>
+> **프론트는 react-query로 클라이언트 캐시도 둠** — 같은 엔드포인트 1회 호출(디둡), `staleTime 5분` 내 즉시 렌더, `gcTime 1시간`(재방문에도 옛 화면 즉시), `keepPreviousData`(코인/인터벌 전환 시 옛 화면 유지). 백엔드 캐시와 2단.
 
-각 키는 **신선**(TTL 내, 캐시 즉시 반환) / **stale**(만료, 옛 값 즉시 반환 + 백그라운드 1스레드 갱신) / **콜드**(키 없음, 동기 fetch) 3가지 상태로 동작하며, 재검증은 **요청이 들어와 stale을 발견했을 때만**(lazy) 수행합니다. 코인 통계(변동성·베타 등)는 일봉 파생이라 거의 변하지 않으므로 길게(300s) 캐시합니다. 일부 키가 사용자 파라미터(포트폴리오 종목 조합 등)로 생성돼 무한히 쌓이지 않도록 **LRU 상한**(초과 시 가장 오래전 갱신 키부터 축출)을 두되, 읽기 핫패스는 락 없이 유지합니다.
+각 키는 **신선** / **stale**(옛 값 즉시 + 백그라운드 갱신) / **콜드**(동기 fetch) 3상태로 동작합니다. **읽기 적중도 LRU 꼬리로 이동**(핫 키 축출 방지)하고 상한(20000)을 둡니다. 콜드 경로도 single-flight로 동시 첫 방문의 중복 fetch를 막습니다.
 
 ---
 

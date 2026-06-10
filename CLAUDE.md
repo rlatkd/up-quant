@@ -30,7 +30,7 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 
 ## 데이터 소스 (중요)
 
-- **외부 의존(트렌드 대시보드 한정, Phase 29)**: 업비트 시세 외에 ⑴**환율** = `open.er-api.com`(무료·무인증, 백엔드 프록시·10분 캐시) ⑵**뉴스** = 한국 크립토 RSS 통합(블록미디어·토큰포스트·코인데스크코리아, 헤드라인+링크만) ⑶**시가총액** = `CoinGecko /coins/markets`(상위 500, 심볼 매핑 ~156/263). **공통 원칙: 외부 실패 시 숨기지 않고 "⚠️ 소스 교체 필요"를 화면에 노출**(`fx_service`·`news_service`·`marketcap_service`). 그 외(자체 시장지수·인트라데이·체결강도·기간수익·시황)는 전부 업비트 시세 기반. **체결강도** = 업비트 WS 티커의 `acc_ask_volume`/`acc_bid_volume`(REST엔 없음) 1회 스냅샷 → 매수/매도×100. **인트라데이 당일/전일** = 60분봉 자체 동일가중(구성 상한 40).
+- **외부 의존(트렌드 대시보드 한정, Phase 29·31)**: 업비트 시세 외에 ⑴**환율** = `open.er-api.com`(무료·무인증, 백엔드 프록시·10분 캐시) ⑵**뉴스** = 한국 크립토 RSS 통합(블록미디어·토큰포스트·코인데스크코리아, 헤드라인+링크만) ⑶**시가총액** = `CoinGecko /coins/markets`(상위 500, 심볼 매핑 ~156/263) ⑷**도미넌스(Phase 31)** = `CoinGecko /global`의 `market_cap_percentage.btc`(=시총 기준 업계 표준, 거래대금 비중 아님 — 실패 시 거래대금 비중으로 폴백·라벨로 출처 명시) ⑸**공포·탐욕(Phase 31)** = `alternative.me` Crypto Fear&Greed(실패 시 자체 시장 폭 프록시 폴백·'자체' 표식, `fng_service`). **공통 원칙: 외부 실패 시 숨기지 않고 "⚠️ 소스 교체 필요" 노출** + **에러 결과를 60초만 캐시(callable TTL)**+httpx 타임아웃 4초(Phase 32 — 죽은 소스에 매 진입 재-매달림 방지) + **부팅 프리페치 포함**(첫 화면도 캐시 히트). 그 외(자체 시장지수·인트라데이·체결강도·기간수익·시황)는 전부 업비트 시세 기반. **체결강도** = 업비트 WS 티커의 `acc_ask_volume`/`acc_bid_volume`(REST엔 없음, **당일 누적**이라 순간압력 아님·라벨 명시) 1회 스냅샷 → 매수/매도×100. **인트라데이 당일/전일** = 60분봉 자체 동일가중(구성 상한 40).
 
 - **업비트 시세(Quotation) REST API**로 실연동. **인증/API Key 불필요** (거래소 API 아님).
 - 사용 엔드포인트: `/market/all`, `/ticker`, `/candles/*`, `/orderbook`, `/trades/ticks`.
@@ -53,11 +53,23 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 ## 성능/관측성 (직접 구현, 외부 의존성 없음)
 
 - **캐시** `core/cache.py`: 인메모리 TTL + **stale-while-revalidate + single-flight** + **LRU 상한**(`_MAX_KEYS`, Phase 28 — 사용자 파라미터로 생성되는 키(포트폴리오 종목 조합 등)가 무한 증가하지 않게 초과 시 가장 오래전 갱신 키부터 축출. 읽기 핫패스는 락-프리 유지, 쓰기 시에만 `_store_lock`으로 축출). 만료돼도 옛 값 즉시 반환, 갱신은 백그라운드 1스레드. **일봉·월봉·주봉은 종목별 canonical(일봉 200·월봉 61·주봉 200) 1회 fetch 후 슬라이스 공유**(상관관계 ~1800ms→~5ms). ⚠️ **Phase 30 — 월봉/주봉도 일봉처럼 `TTL_CANDLE_LONG=1800`+canonical로 통일**: 과거엔 분/주/월이 `TTL_CANDLE=30s`였는데, 이를 소비하는 집계(기간수익률 300·섹터 월봉 1800)가 재검증될 때마다 261종 월봉을 콜드로 다시 받는 숨은 팬아웃이 있었음. 분봉(인트라데이)만 `TTL_CANDLE=30s`로 짧게(라이브 차트, WS가 최신가 덧씌움). TTL은 config(코인통계 `TTL_COIN_STATS=300` — 일봉 파생이라 거의 안 변하는데 261종 루프가 비싸 길게). 유니버스 전체 확장에 따라 일봉/스파크라인 TTL은 장기화해 팬아웃 부하 억제. **스파크라인(1시간봉)은 대시보드 시세표·마켓 상단 카드만 쓰는 시각 요소라 거래대금 상위 30종만 채운다**(`market_service._SPARK_LIMIT`, Phase 24 — 261종 전부 받던 팬아웃 제거).
-- **레이트리밋**: `clients/upbit_rest.py`에 전역 스로틀(~초당 8회) + 429 백오프 재시도. 캐싱 없으면 캔들 팬아웃으로 429 발생함(실증됨).
+- **레이트리밋(업비트 방향) + 포그라운드 우선(Phase 32)**: `clients/upbit_rest.py`에 전역 스로틀(~초당 8회) + 429 백오프 재시도. ⚠️ 백그라운드 워밍/SWR 재검증이 261종 팬아웃을 동시에 쏟으면 사용자(포그라운드) 요청이 그 줄 뒤에서 수십 초 대기하던 문제 → **백그라운드 호출(스레드명 `cache-revalidate`/`periodic-warm`)은 `_bg_lock`으로 직렬화 + 포그라운드 대기 시 양보**, 포그라운드는 `_bg_lock`을 건너뛰어 다음 슬롯(~0.12s)만 대기. 전체 8회/초 상한은 슬롯 예약이 보장.
+- **캐시 LRU 읽기-터치(Phase 32)**: 과거엔 읽기가 LRU 순서를 갱신 안 해 '자주 읽기만 하는' 일봉 canonical 키가 새 키에 밀려 축출 → 다음 집계가 콜드 재팬아웃됐음. 이제 **읽기 적중도 꼬리로 이동**(`_touch`, 짧은 락) + 상한 `_MAX_KEYS=20000`. **callable TTL**(외부 소스 성공은 길게·**에러는 60초만** 캐시 → 죽은 소스에 매 진입 재-매달림 방지).
+- **TTL 재조정(Phase 32)**: 일봉 `TTL_CANDLE_DAYS=3600`(하루 1회 확정, 장중엔 WS가 라이브), **60·240분봉 `TTL_CANDLE_INTRADAY=300`**(시간 단위 갱신 — 과거 30s라 인트라데이 지수 재계산마다 콜드 재팬아웃), **스파크라인(1시간봉) `TTL_SPARKLINE=1800` + 전 종목 프리페치**(`_SPARK_LIMIT` 제거 — 코인목록 전 행 미니 스파크라인용). 분봉(1~30분)만 `TTL_CANDLE=30s`(라이브).
+- **주기 재워밍(Phase 32)**: `main.py:_periodic_warm` 데몬이 **240초를 7그룹으로 나눠 staggered** 재워밍(한꺼번에 안 몰리게) — 무거운 집계를 만료 직전 갱신해 신선도·LRU 유지(포그라운드 우선과 합쳐 사용자 안 막음). dev `SKIP_PREFETCH=1`이면 워머도 안 돔.
 - **성능 원칙 (중요)**: 클라우드/멀티 인스턴스 전제 — **대량 팬아웃(수백 콜)은 서버 기동 시 1회만** 하고, 이후엔 어떤 클라이언트가 접속하든 캐시 히트로 빨라야 한다. 클라이언트가 매 요청마다 수십~수백 콜을 떠안으면 안 됨. (새 무거운 집계를 추가하면 **프리페치 워밍 범위도 반드시 함께 갱신** — 안 그러면 첫 방문자가 콜드 비용을 떠안음)
 - **부팅 프리페치(동기 워밍)**: `main.py` lifespan이 `_prefetch()`를 **동기로 워밍한 뒤 기동**(`await asyncio.to_thread(_prefetch)`). 워밍 대상: `get_tickers()`(현재가+거래대금 상위 30종 스파크라인) + `get_coin_stats()`(변동성·수익률, 일봉 팬아웃) + `get_category_monthly()`(섹터 월봉 261종 팬아웃, 콜드 ~1분, 히트맵용) + `get_category_daily_cumulative()`(일봉 누적, 공용 캐시 재사용→팬아웃0) + **퀀트 9종**(network·pca·clusters·dendrogram·momentum·pairs·regime·portfolio·garch — 일봉 캐시 재사용이라 계산만) + **트렌드 3종**(`get_indices`=일봉+**60분봉 인트라데이 팬아웃**·`get_asset_indices`·`get_period_returns`=외부 CoinGecko 1회). 기동이 느려지는(스로틀 초당 8회 + 60분봉 추가 팬아웃) 대신 첫 사용자도 콜드 없이 즉시 응답. (체결강도는 WS 1회라 프리페치 제외 → 첫 호출 시 ~2초.) 대시보드·마켓·코인목록·카테고리·정량분석 전반을 커버. 종목별 호가·체결·캔들(10 interval)·상관관계는 호출 수(수천)·실시간성(짧은 TTL) 때문에 프리페치 제외 → 해당 종목 첫 방문 시 fetch.
 - **통합 로깅**: `core/logging.py`의 `contextvars` 기반 요청 ID(rid)를 3계층 로그에 주입 — axios 인터셉터(프론트) / FastAPI 미들웨어(인바운드) / httpx `event_hook`(Upbit). 백엔드가 `X-Request-Id` 헤더로 전파. 같은 rid로 한 요청 전 구간 추적(Spring MDC 유사). 백그라운드 작업은 rid=`-`.
-- **실시간 시세 중계 허브(Phase 25)**: `main.py:TickerHub`가 업비트 ticker WS **1개**를 유지하며 구독 클라이언트 전체에 fan-out한다(클라이언트마다 업비트 연결을 새로 열면 다중 탭/인스턴스에서 N개로 늘어 비효율 — 캐시 팬아웃 원칙의 WS판). 신규 클라이언트엔 `latest` 스냅샷을 즉시 푸시해 REST를 안 기다리고 화면이 채워지고, 구독자가 0이 되면 업비트 WS를 끊는다(끊기면 자동 재연결). 프론트는 **외부 store**(`contexts/realtimeStore.js`)에 시세를 모아 `useSyncExternalStore`로 **종목별 selector** 구독 — 한 종목이 바뀌어도 그 종목 셀만 리렌더(전체 Context 구독의 리렌더 폭주 회피). WS 메시지는 300ms 배치로 store에 반영(`RealtimeProvider`). 코인 상세 호가·체결은 종목별 WS(`hooks/useMarketStream.js`)라 허브 불필요.
+- **실시간 시세 중계 허브(Phase 25)**: `main.py:TickerHub`가 업비트 ticker WS **1개**를 유지하며 구독 클라이언트 전체에 fan-out한다(클라이언트마다 업비트 연결을 새로 열면 다중 탭/인스턴스에서 N개로 늘어 비효율 — 캐시 팬아웃 원칙의 WS판). 신규 클라이언트엔 `latest` 스냅샷을 즉시 푸시해 REST를 안 기다리고 화면이 채워지고, 구독자가 0이 되면 업비트 WS를 끊는다(끊기면 자동 재연결). 프론트는 **외부 store**(`contexts/realtimeStore.js`)에 시세를 모아 `useSyncExternalStore`로 **종목별 selector** 구독 — 한 종목이 바뀌어도 그 종목 셀만 리렌더(전체 Context 구독의 리렌더 폭주 회피). WS 메시지는 300ms 배치로 store에 반영(`RealtimeProvider`). 코인 상세 호가·체결은 종목별 WS(`hooks/useMarketStream.js`)라 허브 불필요. **WS 인증(Phase 31~32)**: 브라우저가 WS 핸드셰이크에 쿠키를 항상 보내지 않아, 프론트는 쿠키 인증된 REST로 받은 **단기 ws 티켓**(`/api/auth/ws-ticket`, type=ws, 60초)을 `?token=`으로 붙인다(`realtimeStore`/`useMarketStream`).
+- **'/' 전 요소 실시간화(Phase 32)**: 실시간 의미 있는 것은 모두 라이브 — `useLiveTickers`(REST tickers에 WS 시세 덮어쓴 배열, store 전역 버전으로 리스트 재정렬·필터 카운트·거래대금 갱신), 코인상세 **52주 위치·1개월 수익률(한달전가 역산)·시장 점유율·거래대금 순위**는 현재가/거래대금 종속이라 라이브 계산, **캔들차트 실시간 슬라이딩**(WS 틱→형성 봉 갱신, 새 시간버킷이면 우측 새 봉 생성·좌측 밀림, `bucketSeconds`). 실시간 의미 없는 것(30일 변동성·GARCH·VaR·BTC 베타·상관관계 — 일봉 파생)만 정적. react-query **keepPreviousData**(코인/인터벌 전환 시 옛 화면 유지)·**gcTime 1h**(재방문 즉시)·**staleTime 5분**.
+
+## 보안/인증 (Phase 31)
+
+- **방식**: FastAPI **OAuth2 Password 플로우 + JWT(HS256, PyJWT) + bcrypt**(`core/security.py`). 하드코딩 단일 계정(`test/test`, 과제용 — env `AUTH_USERNAME`/`AUTH_PASSWORD`). access(30분)+refresh(7일).
+- **토큰 보관**: **HttpOnly·Secure·SameSite=Strict 쿠키**(localStorage 미사용 → XSS로 토큰 탈취 불가). `cookie_secure`는 배포(HTTPS) True/로컬 False. CORS `allow_credentials=True`(이때 오리진 `*` 불가 → env로 명시).
+- **가드**: 전 데이터 라우터에 `Depends(current_user)` 일괄(`main.py` `_AUTH`), `/health`·`/api/auth/*`만 예외. **WS도 인증**(ws 티켓 또는 쿠키). 미인증 시 프론트 `RequireAuth`가 `/login`으로(원래 경로 보존), `/login` 진입 시엔 무조건 세션 wipe.
+- **레이트리밋/하드닝**(`core/ratelimit.py`): 전역 인바운드 IP 토큰버킷(`rate_limit_per_min`, 429) + 로그인 brute-force 잠금(`login_max_attempts`/`login_window_sec`/`login_lock_sec`) → 봇/해킹 요청 폭주로 AWS 비용 새는 것 1차 차단. **보안 헤더**(nosniff·X-Frame-Options DENY·Referrer-Policy·HTTPS면 HSTS). ⚠️ 앱 레벨 레이트리밋은 단일 인스턴스 backstop — **진짜 DDoS 방어선은 엣지(CloudFront/WAF/ALB)**, 분산 환경은 Redis 필요(보류).
+- **401 처리(프론트)**: axios `withCredentials`+인터셉터가 401 시 `/api/auth/refresh` 1회 시도→실패하면 `/login`. WS는 ws 티켓.
 
 ## UI 컨벤션
 
@@ -117,12 +129,16 @@ Backend:   routers/(≈Controller) → services/(≈Service, +캐시) → client
 - **전수 코드 리뷰 후속: 캐시·정밀도·페어 사후검증(2026-06-09)** — Phase 28. coin_stats TTL 정상화·중복 페치 제거, 캐시 LRU 상한, RNG 시드 결정화, MA 익일 체결, 공적분 페어 사후검증(백테스트 곡선·승률). 상세는 작업 이력 Phase 28.
 - **UI/UX 재정리 + 대시보드 코인동향 미러 전면 재편(2026-06-09)** — Phase 29. 헤더 4그룹 드롭다운+우측⋯, 대시보드를 업비트 코인동향(자체 시장지수·당일/전일 인트라데이·환율·뉴스·시황·랭킹·체결강도·기간수익/시총·자산지수)으로 전면 재작성, 마켓 요약 스트립. 외부 연동(환율 open.er-api·뉴스 한국RSS·시총 CoinGecko)·체결강도(WS)·인트라데이(60분봉) 실구현. 상세는 작업 이력 Phase 29.
 - **코드리뷰 후속 개선 + react-query + 헤더 자산운용 톤 재명명 + 포트폴리오 페이지 완성 + 전역 로딩게이트 + 백테스트 2분리(2026-06-09)** — Phase 30. **백엔드**: 월봉/주봉 canonical 장기 TTL(숨은 팬아웃 제거)·페어 백테스트 β 룩어헤드 제거(형성/거래기간 OOS)·모멘텀 롱온리 토글·로그 이중출력 제거·`/ws/market` 입력검증·pytest 26. **프론트**: react-query 도입(동일키 디둡·캐시 재사용)·다크모드 차트 즉시반영·헤더 4그룹 자산운용 톤(시황·마켓·리서치·전략, 종목비교→리서치)·포트폴리오 페이지 확장(CAL·목표수익률 슬라이더·리스크기여도·상관행렬·자산표)·표시형 페이지 전역 로딩/에러 게이트·백테스트→[백테스트(전략실행)/검증·시뮬레이션] 2페이지 분리. WS 실시간 갱신 end-to-end 검증 통과. 상세는 작업 이력 Phase 30.
+- **전수 리뷰(4관점) 후속: 퀀트 정확성·인증·실행연결·정직표기(2026-06-10)** — Phase 31. Q1 상관 수익률 기반·Q2 페어 FDR·Q3 페어 실제 2-leg PnL·Q5 RSI Wilder·Q6 변동성 타게팅 사이징·Q8 도미넌스 시총(CoinGecko /global)·Q9 실제 F&G(alternative.me)·Q10 체결강도 라벨. **OAuth2+JWT(HttpOnly 쿠키, WS는 ws-ticket) 로그인·전 라우터 가드·레이트리밋·보안헤더**. 시그널 집계 라우터+패널·CSV export, /system 외부소스 헬스, 통합 Caveat·rf=0·생존편향, 외부소스 에러 60s 캐시. pytest 26→43, 프론트 vitest 9 도입. 상세는 작업 이력 Phase 31.
+- **성능(스로틀 우선·TTL·워머)·react-query·'/' 전면 실시간·로그인 재디자인(2026-06-10)** — Phase 32. 포그라운드 우선 스로틀·일봉 1h/60분봉 5분 TTL·스파크라인 전종목 프리페치·주기 워머 분산·LRU 읽기터치. react-query keepPreviousData·gcTime 1h·staleTime 5분. '/' 전 요소 실시간화(거래대금·재정렬·필터카운트·52주위치·1개월수익·점유율·순위·캔들 슬라이딩)+WS 인증 티켓. 경량 SVG 스파크라인·시그널 배지·최근 본 코인 왼쪽 플로팅. 로그인 plain 재디자인(큰 로고 인트로·언더라인 인라인 폼·비번 눈토글). 상세는 작업 이력 Phase 32.
 
 **다음 작업 (우선순위 순)**
-1. **브라우저 육안 검증** — Phase 24~30 변경분 미검증(WS 실시간 갱신은 Phase 30에서 end-to-end 검증 완료). 특히 **Phase 30 — 헤더 자산운용 톤 재명명(시황·마켓·리서치·전략)·포트폴리오 페이지 확장(CAL·슬라이더·상관행렬·리스크기여도)·전역 로딩/에러 게이트·백테스트 2분리(/tools/validation)·react-query 캐시 동작** + Phase 29 코인동향 대시보드. **신규 백엔드 라우트는 서버 재기동 필요**(트렌드는 60분봉 팬아웃으로 부팅↑ → dev `SKIP_PREFETCH=1`).
-2. **TS strict 점진 강화** — 현재 `strict:false`로 전환 완료(빌드·lint·`tsc --noEmit` 그린). `any` 캐스팅·`useState` 제네릭을 실제 타입(API 응답 인터페이스)으로 좁히기.
-3. **수익률 레버 후속(선택)** — 인트라데이(분봉) 백테스트·김치프리미엄·멀티팩터 컴포지트 스코어.
-4. **AI 리포트 LLM 연동** — `GEMINI_API_KEY` + `report_service.py` Gemini 호출부 주석 해제.
+1. **배포(AWS) 보안 설정** — 배포 시 `AUTH_SECRET`(강한 랜덤)·`COOKIE_SECURE=1`·`CORS_ORIGINS` 환경변수 주입 필수. 앱 레벨 레이트리밋은 backstop이고 **진짜 DDoS/비용 방어선은 CloudFront/WAF/ALB**(엣지). 인증 계정은 현재 하드코딩 `test/test`(과제용).
+2. **브라우저 육안 검증** — Phase 24~32 변경분(특히 Phase 32 '/' 실시간·로그인). 인증이 걸려 **재기동+test/test 로그인** 필요. dev는 `SKIP_PREFETCH=1`(워밍 생략, 단 그때 스파크라인 전종목 콜드라 첫 코인목록 진입이 느릴 수 있음 → 화면 검증은 워밍 켜고 띄우는 게 정확).
+3. **분석 가이드(`/guide`)·도움말(`/help`) 갱신** — 내용 최신화(Phase 31~32 반영) + **가이드에 이미지(스크린샷) 첨부**. ⚠️ 둘 다 현재 `window.open` 별도 창인데, **팝업을 화면 중앙에서 뜨게**(현 `width=860,height=900`만 지정 → `left/top` 중앙 계산 추가).
+4. **헤더 드롭다운 영역 개선** — 좌(마켓·리서치·전략)·우(⋯·AI 등) 드롭다운이 **호버로만 열려 불편**(터치/이동 시 닫힘). 열림 영역을 넉넉히 + 클릭 토글 병행 등으로 제대로 잡기.
+5. **AI 리포트 LLM 연동** — `GEMINI_API_KEY` + `report_service.py` Gemini 호출부 주석 해제(`google-genai` 설치).
+6. **TS strict 점진 강화** — `strict:false`. `any` 캐스팅·`useState` 제네릭을 실제 API 응답 타입으로.
 
 **의도적으로 보류**: **Docker화(Dockerfile·docker-compose, 나중 작업)** · Redis(분산 캐시, 나중 작업) · LLM 종목 한 줄 요약(나중 작업) · async httpx(병목=업비트 레이트리밋이라 실익 음). (※ TypeScript·다크모드·테스트 코드는 Phase 26~27에서 완료돼 보류 해제. 환경변수화로 배포 설정 일부 진척.)
 
@@ -397,3 +413,25 @@ P2-1~P2-3 묶음.
 - **백테스트 2분리**: 7종이 목적상 이질적(전략 실행 vs 검증) → `/tools/backtest`(전략 실행: MA·RSI·추세추종·포트폴리오 보유) + `/tools/validation`(검증·시뮬: 전략비교·워크포워드·몬테카를로) 신설. 헤더 그룹명 포트폴리오→**전략**.
 - **상관 네트워크 여백**: 캔버스 흰 여백 축소 + `preserveAspectRatio="xMidYMid meet"`(찌그러짐 방지). (이후 사용자가 화면 보고 추가 미세조정)
 - 검증: 백엔드 `pytest 26/26`·`compileall`, 프론트 `tsc`·`lint`·`build` 그린. **WS 실시간 갱신 end-to-end 검증**(8001 임시서버, `/ws/tickers`·`/ws/market`·미상장 거부 3종 통과). 포트폴리오 신규 필드 실데이터 산출 확인.
+
+### Phase 31 — 전수 리뷰(개발/디자인/PM/퀀트) 후속: 퀀트 정확성·인증·실행연결·정직표기 (2026-06-10)
+4관점 전수 리뷰에서 도출한 항목을 사용자 승인분만 일괄 구현. 의사결정은 엔지니어링노트.
+- **퀀트 정확성 수정**: ⑴**Q1 상관 = 일간 수익률 기반**(`analysis_service.get_correlation`이 종가 '레벨'끼리 피어슨을 구해 허위상관이 났던 것 → `_daily_returns`로 수정, quant network/PCA와 통일) ⑵**Q5 RSI Wilder 평활**(매 봉 단순평균 → 첫 period 시드+α=1/period 지수평활, 백엔드 `_rsi`·프론트 `calcRSI` 동일) ⑶**Q2 공적분 페어 BH-FDR 다중검정 보정**(수백 페어를 α=0.05로 개별검정하면 우연 발견 다수 → Benjamini-Hochberg 임계, `CointPair.fdr_pass`·`PairsResult.found_fdr` 표기) ⑷**Q3 페어 검증수익 = 실제 2-leg PnL**(로그스프레드 변화 프록시 → (자산1−β·자산2) 달러중립 일간수익, 거래비용, `_pair_backtest(p1,p2,spread,beta,...)`) ⑸**Q6 단일전략 변동성 타게팅 사이징**(올인/올아웃 토이 보완 — 진입 시 직전20일 실현변동성으로 비중 축소, `target_vol` 파라미터·`avg_position` 노출) ⑹**Q8 도미넌스 = 시총 기준**(거래대금 비중 → CoinGecko `/global` `market_cap_percentage.btc`, 실패 시 거래대금 폴백, 라벨로 출처 명시) ⑺**Q9 공포·탐욕 = 실제 F&G**(자체 breadth 휴리스틱 → alternative.me 연동, 실패 시 자체 폴백 '자체' 표식, `fng_service.py`) ⑻**Q10 체결강도 '당일 누적' 라벨**(순간압력 아님 명시).
+- **보안/인증(가장 강하게)**: `core/security.py`(PyJWT HS256 + bcrypt) + `core/ratelimit.py`(IP 토큰버킷 전역 레이트리밋 + 로그인 brute-force 잠금) + `routers/auth.py`(`/api/auth/login·token·refresh·logout·me`). **JWT를 HttpOnly·Secure·SameSite=Strict 쿠키**로 보관(localStorage 미사용), access(30분)+refresh(7일). **전 데이터 라우터에 `Depends(current_user)` 일괄 가드**(/health만 예외), **보안 헤더**(nosniff·DENY·Referrer·HSTS), **WS도 인증**(처음엔 쿠키, 이후 브라우저 WS 쿠키 미전송 우회 위해 **단기 ws 티켓** `/api/auth/ws-ticket`+`?token=`으로 전환). 프론트 `contexts/Auth.tsx`+`useAuth.ts`·`pages/Login.tsx`·`App.tsx` `RequireAuth`/`ProtectedShell` 가드·axios `withCredentials`+401 자동 refresh.
+- **실행 연결(actionability)**: `services/signal_service.py`+`routers/signals.py`(`/api/signals`) — 모멘텀 롱·페어 z>2·국면 전환·52주 돌파/급등을 합성(기존 캐시 재사용, 팬아웃0). 프론트 `components/SignalsPanel.tsx`(대시보드)·코인상세 시그널 배지. **CSV export**(`utils/csv.ts`, BOM+이스케이프) — 기간표·스크리너.
+- **관측성**: `metrics.record_source` + `/system` **외부 소스 헬스**(환율·뉴스·시총·F&G·체결강도 WS 마지막 성공/실패 시각·정상여부).
+- **신뢰성/정직표기**: 통합 `components/Caveat.tsx`(회색 한 줄, amber 박스 지양) — 백테스트·모멘텀·페어·포트폴리오·리스크에 인샘플·생존편향·거래비용·rf=0 명시(SurvivorshipNote 흡수).
+- **인프라**: 콜드 캐시 경로 single-flight, `get_tickers` 조립 결과 캐시화, 캐시 LRU 읽기-터치+상한 20k.
+- **UX**: 스크리너 결과에 '거른 기준 컬럼' 동적 노출(BTC베타·거래량급증·변동성z), 대시보드 외부소스를 전역 게이트에서 분리(인라인 degrade) — 이후 Phase 32에서 정책 재정의.
+- **테스트/CI**: 백엔드 `test_improvements.py`(RSI·사이징·FDR·2-leg·JWT·레이트리밋·F&G·뉴스/FX 파서) → **pytest 26→43**, 프론트 **vitest 도입**(format·csv·PageError·Login = 9), CI에 vitest 단계. requirements `bcrypt`·`PyJWT`, package `vitest`·`jsdom`·`@testing-library/*`.
+- 검증: 백엔드 `pytest 43`·`compileall`, 프론트 `tsc`·`lint`·`build`·`vitest 9` 그린. 인증 스모크(미인증 401·로그인·me·ws-ticket decode) 통과.
+
+### Phase 32 — 성능(스로틀 우선·TTL·워머)·react-query·'/' 전면 실시간·로그인 재디자인 (2026-06-10)
+"페이지 이동 시 가끔 부팅 데이터 로드를 다시 해 느리다"의 원인 진단 → 전역 업비트 스로틀을 백그라운드 팬아웃이 점유해 포그라운드가 줄 서던 것 + 인메모리 캐시의 콜드. 사용자와 정책을 합의해 일괄 개선.
+- **성능**: ⑴**포그라운드 우선 스로틀**(`upbit_rest`: 백그라운드 호출(스레드명 `cache-revalidate`/`periodic-warm`)을 `_bg_lock`으로 직렬화+포그라운드 대기 시 양보, 사용자 요청은 다음 슬롯만 대기) ⑵**일봉 TTL 600s→1시간**·**60분봉 30s→5분**(`TTL_CANDLE_INTRADAY`)·**스파크라인 전 종목 프리페치+TTL 30분**(`_SPARK_LIMIT` 제거) ⑶**주기 워머 분산**(240s를 7그룹 staggered)+외부소스도 부팅 프리페치 포함 ⑷**캐시 LRU 읽기-터치**(핫 키 축출 방지)+상한 20k ⑸**외부소스 게이팅**: callable TTL로 **에러 60초 캐시**(죽은 소스 재-매달림 방지)+httpx 타임아웃 4초, 프론트는 게이트에 포함(워밍 후 캐시히트, 죽으면 SourceError).
+- **react-query**: `keepPreviousData`(코인/인터벌 전환 시 옛 화면 유지)·`gcTime 1시간`(재방문 즉시)·`staleTime 5분`.
+- **'/' 전 요소 실시간화**(실시간 의미 있는 것 전부): 우측 리스트 **거래대금·실시간 재정렬·필터 카운트**(`useLiveTickers`+store 전역 버전), 코인상세 **52주 위치·1개월 수익률·시장 점유율·거래대금 순위**(현재가/거래대금 종속분 라이브 계산), **캔들차트 실시간 슬라이딩**(WS 틱으로 형성 봉 갱신+새 버킷 시 우측 새 봉 생성·좌측 밀림). 변동성·GARCH·베타·상관 등 실시간 의미 없는 것만 정적. WS 끊김 원인=인증 가드 → **ws 티켓**으로 복구.
+- **'/' 요소 추가**: 경량 SVG 스파크라인(전 행, recharts 아님), 코인상세 시그널 배지, **최근 본 코인 왼쪽 플로팅 패널**(최근 6개, `xl:` 이상).
+- **헤더**: 메뉴 영역 width 통일(min-w-96 중앙정렬).
+- **로그인 재디자인**: `/login` 진입 시 세션 wipe, **plain 다크 그라데이션 배경**(차트 이미지 후보들 비교 후 사용자 plain 선택), **큰 로고 인트로**(scale 2.8→1 settle)+쉬머, **배경에 녹는 언더라인 인라인 폼**(흰 밑줄·흰 글씨), **비밀번호 눈 토글**, 문구 "암호화폐 퀀트 분석 대시보드", 로그아웃 헤더 ⋯. (로그인 차트 캡처용 Playwright는 작업 후 미사용이라 제거.)
+- 검증: 백엔드 `pytest 43`·`compileall`, 프론트 `tsc`·`lint`·`build`·`vitest 9` 그린. 캐시 읽기-터치 회귀 테스트 추가.
