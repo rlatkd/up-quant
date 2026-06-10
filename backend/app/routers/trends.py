@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.schemas.trends import (
     AssetIndices,
+    FearGreed,
     FxResult,
     MarketBrief,
     NewsResult,
@@ -10,7 +11,7 @@ from app.schemas.trends import (
     TrendsIndices,
     VolumePower,
 )
-from app.services import fx_service, news_service, trends_service
+from app.services import fng_service, fx_service, news_service, trends_service
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
@@ -48,3 +49,8 @@ def fx():
 @router.get("/news", response_model=NewsResult)
 def news():
     return news_service.get_news()
+
+
+@router.get("/fear-greed", response_model=FearGreed)
+def fear_greed():
+    return fng_service.get_fear_greed()

@@ -25,10 +25,12 @@ class TrendsIndices(BaseModel):
 
 
 # ── 체결 강도 (WS acc_ask/bid_volume) ──────────────────────────
+# ⚠️ acc_ask/bid_volume은 '당일 누적' 체결량이라, 체결강도는 순간 압력이 아니라
+# '당일 누적 매수/매도 체결 비율'이다(업비트와 동일 정의). 프론트도 '당일 누적'으로 라벨링.
 class VolumePowerItem(BaseModel):
     market: str
     korean_name: str
-    power: float        # 체결강도 = 매수체결량/매도체결량 × 100 (>100 매수 우위)
+    power: float        # 당일 누적 체결강도 = 누적매수체결량/누적매도체결량 × 100 (>100 매수 우위)
 
 
 class VolumePower(BaseModel):
@@ -110,4 +112,15 @@ class MarketBrief(BaseModel):
     fall: int
     avg_change: float
     dominance: float
+    dominance_label: str = "BTC 거래대금 비중"  # 시총 기준이면 "BTC 시총 지배력", 폴백이면 거래대금 비중
     total_volume: float
+
+
+# ── 공포·탐욕 지수 (외부 alternative.me, 실패 시 자체 시장 폭 폴백) ──
+class FearGreed(BaseModel):
+    value: int              # 0(극단적 공포) ~ 100(극단적 탐욕)
+    label: str              # 한글 분류(극단적 공포/공포/중립/탐욕/극단적 탐욕)
+    classification: str     # 원문 분류
+    as_of: str
+    source: str             # "alternative.me"(실제 지수) | "자체(시장 폭)"(폴백)
+    error: str | None = None

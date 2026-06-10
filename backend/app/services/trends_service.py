@@ -240,12 +240,16 @@ async def _ws_collect() -> dict[str, tuple[float, float]]:
 
 
 def _compute_volume_power() -> VolumePower:
+    from app.core import metrics
     try:
         data = asyncio.run(_ws_collect())
     except Exception as e:  # noqa: BLE001
+        metrics.record_source("volume_power_ws", ok=False, error=str(e))
         return VolumePower(buy=[], sell=[], error=f"체결강도 WS 실패 — 소스 점검 필요 ({type(e).__name__})")
     if not data:
+        metrics.record_source("volume_power_ws", ok=False, error="empty")
         return VolumePower(buy=[], sell=[], error="체결강도 데이터 없음 — 소스 점검 필요")
+    metrics.record_source("volume_power_ws", ok=True)
     nmap = _name_map()
     # 유동성 상위만 대상(거래대금 desc), 스테이블코인은 체결강도 의미가 없어 제외
     ranked = sorted(data.items(), key=lambda kv: kv[1][1], reverse=True)[:_VP_LIQUIDITY_TOP]
@@ -316,15 +320,24 @@ def _compute_brief() -> MarketBrief:
     fall = sum(1 for t in tickers if t.change == "FALL")
     total = sum(t.acc_trade_price_24h for t in tickers)
     btc = next((t for t in tickers if t.market == "KRW-BTC"), None)
-    dom = round(btc.acc_trade_price_24h / total * 100, 1) if (btc and total) else 0.0
+    # 도미넌스는 업계 표준인 '시총 기준'(CoinGecko /global)을 우선 쓰고, 외부 실패 시에만
+    # 거래대금 비중으로 폴백한다(라벨로 출처를 명시 — 둘은 다른 지표다).
+    glob = marketcap_service.get_global()
+    if glob.get("btc_dominance"):
+        dom = float(glob["btc_dominance"])
+        dom_label = "BTC 시총 지배력"
+    else:
+        dom = round(btc.acc_trade_price_24h / total * 100, 1) if (btc and total) else 0.0
+        dom_label = "BTC 거래대금 비중"
     avg = round(sum(t.change_rate for t in tickers) / len(tickers) * 100, 2) if tickers else 0.0
     mood = "상승 우위" if rise > fall else "하락 우위" if fall > rise else "혼조세"
     top = max(tickers, key=lambda t: t.change_rate, default=None)
     top_txt = f" 상승률 1위는 {top.korean_name}({top.change_rate * 100:+.1f}%)." if top else ""
     text = (f"오늘 시장은 {mood}입니다 (상승 {rise}·하락 {fall}종, 평균 등락 {avg:+.2f}%). "
-            f"BTC 지배력 {dom}%, 24h 총 거래대금 {_fmt_won(total)}.{top_txt}")
+            f"{dom_label} {dom}%, 24h 총 거래대금 {_fmt_won(total)}.{top_txt}")
     return MarketBrief(text=text, as_of=datetime.now(_KST).strftime("%Y-%m-%d %H:%M KST"),
-                       rise=rise, fall=fall, avg_change=avg, dominance=dom, total_volume=total)
+                       rise=rise, fall=fall, avg_change=avg, dominance=dom,
+                       dominance_label=dom_label, total_volume=total)
 
 
 def get_brief() -> MarketBrief:
