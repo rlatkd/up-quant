@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 
 // 로그인 — 대학원 과제용 단일 계정(test/test). 미인증 시 모든 페이지가 이 화면으로 막힌다.
@@ -7,7 +7,6 @@ import { useAuth } from '../contexts/useAuth'
 export default function Login() {
   const { login, logout } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation() as any
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -25,14 +24,12 @@ export default function Login() {
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
-  const from = location.state?.from?.pathname || '/'
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setError(''); setBusy(true)
     try {
       await login(username.trim(), password)
-      navigate(from, { replace: true })
+      navigate('/', { replace: true })   // 로그인 후 항상 메인(코인 목록)으로
     } catch (err: any) {
       const status = err?.response?.status
       const msg = err?.response?.data?.detail
