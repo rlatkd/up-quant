@@ -12,10 +12,16 @@ const KIND_META: Record<string, { label: string; color: string }> = {
   breakout: { label: '돌파', color: 'text-amber-600 bg-amber-50 dark:bg-amber-500/10' },
 }
 
+// 좌측 시장지수 컬럼 높이를 우측 랭킹 레일과 맞추기 위해 시그널을 고정 칸수로 제한한다.
+// 시그널이 칸수보다 적으면 빈 칸을 회색으로 채워 높이를 유지(많으면 잘라 캡). 칸수 = SLOTS.
+const SLOTS = 12
+
 export default function SignalsPanel() {
   const navigate = useNavigate()
   const { data, loading } = useSignals()
   const items = data.items || []
+  const shown = items.slice(0, SLOTS)
+  const pads = Math.max(0, SLOTS - shown.length)
 
   return (
     <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md overflow-hidden">
@@ -30,17 +36,15 @@ export default function SignalsPanel() {
       {/* 국면 전환은 가장 중요한 거시 신호 — 배너로 강조(알림 성격) */}
       {data.regime_changed && (
         <div className="px-4 py-2 bg-violet-50 dark:bg-violet-500/10 border-b border-violet-100 dark:border-violet-500/20 text-xs text-violet-700 dark:text-violet-300 flex items-center gap-2 cursor-pointer"
-          onClick={() => navigate('/regime')}>
+          onClick={() => navigate('/research/regime')}>
           <span>⚡</span><span>시장 국면이 <b>{data.regime_label}</b>(으)로 전환됐습니다 — 익스포저를 점검하세요. (클릭 → 시장 국면)</span>
         </div>
       )}
       {loading ? (
         <div className="py-8 text-center text-sm text-gray-400">시그널 집계 중…</div>
-      ) : items.length === 0 ? (
-        <div className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">현재 뚜렷한 시그널이 없습니다</div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-gray-100 dark:bg-[#232d40]">
-          {items.map((s: any, i: number) => {
+          {shown.map((s, i: number) => {
             const meta = KIND_META[s.kind] || { label: s.kind, color: 'text-gray-500 bg-gray-50' }
             return (
               <div key={i} onClick={() => s.action && navigate(s.action)}
@@ -58,6 +62,12 @@ export default function SignalsPanel() {
               </div>
             )
           })}
+          {/* 칸수만큼 결과가 없으면 회색 빈 칸으로 채워 높이 유지(전부 없으면 첫 칸에 안내) */}
+          {Array.from({ length: pads }).map((_, i) => (
+            <div key={`pad-${i}`} className="bg-gray-50 dark:bg-[#141b29] px-4 py-2.5 min-h-[58px] flex items-center justify-center">
+              {items.length === 0 && i === 0 && <span className="text-xs text-gray-300 dark:text-gray-600">현재 뚜렷한 시그널 없음</span>}
+            </div>
+          ))}
         </div>
       )}
     </div>
