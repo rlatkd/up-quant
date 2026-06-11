@@ -4,10 +4,14 @@ from pathlib import Path
 from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, NoDecode
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # backend/.env에서 비밀값(GEMINI_API_KEY·AUTH_SECRET 등)을 읽는다(.env는 .gitignore로 추적 제외).
+    # 환경변수가 .env보다 우선. extra="ignore"로 .env에 다른 키가 있어도 무시.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
     app_name: str = "UPquant"
     # 허용할 프론트 오리진. 배포 시 환경변수 CORS_ORIGINS(콤마 구분)로 덮어쓴다.
     # 예: CORS_ORIGINS="https://upquant.app,https://www.upquant.app"
@@ -32,6 +36,10 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5          # 로그인 실패 허용 횟수(윈도우 내)
     login_window_sec: int = 300          # 로그인 실패 카운트 윈도우(초)
     login_lock_sec: int = 600            # 초과 시 잠금(초)
+
+    # ── AI 리포트(Gemini) ──────────────────────────────────────
+    # GEMINI_API_KEY 환경변수(또는 backend/.env)로 주입. 비어 있으면 리포트는 데이터 기반 자동 초안(stub).
+    gemini_api_key: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

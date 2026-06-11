@@ -65,4 +65,4 @@ websockets==16.0
 # ── 개발용(선택) ───────────────────────────────────────────────
 # pytest          # 수치 코어 회귀 테스트 (tests/)
 # ── 선택 기능 활성화 시 ────────────────────────────────────────
-# google-genai    # LLM 투자 리포트(report_service.py Gemini 호출부 주석 해제 + GEMINI_API_KEY)
+google-genai==2.8.0    # LLM 투자 리포트(report_service.py Gemini 호출 / 키는 backend/.env의 GEMINI_API_KEY)
