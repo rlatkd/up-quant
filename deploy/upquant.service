@@ -1,0 +1,16 @@
+[Unit]
+Description=UPquant FastAPI
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/up-quant/backend
+EnvironmentFile=/home/ubuntu/up-quant/backend/.env
+# ⚠️ 단일 프로세스로만 실행한다. 인메모리 캐시 + WebSocket 중계 허브(TickerHub)가 프로세스 상태라,
+#    --workers N(멀티워커)이면 워커마다 캐시·WS가 따로 생겨 캐시 공유·실시간 fan-out이 깨진다.
+ExecStart=/home/ubuntu/up-quant/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+name: deploy-backend
+
+# backend/** 가 main에 푸시되면: EC2에 SSH → git pull → .env 주입(GitHub Secrets) → 의존성 설치 → 서비스 재시작.
+# 비밀은 EC2가 런타임에 읽어야 하므로 배포 때 .env로 기록한다(GitHub Secrets가 단일 소스).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH 배포
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}        # 강한 랜덤(고정 — 바뀌면 전원 로그아웃)
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}    # 과제용 계정 비번
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}      # 예: https://내도메인
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          host: ${{ secrets.EC2_HOST }}                  # api 도메인 또는 EIP
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}                # .pem 내용 전체
+          envs: AUTH_SECRET,AUTH_PASSWORD,CORS_ORIGINS,GEMINI_API_KEY  # 러너→원격 전달(로그 노출 X)
+          script: |
+            set -e
+            cd /home/ubuntu/up-quant
+            git pull origin main
+            # GitHub Secrets → EC2 .env (런타임에 uvicorn이 읽음)
+            cat > backend/.env <<EOF
+            AUTH_SECRET=${AUTH_SECRET}
+            AUTH_USERNAME=test
+            AUTH_PASSWORD=${AUTH_PASSWORD}
+            COOKIE_SECURE=1
+            CORS_ORIGINS=${CORS_ORIGINS}
+            GEMINI_API_KEY=${GEMINI_API_KEY}
+            SKIP_PREFETCH=0
+            EOF
+            chmod 600 backend/.env
+            cd backend
+            .venv/bin/pip install -r requirements.txt
+            sudo systemctl restart upquant
