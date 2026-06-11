@@ -1,43 +1,43 @@
 ﻿import { Link } from 'react-router-dom'
+import { openCenteredWindow } from '../../utils/popup'
 
 // 전 페이지 공통 푸터. 업비트 푸터의 느낌(좌측 브랜드/데이터 출처 + 링크 컬럼 + 하단 면책/저작권)을 본떴다.
 // ⚠️ width는 헤더(full-bleed)와 달리 페이지 본문(max-w-[1440px])에 맞춘다 — 상단 구분선도 본문 폭만큼만.
 // 가짜 사업자정보·연락처는 넣지 않고, 이 프로젝트의 실제 정보(데이터 출처·면책·기술 스택)만 담는다.
 
-// 헤더 그룹(시황·마켓·리서치·포트폴리오)과 라벨을 일치시킨다. '종목 비교'는 리서치로, 스크리너는 마켓에.
+// 헤더 그룹과 1:1로 맞춘다 — 마켓·리서치·전략 드롭다운 항목 그대로. 시장 동향(단일)·코인 목록(로고)은
+// 헤더의 단독 진입점이라 컬럼이 아니라 브랜드 영역 바로가기로 둔다.
 const NAV_COLUMNS = [
   {
     title: '마켓',
     links: [
-      { label: '시황', to: '/dashboard' },
-      { label: '시장 현황', to: '/market' },
-      { label: '섹터', to: '/sectors' },
-      { label: '스크리너', to: '/screener' },
-      { label: '코인 목록', to: '/coins' },
+      { label: '시장 현황', to: '/market/overview' },
+      { label: '섹터', to: '/market/sectors' },
+      { label: '스크리너', to: '/market/screener' },
+      { label: '종목 비교', to: '/market/compare' },
     ],
   },
   {
     title: '리서치',
     links: [
-      { label: '시장 구조', to: '/structure' },
-      { label: '시장 국면', to: '/regime' },
-      { label: '팩터', to: '/factor' },
-      { label: '리스크', to: '/risk' },
-      { label: '종목 비교', to: '/tools/compare' },
+      { label: '시장 구조', to: '/research/structure' },
+      { label: '시장 국면', to: '/research/regime' },
+      { label: '팩터', to: '/research/factor' },
+      { label: '리스크', to: '/research/risk' },
     ],
   },
   {
     title: '전략',
     links: [
-      { label: '최적화', to: '/tools/portfolio' },
-      { label: '백테스트', to: '/tools/backtest' },
-      { label: '검증·시뮬레이션', to: '/tools/validation' },
+      { label: '최적화', to: '/strategy/portfolio' },
+      { label: '백테스트', to: '/strategy/backtest/ma' },
+      { label: '검증', to: '/strategy/validation' },
     ],
   },
 ]
 
-function openWin(path, name) {
-  window.open(path, name, 'width=860,height=900,menubar=no,toolbar=no,location=no,status=no')
+function openWin(path: string, name: string) {
+  openCenteredWindow(path, name)
 }
 
 // 흰 배경은 헤더처럼 뷰포트 전체 width(full-bleed)로 깔고, 맨 아래까지 닿게(여백 없음).
@@ -68,7 +68,12 @@ function Footer() {
               <br></br>
               섹터 분석 · 정량 분석 · 리스크 분석 · 백테스트
             </p>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {/* 헤더의 단독 진입점(로고=코인 목록, 시장 동향)은 드롭다운 컬럼이 아니라 브랜드 영역 바로가기로 */}
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <Link to="/" className="text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">코인 목록</Link>
+              <Link to="/trends" className="text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">시장 동향</Link>
+            </div>
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               데이터 출처 · 업비트 Open API
             </p>
           </div>
@@ -106,15 +111,15 @@ function Footer() {
                 </button>
               </li>
               <li>
+                <Link to="/system" className="text-sm text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">
+                  시스템 모니터링
+                </Link>
+              </li>
+              <li>
                 <a href="https://docs.upbit.com/reference" target="_blank" rel="noreferrer"
                   className="text-sm text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">
                   업비트 Open API ↗
                 </a>
-              </li>
-              <li>
-                <Link to="/system" className="text-sm text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">
-                  시스템 모니터링
-                </Link>
               </li>
             </ul>
           </div>
