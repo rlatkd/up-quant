@@ -155,11 +155,15 @@ export default function ReportModal({ onClose }: any) {
                         <div className="text-xs break-words">{err}</div>
                       </div>
                     ) : (
-                      <Markdown text={d.markdown} />
+                      // 리포트마다 들어간 면책 한 줄(> 본 리포트는…)은 떼고, 맨 아래 한 번만 보여준다.
+                      <Markdown text={d.markdown.replace(/^>\s*본 리포트는[^\n]*$/gm, '').trim()} />
                     )}
                   </section>
                 )
               })}
+              <div className="mt-8 pt-4 border-t border-gray-100 dark:border-[#232d40] text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+                ※ 본 리포트는 정보 제공 목적이며 투자 권유가 아닙니다. 정량 분석은 과거 데이터 기반(생존편향·거래비용 등 한계)이라 미래 수익을 보장하지 않습니다.
+              </div>
             </div>
           )}
         </div>
