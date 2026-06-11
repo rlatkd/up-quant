@@ -166,6 +166,8 @@ def test_fx_change_vs_prev(monkeypatch):
         return r
 
     monkeypatch.setattr(fx_service.httpx, "get", fake_get)
+    # 추이 차트(frankfurter) 호출은 이 테스트와 무관 → 목으로 막아 er-api 호출만 세게 한다.
+    monkeypatch.setattr(fx_service, "_spark_map", lambda: {"dates": [], "rates": {}})
     first = fx_service._fetch()
     usd1 = next(r for r in first.rates if r.pair == "USD/KRW")
     assert usd1.change == 0.0          # 첫 호출은 직전값 없음 → 변화 0
