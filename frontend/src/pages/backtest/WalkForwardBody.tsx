@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type Dispatch, type SetStateAction } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
@@ -6,15 +6,16 @@ import PageLoading from '../../components/ui/PageLoading'
 import InfoTooltip from '../../components/InfoTooltip'
 import { runWalkForward } from '../../api/backtest'
 import { MetricCard, MarketSelect } from './parts'
+import type { Ticker } from '../../types'
 
 // 워크포워드 — in-sample에서 MA 파라미터를 고른 뒤 out-of-sample 구간에서만 성과를 집계(과최적화 검증).
-export default function WalkForwardBody({ market, setMarket, tickers }) {
-  const [data, setData] = useState(null)
+export default function WalkForwardBody({ market, setMarket, tickers, onReady }: { market: string; setMarket: Dispatch<SetStateAction<string>>; tickers: Ticker[]; onReady?: () => void }) {
+  const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const run = () => { setLoading(true); runWalkForward({ market, count: 300, n_splits: 4 }).then(setData).finally(() => setLoading(false)) }
-  useEffect(() => { Promise.resolve().then(run) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const run = () => { setLoading(true); return runWalkForward({ market, count: 300, n_splits: 4 }).then(setData).finally(() => setLoading(false)) }
+  useEffect(() => { Promise.resolve().then(run).finally(() => onReady?.()) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const chartData = data ? data.equity.map(e => ({
+  const chartData = data ? data.equity.map((e: any) => ({
     time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
     value: e.value,
   })) : []
@@ -47,10 +48,10 @@ export default function WalkForwardBody({ market, setMarket, tickers }) {
               sub="out-of-sample만 집계" />
             <MetricCard label="분할 수" value={data.n_splits + '개'} sub="롤링 윈도우" />
             <MetricCard label="평균 OOS 수익"
-              value={(data.folds.reduce((s, f) => s + f.oos_return, 0) / data.folds.length).toFixed(2) + '%'}
+              value={(data.folds.reduce((s: any, f: any) => s + f.oos_return, 0) / data.folds.length).toFixed(2) + '%'}
               sub="구간 평균" />
             <MetricCard label="승 구간"
-              value={data.folds.filter(f => f.oos_return > 0).length + ' / ' + data.folds.length}
+              value={data.folds.filter((f: any) => f.oos_return > 0).length + ' / ' + data.folds.length}
               sub="OOS 수익 > 0" />
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-[#141b29] border border-gray-100 dark:border-[#232d40] rounded-md px-4 py-2.5">
@@ -65,7 +66,7 @@ export default function WalkForwardBody({ market, setMarket, tickers }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(chartData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip contentStyle={{ fontSize: 12 }} formatter={v => [v.toFixed(2), 'OOS 자산']} />
+                <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v: any) => [v.toFixed(2), 'OOS 자산']} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
                 <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="value" />
               </LineChart>
@@ -83,7 +84,7 @@ export default function WalkForwardBody({ market, setMarket, tickers }) {
                 </tr>
               </thead>
               <tbody>
-                {data.folds.map((f, i) => (
+                {data.folds.map((f: any, i: any) => (
                   <tr key={i} className="border-t border-gray-50">
                     <td className="px-4 py-2 text-gray-600 dark:text-gray-300">#{i + 1}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">MA({f.fast}, {f.slow})</td>

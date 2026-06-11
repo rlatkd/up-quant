@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { useCoinStats } from '../hooks/useAnalysis'
@@ -38,8 +38,8 @@ const BASE_RESULT_FIELDS = new Set(['change_rate', 'acc_trade_24h', 'volatility'
 export default function Screener() {
   const { tickers, loading: tLoading, error: tError, retry: tRetry } = useTickers()
   const { data: stats, loading: statsLoading, error: statsError, retry: statsRetry } = useCoinStats()
-  const [conditions, setConditions]  = useState([])
-  const [results, setResults]        = useState(null)
+  const [conditions, setConditions]  = useState<any[]>([])
+  const [results, setResults]        = useState<any>(null)
   const [ranFields, setRanFields]    = useState<string[]>([])  // 마지막 실행에 쓴 조건 필드(결과 표 추가 컬럼용)
   const navigate = useNavigate()
 
@@ -52,8 +52,8 @@ export default function Screener() {
 
   const merged = useMemo(() => {
     if (!tickers.length || !stats.length) return []
-    const statsMap = Object.fromEntries(stats.map(s => [s.market, s]))
-    return tickers.map(t => {
+    const statsMap = Object.fromEntries(stats.map((s) => [s.market, s]))
+    return tickers.map((t) => {
       const s = statsMap[t.market] ?? {}
       const range  = (t.w52_high ?? 0) - (t.w52_low ?? 0)
       const w52_pos = range > 0 ? Math.round((t.trade_price - (t.w52_low ?? 0)) / range * 100) : 50
@@ -78,27 +78,27 @@ export default function Screener() {
     setConditions(prev => [...prev, { id: _uid++, field, op, value }])
   }
 
-  function removeCondition(id) {
+  function removeCondition(id: any) {
     setConditions(prev => prev.filter(c => c.id !== id))
   }
 
-  function updateCondition(id, patch) {
+  function updateCondition(id: any, patch: any) {
     setConditions(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
   }
 
-  function applyPreset(preset) {
-    const conds = preset.conditions.map(c => ({ id: _uid++, ...c }))
+  function applyPreset(preset: any) {
+    const conds = preset.conditions.map((c: any) => ({ id: _uid++, ...c }))
     setConditions(conds)
     setResults(evaluate(conds))
-    setRanFields(conds.map(c => c.field))
+    setRanFields(conds.map((c: any) => c.field))
   }
 
-  function evaluate(conds) {
-    return merged.filter(coin =>
-      conds.every(cond => {
+  function evaluate(conds: any) {
+    return merged.filter((coin) =>
+      conds.every((cond: any) => {
         const v = parseFloat(cond.value)
         if (isNaN(v)) return true
-        const actual = coin[cond.field]
+        const actual = (coin as any)[cond.field]
         if      (cond.op === '>') return actual >  v
         else if (cond.op === '<') return actual <  v
         else if (cond.op === '>=') return actual >= v
@@ -249,8 +249,10 @@ export default function Screener() {
           {results.length === 0 ? (
             <div className="py-16 text-center text-sm text-gray-400 dark:text-gray-500">조건에 맞는 종목이 없습니다</div>
           ) : (
+            // 결과가 길어도 영역이 과도하게 늘어나지 않게 스크롤(기본 ~15행 노출, 헤더는 sticky로 고정)
+            <div className="max-h-[780px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-gray-50 dark:bg-[#141b29] text-xs text-gray-400 dark:text-gray-500 font-medium">
                   <th className="px-4 py-2.5 text-left">종목</th>
                   <th className="px-4 py-2.5 text-right">현재가</th>
@@ -263,7 +265,7 @@ export default function Screener() {
                 </tr>
               </thead>
               <tbody>
-                {results.map(coin => (
+                {results.map((coin: any) => (
                   <tr
                     key={coin.market}
                     onClick={() => navigate(`/coins/${coin.market}`)}
@@ -312,6 +314,7 @@ export default function Screener() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

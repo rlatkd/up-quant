@@ -6,6 +6,7 @@ import { runPortfolio } from '../../api/backtest'
 import { SERIES } from '../../theme'
 import { MetricCard, Spinner } from './parts'
 import { raColor } from './helpers'
+import type { Ticker } from '../../types'
 
 const REBAL_OPTIONS = [
   { v: 0,  label: '매수보유' },
@@ -15,39 +16,39 @@ const REBAL_OPTIONS = [
 
 // 포트폴리오 보유 백테스트 — 종목을 비중대로 들었을 때의 자산 곡선.
 // 종목·비중 출처: preset(포트폴리오 최적화에서 넘어온 ★/◆/▲ 비중) > 기본 3종.
-export default function PortfolioBacktest({ tickers, preset }) {
+export default function PortfolioBacktest({ tickers, preset }: { tickers: Ticker[]; preset?: any }) {
   const init = preset?.markets?.length ? preset.markets.slice(0, 10) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
   const [markets, setMarkets] = useState(init)
   const [wmap, setWmap] = useState(() =>
     preset?.markets?.length && preset?.weights?.length
-      ? Object.fromEntries(preset.markets.map((m, i) => [m, preset.weights[i] ?? 0]))
-      : Object.fromEntries(init.map(m => [m, +(100 / init.length).toFixed(1)]))
+      ? Object.fromEntries(preset.markets.map((m: any, i: any) => [m, preset.weights[i] ?? 0]))
+      : Object.fromEntries(init.map((m: any) => [m, +(100 / init.length).toFixed(1)]))
   )
   const [rebalance, setRebalance] = useState(0)
   const [count, setCount] = useState(180)
   const [fee, setFee] = useState(5)
-  const [result, setResult] = useState(null)
+  const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
-  const nmap = Object.fromEntries(tickers.map(t => [t.market, t.korean_name]))
+  const nmap = Object.fromEntries(tickers.map((t) => [t.market, t.korean_name]))
 
-  function equalize(ms) {
+  function equalize(ms: any) {
     const w = +(100 / ms.length).toFixed(1)
-    setWmap(Object.fromEntries(ms.map(m => [m, w])))
+    setWmap(Object.fromEntries(ms.map((m: any) => [m, w])))
   }
-  function addMarket(m) {
+  function addMarket(m: any) {
     if (!m || markets.includes(m) || markets.length >= 10) return
     const next = [...markets, m]; setMarkets(next); equalize(next)
   }
-  function removeMarket(m) {
-    const next = markets.filter(x => x !== m); setMarkets(next); equalize(next)
+  function removeMarket(m: any) {
+    const next = markets.filter((x: any) => x !== m); setMarkets(next); equalize(next)
   }
 
   async function run() {
     if (markets.length < 1) return
     setLoading(true)
     try {
-      const weights = markets.map(m => wmap[m] ?? 0)
+      const weights = markets.map((m: any) => wmap[m] ?? 0)
       const data = await runPortfolio({ markets, weights, count, rebalance_days: rebalance, fee_bps: fee })
       setResult(data)
     } finally { setLoading(false) }
@@ -57,7 +58,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const equityData = result?.equity.map(e => ({
+  const equityData = result?.equity.map((e: any) => ({
     time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
     value: e.value, benchmark: e.benchmark,
   })) ?? []
@@ -67,7 +68,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
         <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">포트폴리오 구성</div>
         <div className="space-y-1.5 mb-3">
-          {markets.map((m, i) => (
+          {markets.map((m: any, i: any) => (
             <div key={m} className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SERIES[i % SERIES.length] }} />
               <span className="w-28 text-sm text-gray-700 dark:text-gray-200">{m.replace('KRW-', '')} <span className="text-gray-400 dark:text-gray-500 text-xs">{nmap[m]}</span></span>
@@ -83,7 +84,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
           <select value="" onChange={e => addMarket(e.target.value)}
             className="border border-gray-200 dark:border-[#2c3850] rounded px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer focus:outline-none focus:border-brand-400">
             <option value="">+ 종목 추가</option>
-            {tickers.filter(t => !markets.includes(t.market)).slice(0, 80).map(t => (
+            {tickers.filter((t) => !markets.includes(t.market)).slice(0, 80).map((t) => (
               <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} · {t.korean_name}</option>
             ))}
           </select>
@@ -98,7 +99,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
             title="편도 거래비용(bps) · 진입+리밸런스 회전에 차감" className="w-20 border border-gray-200 dark:border-[#2c3850] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-brand-400" placeholder="bps" />
           <button onClick={run} disabled={loading || markets.length < 1}
             className="px-5 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {loading ? '실행 중...' : '백테스트 실행'}
+            {loading ? '실행 중…' : '실행'}
           </button>
         </div>
         <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">※ 비중 합은 자동 정규화 · 마지막 입력칸 = 편도 거래비용(bps, 진입+리밸런스 회전에 차감) · 균등 비중이면 동일가중 벤치마크와 곡선이 겹칩니다.</div>
@@ -124,7 +125,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(equityData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'value' ? '포트폴리오' : '벤치마크']} contentStyle={{ fontSize: 12 }} />
+                <Tooltip formatter={(v: any, n: any) => [v.toFixed(2), n === 'value' ? '포트폴리오' : '벤치마크']} contentStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
                 <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
@@ -135,7 +136,7 @@ export default function PortfolioBacktest({ tickers, preset }) {
           <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
             <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">종목별 기여</div>
             <div className="space-y-2">
-              {result.contributions.map((c, i) => (
+              {result.contributions.map((c: any, i: any) => (
                 <div key={c.market} className="flex items-center gap-3 text-sm">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SERIES[i % SERIES.length] }} />
                   <span className="w-32 text-gray-700 dark:text-gray-200">{c.market.replace('KRW-', '')} <span className="text-gray-400 dark:text-gray-500 text-xs">{c.korean_name}</span></span>

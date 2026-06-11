@@ -10,7 +10,8 @@ const PRESETS: Record<string, string> = {
 
 export default function Caveat({ kind = 'backtest', text }: { kind?: keyof typeof PRESETS | string; text?: string }) {
   const body = text || PRESETS[kind] || PRESETS.backtest
+  // 위 요소와 너무 붙지 않게 공통 위 간격 — 모든 Caveat에 일괄 적용(mt-5 + 옅은 상단 구분선).
   return (
-    <div className="text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">{body}</div>
+    <div className="mt-5 pt-3 border-t border-gray-100 dark:border-[#232d40] text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">{body}</div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type Dispatch, type SetStateAction } from 'react'
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
   ComposedChart, Area,
@@ -8,19 +8,20 @@ import InfoTooltip from '../../components/InfoTooltip'
 import { runMonteCarlo } from '../../api/backtest'
 import { MetricCard, MarketSelect } from './parts'
 import { signedPct } from './helpers'
+import type { Ticker } from '../../types'
 
 // 몬테카를로 — 과거 일간수익률을 부트스트랩해 미래 가격 경로 1000개를 생성, 백분위 부채꼴로 표시.
 const MC_HORIZONS = [7, 30, 60, 90]
 
-export default function MonteCarloBody({ market, setMarket, tickers }) {
+export default function MonteCarloBody({ market, setMarket, tickers, onReady }: { market: string; setMarket: Dispatch<SetStateAction<string>>; tickers: Ticker[]; onReady?: () => void }) {
   const [horizon, setHorizon] = useState(30)
-  const [data, setData] = useState(null)
+  const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const run = (h = horizon) => { setLoading(true); runMonteCarlo({ market, horizon: h }).then(setData).finally(() => setLoading(false)) }
-  useEffect(() => { Promise.resolve().then(() => run()) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const run = (h = horizon) => { setLoading(true); return runMonteCarlo({ market, horizon: h }).then(setData).finally(() => setLoading(false)) }
+  useEffect(() => { Promise.resolve().then(() => run()).finally(() => onReady?.()) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 각 시점의 [p5,p95]·[p25,p75] 범위 Area + 중앙값 라인. recharts Area는 [low,high] 튜플 dataKey를 범위로 그린다.
-  const chartData = data ? data.bands.map(b => ({
+  const chartData = data ? data.bands.map((b: any) => ({
     day: b.day, outer: [b.p5, b.p95], inner: [b.p25, b.p75], median: b.p50,
   })) : []
 
@@ -81,7 +82,7 @@ export default function MonteCarloBody({ market, setMarket, tickers }) {
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={d => d + '일'} minTickGap={24} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} domain={['dataMin', 'dataMax']} />
                 <Tooltip contentStyle={{ fontSize: 12 }}
-                  formatter={(v, n) => {
+                  formatter={(v: any, n: any) => {
                     if (n === 'median') return [v.toFixed(1), '중앙값']
                     if (Array.isArray(v)) return [`${v[0].toFixed(1)} ~ ${v[1].toFixed(1)}`, n === 'outer' ? '90% 구간' : '50% 구간']
                     return [v, n]

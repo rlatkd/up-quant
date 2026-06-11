@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, type ComponentType } from 'react'
+import { useState, useMemo, useEffect, type ComponentType, type Dispatch, type SetStateAction } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ScatterChart, Scatter, BarChart, Bar, LineChart, Line, ComposedChart, Area,
@@ -20,31 +20,32 @@ import {
   useMomentum, usePairs, useRegime,
 } from '../hooks/useQuant'
 import { SERIES } from '../theme'
+import type { AssetPoint, PortfolioSpot, DendrogramResult, MomentumHolding, PairBacktestDetail } from '../types'
 
 // ── 공용 ──────────────────────────────────────────────────────
 const SECTORS = ['스마트 컨트랙트 플랫폼', '인프라', '디파이', '문화/엔터테인먼트', '밈']
-const sectorColor = (cat) => {
+const sectorColor = (cat: string) => {
   const i = SECTORS.indexOf(cat)
   return i >= 0 ? SERIES[i] : '#cbd5e1'
 }
 const CLUSTER_COLORS = ['#4c8dd6', '#e0913c', '#27b3ab', '#d56e83', '#9b7fc7', '#4cae76', '#7d93a8', '#c0853a']
-const sym = (m) => (m || '').replace('KRW-', '')
-const pct = (v) => (v > 0 ? '+' : '') + (v ?? 0).toFixed(2) + '%'
-const up = (v) => (v >= 0 ? 'text-red-500' : 'text-blue-500')
+const sym = (m: string) => (m || '').replace('KRW-', '')
+const pct = (v: number) => (v > 0 ? '+' : '') + (v ?? 0).toFixed(2) + '%'
+const up = (v: number) => (v >= 0 ? 'text-red-500' : 'text-blue-500')
 
 // hex 선형보간 (샤프 색 스케일 등)
-function lerpColor(a, b, t) {
+function lerpColor(a: string, b: string, t: number) {
   const pa = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16))
   const pb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16))
   const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.max(0, Math.min(1, t))))
   return `rgb(${c[0]},${c[1]},${c[2]})`
 }
 
-function SectorLegend({ cats = [] }) {
+function SectorLegend({ cats = [] }: { cats?: string[] }) {
   const list = cats ?? SECTORS
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1">
-      {list.map(c => (
+      {list.map((c) => (
         <span key={c} className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sectorColor(c) }} />
           {c}
@@ -57,15 +58,15 @@ function SectorLegend({ cats = [] }) {
   )
 }
 
-function NObs({ n, label = '관측' }) {
+function NObs({ n, label = '관측' }: { n: number; label?: string }) {
   return <span className="text-[11px] text-gray-400 dark:text-gray-500">{label} {n}일</span>
 }
 
 // ── 1) 포트폴리오 (Markowitz 효율적 경계선) ───────────────────
-function CoinPicker({ selected, setSelected, max = 6 }) {
+function CoinPicker({ selected, setSelected, max = 6 }: { selected: string[]; setSelected: Dispatch<SetStateAction<string[]>>; max?: number }) {
   const { tickers } = useTickers()
-  const add = (m) => setSelected(prev => (prev.includes(m) || prev.length >= max ? prev : [...prev, m]))
-  const remove = (m) => setSelected(prev => prev.filter(x => x !== m))
+  const add = (m: any) => setSelected((prev) => (prev.includes(m) || prev.length >= max ? prev : [...prev, m]))
+  const remove = (m: any) => setSelected((prev) => prev.filter((x) => x !== m))
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {selected.map((m, i) => (
@@ -82,7 +83,7 @@ function CoinPicker({ selected, setSelected, max = 6 }) {
           className="border border-gray-200 dark:border-[#2c3850] rounded px-2 py-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer focus:outline-none focus:border-brand-400"
         >
           <option value="">+ 종목 추가</option>
-          {tickers.filter(t => !selected.includes(t.market)).slice(0, 80).map(t => (
+          {tickers.filter((t) => !selected.includes(t.market)).slice(0, 80).map((t) => (
             <option key={t.market} value={t.market}>{sym(t.market)} · {t.korean_name}</option>
           ))}
         </select>
@@ -91,14 +92,14 @@ function CoinPicker({ selected, setSelected, max = 6 }) {
   )
 }
 
-export function PortfolioSection({ onSend }) {
+export function PortfolioSection({ onSend }: { onSend: (payload: any) => void }) {
   const [selected, setSelected] = useState(['KRW-BTC', 'KRW-ETH', 'KRW-XRP'])
   const { data, loading } = usePortfolio(selected)
   const [fIdx, setFIdx] = useState(-1)   // 목표수익률 슬라이더 인덱스 (-1=기본=최대샤프 근처)
 
   const sharpeRange = useMemo(() => {
     if (!data.points.length) return [0, 1]
-    const ss = data.points.map(p => p.sharpe)
+    const ss = data.points.map((p: any) => p.sharpe)
     return [Math.min(...ss), Math.max(...ss)]
   }, [data.points])
 
@@ -108,7 +109,7 @@ export function PortfolioSection({ onSend }) {
     const t = data.max_sharpe?.ret
     if (t == null) return Math.floor(data.frontier.length / 2)
     let best = 0, bd = Infinity
-    data.frontier.forEach((p, i) => { const d = Math.abs(p.ret - t); if (d < bd) { bd = d; best = i } })
+    data.frontier.forEach((p: any, i: any) => { const d = Math.abs(p.ret - t); if (d < bd) { bd = d; best = i } })
     return best
   }, [data])
   const idx = (fIdx >= 0 && fIdx < data.frontier.length) ? fIdx : defaultIdx
@@ -118,7 +119,7 @@ export function PortfolioSection({ onSend }) {
   const cal = useMemo(() => {
     const ms = data.max_sharpe
     if (!ms || !ms.vol) return []
-    const maxVol = Math.max(ms.vol, ...data.assets.map(a => a.vol)) * 1.05
+    const maxVol = Math.max(ms.vol, ...data.assets.map((a: any) => a.vol)) * 1.05
     const slope = ms.ret / ms.vol
     return [{ vol: 0, ret: 0 }, { vol: maxVol, ret: slope * maxVol }]
   }, [data])
@@ -135,8 +136,8 @@ export function PortfolioSection({ onSend }) {
         <div className="h-72 flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">종목을 2개 이상 선택하세요</div>
       ) : loading ? <Spinner /> : (
         <>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+          <div className="lg:col-span-2 flex flex-col">
             <ResponsiveContainer width="100%" height={360}>
               <ScatterChart margin={{ top: 10, right: 20, bottom: 16, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -145,9 +146,9 @@ export function PortfolioSection({ onSend }) {
                 <YAxis type="number" dataKey="ret" name="수익률" unit="%" tick={{ fontSize: 11, fill: '#9ca3af' }}
                   label={{ value: '연율 수익률 (%)', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#9ca3af' }} />
                 <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ fontSize: 12 }}
-                  formatter={(v, n) => [v.toFixed(2) + '%', n]} />
+                  formatter={(v: any, n: any) => [v.toFixed(2) + '%', n]} />
                 <Scatter data={data.points} isAnimationActive={false}>
-                  {data.points.map((p, i) => {
+                  {data.points.map((p: any, i: any) => {
                     const t = sharpeRange[1] > sharpeRange[0] ? (p.sharpe - sharpeRange[0]) / (sharpeRange[1] - sharpeRange[0]) : 0.5
                     return <Cell key={i} fill={lerpColor('#94a3b8', '#e0913c', t)} fillOpacity={0.5} r={2} />
                   })}
@@ -162,7 +163,7 @@ export function PortfolioSection({ onSend }) {
                   line={{ stroke: '#1763b6', strokeWidth: 2 }} shape={() => null} legendType="none" />
                 {/* 개별 종목 */}
                 <Scatter data={data.assets} isAnimationActive={false} shape="circle" fill="#1763b6">
-                  {data.assets.map((a, i) => <Cell key={i} r={5} fill={SERIES[i % SERIES.length]} />)}
+                  {data.assets.map((a: any, i: any) => <Cell key={i} r={5} fill={SERIES[i % SERIES.length]} />)}
                 </Scatter>
                 {/* 슬라이더로 선택한 경계선 점 */}
                 {fp && <Scatter data={[fp]} isAnimationActive={false} shape="cross" fill="#7c3aed" />}
@@ -188,7 +189,7 @@ export function PortfolioSection({ onSend }) {
                   onChange={e => setFIdx(+e.target.value)}
                   className="w-full cursor-pointer accent-brand-500" />
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                  {fp.weights.map((wv, i) => wv > 0.001 && (
+                  {fp.weights.map((wv: any, i: any) => wv > 0.001 && (
                     <span key={i} className="text-[11px] text-gray-500 dark:text-gray-400">
                       <span className="font-medium text-gray-700 dark:text-gray-200">{sym(data.assets[i]?.market)}</span> {(wv * 100).toFixed(0)}%
                     </span>
@@ -201,23 +202,24 @@ export function PortfolioSection({ onSend }) {
                 공분산: Ledoit-Wolf 수축(강도 {data.shrinkage.toFixed(2)}) — 표본공분산 추정오차로 인한 코너해 완화
               </div>
             )}
+            {/* 자산 간 상관행렬 — 목표수익률 슬라이더 아래(분산효과의 근원). flex-1로 우측 열(개별 종목
+                통계) 바닥까지 높이를 채우고, 행렬은 남는 공간에 세로 중앙정렬해 크게 보이게 한다. */}
+            <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3 mt-4 flex-1 flex flex-col">
+              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">자산 간 상관행렬<InfoTooltip width="w-72">상관이 낮을수록(파랑) 분산효과가 커져 경계선이 더 왼쪽으로 휩니다. 1에 가까울수록(빨강) 함께 움직여 분산이 잘 안 됩니다.</InfoTooltip></div>
+              <div className="flex-1 flex flex-col justify-center">
+                <CorrMatrix labels={data.corr_labels} matrix={data.corr_matrix} />
+              </div>
+            </div>
           </div>
           <div className="space-y-3">
             <WeightCard title="★ 최대 샤프 포트폴리오" spot={data.max_sharpe} onSend={onSend} />
             <WeightCard title="◆ 최소 변동성 포트폴리오" spot={data.min_vol} onSend={onSend} />
             {data.risk_parity && <WeightCard title="▲ 리스크 패리티 (기대수익 추정 비의존·OOS 견고)" spot={data.risk_parity} onSend={onSend} />}
-          </div>
-        </div>
-
-        {/* 입력·진단 — 상관행렬(분산효과의 근원) + 자산 통계 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
-          <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
-            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">자산 간 상관행렬<InfoTooltip width="w-72">상관이 낮을수록(파랑) 분산효과가 커져 경계선이 더 왼쪽으로 휩니다. 1에 가까울수록(빨강) 함께 움직여 분산이 잘 안 됩니다.</InfoTooltip></div>
-            <CorrMatrix labels={data.corr_labels} matrix={data.corr_matrix} />
-          </div>
-          <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
-            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">개별 종목 통계 (연율)</div>
-            <AssetStatsTable assets={data.assets} />
+            {/* 개별 종목 통계 — 비중 카드 아래, 좁은 우측 열(백테스트 표 폭) */}
+            <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
+              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">개별 종목 통계 (연율)</div>
+              <AssetStatsTable assets={data.assets} />
+            </div>
           </div>
         </div>
         <div className="mt-3"><Caveat kind="portfolio" /></div>
@@ -228,22 +230,23 @@ export function PortfolioSection({ onSend }) {
 }
 
 // 자산 간 상관행렬 히트맵 — 파랑(음의 상관)·흰(무상관)·빨강(높은 양의 상관).
-function CorrMatrix({ labels, matrix }) {
+function CorrMatrix({ labels, matrix }: { labels: string[]; matrix: number[][] }) {
   if (!matrix?.length) return <div className="text-xs text-gray-400 py-6 text-center">데이터 없음</div>
-  const bg = (v) => v >= 0 ? lerpColor('#f8fafc', '#ef4444', Math.min(1, v)) : lerpColor('#f8fafc', '#3b82f6', Math.min(1, -v))
+  const bg = (v: any) => v >= 0 ? lerpColor('#f8fafc', '#ef4444', Math.min(1, v)) : lerpColor('#f8fafc', '#3b82f6', Math.min(1, -v))
+  // 영역 가로폭에 꽉 차게(table-fixed w-full) — 데이터 칸은 남는 폭을 균등 분할해 커진다. 행 높이도 넉넉히.
   return (
-    <div className="overflow-x-auto">
-      <table className="text-[11px] border-collapse mx-auto">
+    <div className="w-full overflow-x-auto">
+      <table className="w-full text-sm border-collapse table-fixed">
         <thead>
-          <tr><th className="w-10" />{labels.map(l => <th key={l} className="px-1 py-0.5 font-medium text-gray-400 dark:text-gray-500">{sym(l)}</th>)}</tr>
+          <tr><th className="w-14" />{labels.map((l) => <th key={l} className="px-1 py-1.5 font-medium text-gray-400 dark:text-gray-500">{sym(l)}</th>)}</tr>
         </thead>
         <tbody>
           {matrix.map((row, i) => (
             <tr key={i}>
-              <td className="pr-1.5 text-right font-medium text-gray-400 dark:text-gray-500">{sym(labels[i])}</td>
+              <td className="pr-2 text-right font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">{sym(labels[i])}</td>
               {row.map((v, j) => (
-                <td key={j} className="text-center tabular-nums text-gray-700"
-                  style={{ backgroundColor: bg(v), width: 38, height: 26 }}>{v.toFixed(2)}</td>
+                <td key={j} className="text-center tabular-nums text-gray-700 border border-white/60 dark:border-[#1a2234]"
+                  style={{ backgroundColor: bg(v), height: 56 }}>{v.toFixed(2)}</td>
               ))}
             </tr>
           ))}
@@ -254,7 +257,7 @@ function CorrMatrix({ labels, matrix }) {
 }
 
 // 개별 종목 연율 통계 표 — 수익률·변동성·샤프.
-function AssetStatsTable({ assets }) {
+function AssetStatsTable({ assets }: { assets: AssetPoint[] }) {
   if (!assets?.length) return <div className="text-xs text-gray-400 py-6 text-center">데이터 없음</div>
   return (
     <table className="w-full text-xs">
@@ -280,11 +283,11 @@ function AssetStatsTable({ assets }) {
   )
 }
 
-function WeightCard({ title, spot, onSend }) {
+function WeightCard({ title, spot, onSend }: { title: string; spot: PortfolioSpot; onSend?: (payload: any) => void }) {
   // 최적 비중을 백테스트로 넘길 payload (비중은 %로 — 백테스트가 % 입력을 받음)
-  const send = () => onSend({
-    markets: spot.weights.map(w => w.market),
-    weights: spot.weights.map(w => +(w.weight * 100).toFixed(1)),
+  const send = () => onSend?.({
+    markets: spot.weights.map((w) => w.market),
+    weights: spot.weights.map((w) => +(w.weight * 100).toFixed(1)),
   })
   return (
     <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
@@ -339,27 +342,27 @@ function NetworkSection() {
   // d3-force 정적 레이아웃(애니메이션 없이 N틱 수렴 후 좌표 고정).
   const laid = useMemo(() => {
     if (!data.nodes.length) return { nodes: [], edges: [] }
-    const nodes = data.nodes.map(n => ({ ...n }))
-    const idx = Object.fromEntries(nodes.map((n, i) => [n.market, i]))
-    const links = data.edges.map(e => ({ source: idx[e.source], target: idx[e.target], corr: e.corr }))
+    const nodes = data.nodes.map((n: any) => ({ ...n }))
+    const idx = Object.fromEntries(nodes.map((n: any, i: any) => [n.market, i]))
+    const links = data.edges.map((e: any) => ({ source: idx[e.source], target: idx[e.target], corr: e.corr }))
     const sim = forceSimulation(nodes)
       .force('charge', forceManyBody().strength(-160))
-      .force('link', forceLink(links).distance(d => 40 + (1 - d.corr) * 70).strength(0.4))
+      .force('link', forceLink(links).distance((d: any) => 40 + (1 - d.corr) * 70).strength(0.4))
       .force('center', forceCenter(W / 2, H / 2))
-      .force('collide', forceCollide().radius(d => 8 + d.degree * 1.6))
+      .force('collide', forceCollide().radius((d: any) => 8 + d.degree * 1.6))
       .stop()
     for (let i = 0; i < 300; i++) sim.tick()
     const pad = 24
-    nodes.forEach(n => {
+    nodes.forEach((n: any) => {
       n.x = Math.max(pad, Math.min(W - pad, n.x))
       n.y = Math.max(pad, Math.min(H - pad, n.y))
     })
     // forceLink가 link.source/target을 노드 객체로 치환하므로 좌표를 명시적으로 해석해 반환.
-    const edges = links.map(l => ({ x1: l.source.x, y1: l.source.y, x2: l.target.x, y2: l.target.y, corr: l.corr }))
+    const edges = links.map((l: any) => ({ x1: l.source.x, y1: l.source.y, x2: l.target.x, y2: l.target.y, corr: l.corr }))
     return { nodes, edges }
   }, [data])
 
-  const maxDeg = Math.max(1, ...laid.nodes.map(n => n.degree))
+  const maxDeg = Math.max(1, ...laid.nodes.map((n: any) => n.degree))
 
   return (
     <Card>
@@ -374,12 +377,12 @@ function NetworkSection() {
             <svg viewBox={`0 0 ${W} ${VH}`} preserveAspectRatio="xMidYMid meet" className="w-full" style={{ height: VH }}>
               {/* 그래프(W×H)를 더 큰 영역(W×VH) 안에서 세로 중앙에 배치 */}
               <g transform={`translate(0, ${(VH - H) / 2})`}>
-                {laid.edges.map((e, i) => (
+                {laid.edges.map((e: any, i: any) => (
                   <line key={i}
                     x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
                     stroke="#cbd5e1" strokeWidth={0.5 + e.corr * 2} strokeOpacity={0.25 + e.corr * 0.45} />
                 ))}
-                {laid.nodes.map((n, i) => {
+                {laid.nodes.map((n: any, i: any) => {
                   const r = 5 + n.degree * 1.8
                   const isHub = n.degree >= Math.max(4, maxDeg - 1)
                   return (
@@ -423,7 +426,7 @@ function PcaSection() {
                 <BarChart data={scree} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
                   <XAxis dataKey="index" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={v => 'PC' + v} />
                   <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} unit="%" />
-                  <Tooltip contentStyle={{ fontSize: 12 }} formatter={v => v.toFixed(2) + '%'} labelFormatter={v => 'PC' + v} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v: any) => v.toFixed(2) + '%'} labelFormatter={v => 'PC' + v} />
                   <Bar dataKey="explained" fill="#4c8dd6" radius={[2, 2, 0, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
@@ -439,7 +442,7 @@ function PcaSection() {
               <YAxis type="number" dataKey="pc2" name="PC2" domain={[-1, 1]} tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <ZAxis range={[40, 40]} />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ fontSize: 12 }}
-                formatter={(v, n) => [v.toFixed(2), n]} labelFormatter={() => ''}
+                formatter={(v: any, n: any) => [v.toFixed(2), n]} labelFormatter={() => ''}
                 content={({ payload }) => payload?.[0] ? (
                   <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded px-2 py-1 text-xs shadow-sm">
                     <b>{sym(payload[0].payload.market)}</b> {payload[0].payload.korean_name}<br />
@@ -447,7 +450,7 @@ function PcaSection() {
                   </div>
                 ) : null} />
               <Scatter data={data.loadings} isAnimationActive={false}>
-                {data.loadings.map((l, i) => <Cell key={i} fill={sectorColor(l.category)} />)}
+                {data.loadings.map((l: any, i: any) => <Cell key={i} fill={sectorColor(l.category)} />)}
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
@@ -487,7 +490,7 @@ function ClusterSection() {
                 </div>
               ) : null} />
               <Scatter data={km.points} isAnimationActive={false}>
-                {km.points.map((p, i) => <Cell key={i} fill={CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length]} fillOpacity={0.7} />)}
+                {km.points.map((p: any, i: any) => <Cell key={i} fill={CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length]} fillOpacity={0.7} />)}
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
@@ -506,13 +509,13 @@ function ClusterSection() {
   )
 }
 
-function Dendrogram({ dn }) {
+function Dendrogram({ dn }: { dn: DendrogramResult }) {
   if (!dn.icoord.length) return <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">데이터 없음</div>
   const allX = dn.icoord.flat(), allY = dn.dcoord.flat()
   const xMax = Math.max(...allX), yMax = Math.max(...allY)
   const W = Math.max(640, dn.markets.length * 22), H = 300, padB = 70, padT = 8
-  const sx = (x) => (x / xMax) * (W - 20) + 10
-  const sy = (y) => padT + (1 - y / yMax) * (H - padT - padB)
+  const sx = (x: any) => (x / xMax) * (W - 20) + 10
+  const sy = (y: any) => padT + (1 - y / yMax) * (H - padT - padB)
   const leafX = dn.markets.map((_, i) => sx(5 + i * 10))
   return (
     <div className="w-full overflow-x-auto">
@@ -523,7 +526,7 @@ function Dendrogram({ dn }) {
           return <polyline key={k} points={pts} fill="none" stroke="#7d93a8" strokeWidth={1} />
         })}
         {dn.markets.map((m, i) => (
-          <text key={m} x={leafX[i]} y={H - padB + 12} fontSize={9} fill={sectorColor(dn.categories[i])}
+          <text key={m} x={leafX[i]} y={H - padB + 12} fontSize={9} fill={sectorColor(dn.categories[i] ?? '')}
             transform={`rotate(-90 ${leafX[i]} ${H - padB + 12})`} textAnchor="end">{sym(m)}</text>
         ))}
       </svg>
@@ -570,13 +573,13 @@ function MomentumSection() {
                 tick={{ fontSize: 10, fill: '#9ca3af' }} />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <Tooltip contentStyle={{ fontSize: 12 }} labelFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR')}
-                formatter={(v, n) => [v.toFixed(1), n === 'factor' ? (longOnly ? '롱온리 전략' : '모멘텀 팩터') : '벤치마크']} />
+                formatter={(v: any, n: any) => [v.toFixed(1), n === 'factor' ? (longOnly ? '롱온리 전략' : '모멘텀 팩터') : '벤치마크']} />
               <ReferenceLine y={100} stroke="#e5e7eb" />
               <Line dataKey="factor" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} />
               <Line dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
-          <div className={`grid ${longOnly ? 'grid-cols-1' : 'grid-cols-2'} gap-4 mt-4`}>
+          <div className={`grid ${longOnly ? 'grid-cols-1 max-w-md' : 'grid-cols-2 max-w-2xl'} gap-4 mt-4 mx-auto`}>
             <HoldingList title="현재 롱 (모멘텀 상위)" rows={data.long} color="text-red-500" />
             {!longOnly && <HoldingList title="현재 숏 (모멘텀 하위)" rows={data.short} color="text-blue-500" />}
           </div>
@@ -587,12 +590,12 @@ function MomentumSection() {
   )
 }
 
-function HoldingList({ title, rows, color }) {
+function HoldingList({ title, rows, color }: { title: string; rows: MomentumHolding[]; color: string }) {
   return (
     <div className="border border-gray-100 dark:border-[#232d40] rounded-md p-3">
       <div className={`text-xs font-semibold mb-2 ${color}`}>{title}</div>
       <div className="space-y-1">
-        {rows.map(h => (
+        {rows.map((h) => (
           <div key={h.market} className="flex justify-between text-xs">
             <span className="text-gray-700 dark:text-gray-200">{sym(h.market)} <span className="text-gray-400 dark:text-gray-500">{h.korean_name}</span></span>
             <span className={`font-medium tabular-nums ${up(h.momentum)}`}>{pct(h.momentum)}</span>
@@ -604,13 +607,13 @@ function HoldingList({ title, rows, color }) {
 }
 
 // ── 6) 공적분 페어트레이딩 ────────────────────────────────────
-function SignalBadge({ signal }) {
+function SignalBadge({ signal }: { signal: string }) {
   const map = {
     LONG_SPREAD: ['롱 스프레드', 'bg-red-50 text-red-600'],
     SHORT_SPREAD: ['숏 스프레드', 'bg-blue-50 text-blue-600'],
     NEUTRAL: ['중립', 'bg-gray-100 dark:bg-[#222c3e] text-gray-500 dark:text-gray-400'],
   }
-  const [label, cls] = map[signal] || map.NEUTRAL
+  const [label, cls] = (map as any)[signal] || map.NEUTRAL
   return <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${cls}`}>{label}</span>
 }
 
@@ -629,10 +632,10 @@ function PairsSection() {
         <>
           {data.best && <PairBacktestChart best={data.best} />}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead>
                 <tr className="text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
-                  <th className="px-3 py-2 text-left font-medium">페어</th>
+                  <th className="px-3 py-2 text-left font-medium w-[22%]">페어</th>
                   <th className="px-3 py-2 text-right font-medium">p값</th>
                   <th className="px-3 py-2 text-center font-medium">FDR</th>
                   <th className="px-3 py-2 text-right font-medium">헤지비율 β</th>
@@ -643,7 +646,7 @@ function PairsSection() {
                 </tr>
               </thead>
               <tbody>
-                {data.pairs.map((p, i) => (
+                {data.pairs.map((p: any, i: any) => (
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-100">
                       {sym(p.market1)} <span className="text-gray-300">↔</span> {sym(p.market2)}
@@ -671,7 +674,7 @@ function PairsSection() {
 }
 
 // 최우수(최저 p값) 페어의 사후검증 — 스프레드 z(±진입선)와 전략 자산곡선을 겹쳐 "실제로 통했는지" 보여준다.
-function PairBacktestChart({ best }) {
+function PairBacktestChart({ best }: { best: PairBacktestDetail }) {
   const total = best.points.length ? best.points[best.points.length - 1].equity - 100 : 0
   return (
     <div className="mb-4 px-3 pt-3 pb-1 rounded-md bg-gray-50 dark:bg-[#0f1626]">
@@ -693,7 +696,7 @@ function PairBacktestChart({ best }) {
           <Tooltip
             isAnimationActive={false}
             labelFormatter={(t) => new Date(t * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-            formatter={(v, n) => [typeof v === 'number' ? v.toFixed(2) : v, n === 'equity' ? '자산(100기준)' : 'z점수']}
+            formatter={(v: any, n: any) => [typeof v === 'number' ? v.toFixed(2) : v, n === 'equity' ? '자산(100기준)' : 'z점수']}
           />
           <ReferenceLine yAxisId="z" y={best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
           <ReferenceLine yAxisId="z" y={-best.entry} stroke="#f59e0b" strokeDasharray="4 3" />
@@ -721,7 +724,7 @@ function RegimeSection() {
   const { data, loading } = useRegime(2)
   // 연속 같은 국면 구간을 묶어 배경 밴드(ReferenceArea)로.
   const segments = useMemo(() => {
-    const segs = []
+    const segs: any[] = []
     let start = 0
     for (let i = 1; i <= data.points.length; i++) {
       if (i === data.points.length || data.points[i].regime !== data.points[start].regime) {
@@ -757,13 +760,13 @@ function RegimeSection() {
                 tick={{ fontSize: 10, fill: '#9ca3af' }} />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} domain={['auto', 'auto']} />
               <Tooltip contentStyle={{ fontSize: 12 }} labelFormatter={t => new Date(t * 1000).toLocaleDateString('ko-KR')}
-                formatter={v => [v.toFixed(1), '시장지수']} />
+                formatter={(v: any) => [v.toFixed(1), '시장지수']} />
               <Area dataKey="index" stroke="#1763b6" strokeWidth={1.5} fill="#1763b6" fillOpacity={0.05} dot={false} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-            {data.stats.map(s => (
-              <div key={s.regime} className="border border-gray-100 dark:border-[#232d40] rounded-md p-2.5">
+          <div className="flex flex-wrap justify-center gap-3 mt-3">
+            {data.stats.map((s: any) => (
+              <div key={s.regime} className="border border-gray-100 dark:border-[#232d40] rounded-md p-2.5 w-52">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: REGIME_COLORS[s.regime] }} />
                   <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{s.label}</span>
@@ -782,8 +785,8 @@ function RegimeSection() {
 // ── 8) 리스크 (변동성 분포 · 정규근사 VaR) ────────────────────
 // 데이터는 전종목 coinStats(부팅 프리페치) 재사용 — 추가 팬아웃 0, 계산만.
 const VAR_Z = 1.645 // 95% 단측 정규분위수
-const riskColor = (vol) => lerpColor('#94a3b8', '#e0913c', vol / 12) // 일변동성 0~12%+ → 회색→앰버
-const fmtKrwShort = (v) => {
+const riskColor = (vol: any) => lerpColor('#94a3b8', '#e0913c', vol / 12) // 일변동성 0~12%+ → 회색→앰버
+const fmtKrwShort = (v: any) => {
   if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
   if (v >= 1e8) return Math.round(v / 1e8).toLocaleString() + '억'
   return Math.round(v / 1e4).toLocaleString() + '만'
@@ -794,8 +797,8 @@ function useRiskRows() {
   const { data, loading } = useCoinStats()
   const rows = useMemo(() => (
     data
-      .filter(c => c.volatility > 0)
-      .map(c => ({ ...c, var95: +(VAR_Z * c.volatility).toFixed(2) }))
+      .filter((c) => c.volatility > 0)
+      .map((c) => ({ ...c, var95: +(VAR_Z * c.volatility).toFixed(2) }))
   ), [data])
   return { rows, loading }
 }
@@ -809,7 +812,7 @@ function VolDistSection() {
       mid: i + 0.5,
       count: 0,
     }))
-    rows.forEach(r => { out[Math.min(Math.floor(r.volatility), 10)].count += 1 })
+    rows.forEach((r) => { out[Math.min(Math.floor(r.volatility), 10)].count += 1 })
     return out
   }, [rows])
 
@@ -829,7 +832,7 @@ function VolDistSection() {
             <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false}
               label={{ value: '종목 수', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#9ca3af' }} />
             <Tooltip contentStyle={{ fontSize: 12 }} cursor={{ fill: '#f9fafb' }}
-              formatter={(v) => [v + '종', '종목 수']} labelFormatter={l => `일변동성 ${l}%`} />
+              formatter={(v: any) => [v + '종', '종목 수']} labelFormatter={l => `일변동성 ${l}%`} />
             <Bar dataKey="count" radius={[2, 2, 0, 0]} isAnimationActive={false}>
               {bins.map((b, i) => <Cell key={i} fill={riskColor(b.mid)} />)}
             </Bar>
@@ -854,11 +857,11 @@ function VarRankSection() {
       />
       {loading ? <Spinner /> : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-[#232d40]">
                 <th className="px-3 py-2 text-left font-medium w-10">#</th>
-                <th className="px-3 py-2 text-left font-medium">종목</th>
+                <th className="px-3 py-2 text-left font-medium w-[24%]">종목</th>
                 <th className="px-3 py-2 text-right font-medium">일변동성</th>
                 <th className="px-3 py-2 text-right font-medium">변동성 z</th>
                 <th className="px-3 py-2 text-right font-medium">1일 95% VaR</th>
@@ -968,7 +971,7 @@ const GROUPS = [
     ],
   },
 ]
-// 경로(/structure · /regime · /factor · /risk)가 어떤 그룹을 보여줄지는 아래 Body 컴포넌트가 결정. 헤더 탭과 1:1.
+// 경로(/research/{structure·regime·factor·risk})가 어떤 그룹을 보여줄지는 아래 Body 컴포넌트가 결정. 헤더 탭과 1:1.
 
 // 페이지 맨 위 "한눈 요약" 스트립 — 아래 상세 차트들의 핵심 결론만 먼저 보여준다(요약→상세).
 // 데이터는 아래 섹션과 같은 훅(캐시 공유)이라 추가 팬아웃 없음.
@@ -976,7 +979,7 @@ const GROUPS = [
 function StructureSummary() {
   const { data: net } = useNetwork(50)
   const { data: km } = useClusters(80, 4)
-  const hub = net.nodes.length ? net.nodes.reduce((a, b) => (b.degree > a.degree ? b : a)) : null
+  const hub = net.nodes.length ? net.nodes.reduce((a: any, b: any) => (b.degree > a.degree ? b : a)) : null
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <StatCard label="네트워크 허브 (최다 연결)" value={hub ? sym(hub.market) : '—'}
@@ -999,17 +1002,8 @@ function RegimeSummary() {
   )
 }
 
-function FactorSummary() {
-  const { data: mom } = useMomentum(40, 20, 5)
-  const { data: pairs } = usePairs(50)
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <StatCard label="모멘텀 팩터 총수익률" value={pct(mom.total_return)} color={up(mom.total_return)} valueClass="text-2xl" />
-      <StatCard label="동일가중 벤치마크" value={pct(mom.benchmark_return)} color={up(mom.benchmark_return)} valueClass="text-2xl" />
-      <StatCard label="공적분 페어 발견" value={pairs.found + '쌍'} sub={`${pairs.tested}쌍 검정 중`} valueClass="text-2xl" />
-    </div>
-  )
-}
+// (FactorSummary 제거 — 모멘텀 팩터 총수익률·벤치마크·페어 발견은 아래 모멘텀/페어 섹션과 그대로
+//  중복돼 상단 요약을 없앴다. 팩터 그룹은 요약 없이 섹션부터 바로 보여준다.)
 
 function RiskSummary() {
   const { rows } = useRiskRows()
@@ -1040,7 +1034,7 @@ function gateOf(...hs: { loading: boolean; error: boolean; retry?: () => void }[
 
 // 그룹의 요약 + 섹션들을 렌더(게이트는 Body가 이미 통과한 뒤라 여기선 데이터가 준비됨).
 // 크로스링크(#network 등) 스크롤은 섹션이 실제로 그려진 뒤(=게이트 통과 후) 실행돼 정확히 동작한다.
-function GroupView({ label, Summary }: { label: string; Summary: ComponentType }) {
+function GroupView({ label, Summary }: { label: string; Summary?: ComponentType }) {
   const { hash } = useLocation()
   const group = GROUPS.find(g => g.label === label) ?? GROUPS[0]
   useEffect(() => {
@@ -1050,7 +1044,7 @@ function GroupView({ label, Summary }: { label: string; Summary: ComponentType }
   }, [hash, label])
   return (
     <div className="space-y-6">
-      <Summary />
+      {Summary && <Summary />}
       <section className="space-y-4">
         {group.tabs.map(t => (
           <div key={t.id} id={t.id} className="scroll-mt-20"><t.Comp /></div>
@@ -1080,7 +1074,7 @@ function FactorBody() {
   const g = gateOf(useMomentum(40, 20, 5), usePairs(50))
   if (g.error) return <PageError onRetry={g.retry} />
   if (g.loading) return <PageLoading />
-  return <GroupView label="팩터 분석" Summary={FactorSummary} />
+  return <GroupView label="팩터 분석" />
 }
 function RiskBody() {
   const g = gateOf(useCoinStats())   // 리스크 3섹션·요약 모두 coin_stats 파생(dedup)
@@ -1091,8 +1085,8 @@ function RiskBody() {
 
 export default function Analysis() {
   const { pathname } = useLocation()
-  if (pathname.startsWith('/factor')) return <FactorBody />
-  if (pathname.startsWith('/risk')) return <RiskBody />
-  if (pathname.startsWith('/regime')) return <RegimeBody />
+  if (pathname.startsWith('/research/factor')) return <FactorBody />
+  if (pathname.startsWith('/research/risk')) return <RiskBody />
+  if (pathname.startsWith('/research/regime')) return <RegimeBody />
   return <StructureBody />
 }

@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, type Dispatch, type SetStateAction } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -6,10 +6,15 @@ import {
 import { MetricCard, PngButton, Spinner } from './parts'
 import { raColor } from './helpers'
 import Caveat from '../../components/Caveat'
+import type { Ticker, BacktestResult, TradeRecord } from '../../types'
 
 // 단일 종목 전략(MA/RSI) 설정 + 결과.
-export default function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setParam, loading, handleRun, result, equityData, tradeData }) {
-  const eqRef = useRef(null)
+export default function SingleStrategyBody({ strategy, market, setMarket, tickers, params, setParam, loading, handleRun, result, equityData, tradeData }: {
+  strategy: string; market: string; setMarket: Dispatch<SetStateAction<string>>; tickers: Ticker[]
+  params: any; setParam: (k: string, v: any) => void; loading: boolean; handleRun: () => void
+  result: BacktestResult | null; equityData: any[]; tradeData: TradeRecord[]
+}) {
+  const eqRef = useRef<any>(null)
   return (
     <div className="space-y-4">
       {/* 설정 패널 */}
@@ -19,7 +24,7 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
             <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">종목</label>
             <select value={market} onChange={e => setMarket(e.target.value)}
               className="w-full border border-gray-200 dark:border-[#2c3850] rounded px-2.5 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-brand-400">
-              {tickers.map(t => (
+              {tickers.map((t) => (
                 <option key={t.market} value={t.market}>{t.market.replace('KRW-', '')} {t.korean_name}</option>
               ))}
             </select>
@@ -84,7 +89,7 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
           </div>
           <button onClick={handleRun} disabled={loading}
             className="mt-5 px-6 py-1.5 bg-brand-500 text-white text-sm font-medium rounded cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {loading ? '실행 중...' : '백테스트 실행'}
+            {loading ? '실행 중…' : '실행'}
           </button>
         </div>
       </div>
@@ -137,7 +142,7 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(equityData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'benchmark' ? '매수보유' : n === 'benchmark_btc' ? 'BTC 보유' : '전략']} contentStyle={{ fontSize: 12 }} />
+                <Tooltip formatter={(v: any, n: any) => [v.toFixed(2), n === 'benchmark' ? '매수보유' : n === 'benchmark_btc' ? 'BTC 보유' : '전략']} contentStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
                 <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="value" />
                 <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="benchmark" />
@@ -155,7 +160,7 @@ export default function SingleStrategyBody({ strategy, market, setMarket, ticker
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="time" hide />
                   <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={v => v + '%'} />
-                  <Tooltip formatter={v => [v.toFixed(2) + '%', '손익률']} contentStyle={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: any) => [v.toFixed(2) + '%', '손익률']} contentStyle={{ fontSize: 12 }} />
                   <ReferenceLine y={0} stroke="#e5e7eb" />
                   <Bar dataKey="pnl" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                     {tradeData.map((t, i) => <Cell key={i} fill={t.pnl >= 0 ? '#ef4444' : '#3b82f6'} />)}

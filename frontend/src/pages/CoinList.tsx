@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTickers } from '../hooks/useTickers'
 import { useLiveTickers } from '../contexts/useRealtime'
@@ -11,7 +11,7 @@ import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 // /coins는 디폴트로 KRW-BTC, /coins/:market은 해당 코인을 선택 상태로 표시.
 
 const FILTERS = ['전체', '관심', '상승', '하락', '보합']
-const FILTER_MAP = { '전체': null, '상승': 'RISE', '하락': 'FALL', '보합': 'EVEN' }
+const FILTER_MAP: Record<string, string | null> = { '전체': null, '상승': 'RISE', '하락': 'FALL', '보합': 'EVEN' }
 
 const LS_KEY = 'upquant_favorites'
 
@@ -20,11 +20,11 @@ function loadFavorites() {
   catch { return new Set() }
 }
 
-function saveFavorites(set) {
+function saveFavorites(set: any) {
   localStorage.setItem(LS_KEY, JSON.stringify([...set]))
 }
 
-function StarIcon({ filled }) {
+function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? '#f59e0b' : 'none'} stroke={filled ? '#f59e0b' : '#d1d5db'} strokeWidth="2">
       <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
@@ -32,7 +32,7 @@ function StarIcon({ filled }) {
   )
 }
 
-function fmtVolume(v) {
+function fmtVolume(v: any) {
   if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
   if (v >= 1e8) return (v / 1e8).toFixed(0) + '억'
   if (v >= 1e4) return (v / 1e4).toFixed(0) + '만'
@@ -65,7 +65,7 @@ function pushRecent(market: string): string[] {
 }
 
 
-function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthClass = '' }) {
+function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthClass = '' }: { label: string; col: string; sortKey: string | null; sortDir: string; onSort: (c: string) => void; align?: string; widthClass?: string }) {
   const active = sortKey === col
   const alignClass = align === 'left' ? 'text-left' : 'text-right'
   return (
@@ -85,10 +85,10 @@ function SortTh({ label, col, sortKey, sortDir, onSort, align = 'right', widthCl
 }
 
 const SORT_FN = {
-  korean_name:         (a, b) => a.korean_name.localeCompare(b.korean_name),
-  trade_price:         (a, b) => b.trade_price - a.trade_price,
-  change_rate:         (a, b) => b.change_rate - a.change_rate,
-  acc_trade_price_24h: (a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h,
+  korean_name:         (a: any, b: any) => a.korean_name.localeCompare(b.korean_name),
+  trade_price:         (a: any, b: any) => b.trade_price - a.trade_price,
+  change_rate:         (a: any, b: any) => b.change_rate - a.change_rate,
+  acc_trade_price_24h: (a: any, b: any) => b.acc_trade_price_24h - a.acc_trade_price_24h,
 }
 
 export default function CoinList() {
@@ -111,9 +111,9 @@ export default function CoinList() {
   useEffect(() => {
     if (selectedMarket) setRecent(pushRecent(selectedMarket))  // eslint-disable-line react-hooks/set-state-in-effect
   }, [selectedMarket])
-  const nameOf = useMemo(() => Object.fromEntries(tickers.map(t => [t.market, t.korean_name])), [tickers])
+  const nameOf = useMemo(() => Object.fromEntries(tickers.map((t) => [t.market, t.korean_name])), [tickers])
 
-  const toggleFavorite = useCallback((market, e) => {
+  const toggleFavorite = useCallback((market: any, e: any) => {
     e.stopPropagation()
     setFavorites(prev => {
       const next = new Set(prev)
@@ -124,14 +124,14 @@ export default function CoinList() {
     })
   }, [])
 
-  function handleSort(col) {
+  function handleSort(col: any) {
     if (sortKey !== col) {
       setSortKey(col)
       setSortDir('desc')
     } else if (sortDir === 'desc') {
       setSortDir('asc')
     } else {
-      setSortKey(null)
+      setSortKey(null as any)
     }
   }
 
@@ -139,14 +139,14 @@ export default function CoinList() {
   const rows = useMemo(() => {
     if (!liveTickers.length) return []
     const changeVal = FILTER_MAP[filter]
-    let r = liveTickers.filter(t => {
+    let r = liveTickers.filter((t: any) => {
       if (filter === '관심') return favorites.has(t.market)
       const matchFilter = !changeVal || t.change === changeVal
       const matchSearch = t.korean_name.includes(search) || t.market.toLowerCase().includes(search.toLowerCase())
       return matchFilter && matchSearch
     })
-    if (sortKey && SORT_FN[sortKey]) {
-      const fn = SORT_FN[sortKey]
+    if (sortKey && (SORT_FN as any)[sortKey]) {
+      const fn = (SORT_FN as any)[sortKey]
       r = [...r].sort((a, b) => sortDir === 'desc' ? fn(a, b) : -fn(a, b))
     }
     return r
@@ -161,15 +161,18 @@ export default function CoinList() {
   // (items-start면 우측이 자기 콘텐츠 높이로 grid row를 밀어, 줌 아웃 시 좌측보다 길어져 페이지가 끝없이 늘어남)
   return (
     <>
-      {/* 최근 본 코인 — 화면 왼쪽에 떠 있는 컴팩트 패널(최근 6개). 클릭 시 해당 코인으로 이동. */}
+      {/* 최근 본 코인 — 본문(중앙 max-w-1440) 왼쪽 거터에 떠 있는 컴팩트 패널(최근 6개).
+          뷰포트 끝(left-3)이 아니라 right 앵커로 본문 왼쪽 모서리 바로 옆에 붙인다(거터가 좁으면 화면 안으로 폴백).
+          버튼은 내용 크기(min/max-w)로 둬 긴 심볼도 잘리지 않게 한다. */}
       {recent.length > 1 && (
-        <div className="hidden xl:flex flex-col gap-1.5 fixed left-3 top-1/2 -translate-y-1/2 z-30">
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 px-1 mb-0.5">최근 본</span>
+        <div className="hidden xl:flex flex-col items-end gap-1.5 fixed top-28 z-30"
+          style={{ right: 'min(calc(100% - 3.5rem), calc(50% + 720px + 0.5rem))' }}>
+          <span className="w-16 text-center text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">최근 본</span>
           {recent.map(m => {
             const active = m === selectedMarket
             return (
               <button key={m} onClick={() => navigate(`/coins/${m}`)} title={nameOf[m] || m}
-                className={`w-12 px-1 py-1.5 rounded-md text-[11px] font-semibold cursor-pointer transition-all shadow-sm ${
+                className={`w-16 px-1.5 py-1.5 rounded-md text-[11px] font-semibold truncate text-center cursor-pointer transition-all shadow-sm ${
                   active
                     ? 'bg-brand-500 text-white'
                     : 'bg-white/85 dark:bg-[#1a2234]/85 backdrop-blur border border-gray-200 dark:border-[#2c3850] text-gray-600 dark:text-gray-300 hover:border-brand-400 hover:text-brand-500'
@@ -218,7 +221,7 @@ export default function CoinList() {
               {f}
               {f !== '전체' && f !== '관심' && (
                 <span className="ml-1 opacity-70">
-                  {liveTickers.filter(t => t.change === FILTER_MAP[f]).length}
+                  {liveTickers.filter((t: any) => t.change === FILTER_MAP[f]).length}
                 </span>
               )}
             </button>
@@ -247,7 +250,7 @@ export default function CoinList() {
                     {filter === '관심' ? '관심 종목이 없습니다' : '검색 결과가 없습니다'}
                   </td>
                 </tr>
-              ) : rows.map(t => {
+              ) : rows.map((t: any) => {
                 const isSelected = t.market === selectedMarket
                 return (
                   <tr

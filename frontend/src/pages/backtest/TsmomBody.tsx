@@ -13,13 +13,13 @@ const TSMOM_LOOKBACKS = [30, 60, 90]
 
 export default function TsmomBody() {
   const [lookback, setLookback] = useState(60)
-  const [data, setData] = useState(null)
+  const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const ref = useRef(null)
+  const ref = useRef<any>(null)
   const run = (lb = lookback) => { setLoading(true); runTsmom({ lookback: lb }).then(setData).finally(() => setLoading(false)) }
   useEffect(() => { Promise.resolve().then(() => run()) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const chartData = data ? data.equity.map(e => ({
+  const chartData = data ? data.equity.map((e: any) => ({
     time: new Date(e.time * 1000).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
     value: e.value, benchmark: e.benchmark,
   })) : []
@@ -43,7 +43,7 @@ export default function TsmomBody() {
         </div>
         <button onClick={() => run()} disabled={loading}
           className="px-4 py-2 rounded-md bg-brand-500 text-white text-sm font-medium cursor-pointer hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {loading ? '실행 중…' : '재실행'}
+          {loading ? '실행 중…' : '실행'}
         </button>
         <div className="text-xs text-gray-400 dark:text-gray-500 ml-auto flex items-center gap-1">
           거래대금 상위 30 · 주기 5일 · 거래비용 5bps
@@ -77,7 +77,7 @@ export default function TsmomBody() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#9ca3af' }} interval={Math.floor(chartData.length / 8)} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip formatter={(v, n) => [v.toFixed(2), n === 'value' ? '추세추종' : '매수보유']} contentStyle={{ fontSize: 12 }} />
+                <Tooltip formatter={(v: any, n: any) => [v.toFixed(2), n === 'value' ? '추세추종' : '매수보유']} contentStyle={{ fontSize: 12 }} />
                 <ReferenceLine y={100} stroke="#e5e7eb" />
                 <Line type="monotone" dataKey="value" stroke="#1763b6" strokeWidth={2} dot={false} isAnimationActive={false} />
                 <Line type="monotone" dataKey="benchmark" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
@@ -98,7 +98,7 @@ export default function TsmomBody() {
                 </tr>
               </thead>
               <tbody>
-                {data.holdings.map(h => (
+                {data.holdings.map((h: any) => (
                   <tr key={h.market} className="border-t border-gray-50 dark:border-[#232d40]">
                     <td className="px-4 py-1.5 text-gray-700 dark:text-gray-200">{h.market.replace('KRW-', '')} <span className="text-gray-400 dark:text-gray-500 text-xs">{h.korean_name}</span></td>
                     <td className="px-4 py-1.5 text-right tabular-nums text-red-500">{signedPct(h.momentum)}</td>
