@@ -6,7 +6,7 @@ import Login from './Login'
 // useAuth를 모킹 — 로그인 성공/실패 흐름만 검증(네트워크 없음).
 const loginMock = vi.fn()
 vi.mock('../contexts/useAuth', () => ({
-  useAuth: () => ({ user: null, checking: false, login: loginMock, logout: vi.fn() }),
+  useAuth: () => ({ user: null, checking: false, login: loginMock, logout: vi.fn() } as any),
 }))
 
 function renderLogin() {

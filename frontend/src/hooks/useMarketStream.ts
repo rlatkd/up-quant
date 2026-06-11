@@ -4,9 +4,9 @@ import { wsTicket } from '../api/auth'
 
 // 코인 상세용 — 한 종목의 호가(orderbook)·체결(trade)을 백엔드 WS(/ws/market/:market)로 실시간 수신.
 // market이 바뀌면 재연결. 초기엔 비어 있으니 호출부가 REST 값으로 폴백한다.
-export function useMarketStream(market) {
-  const [orderbook, setOrderbook] = useState(null)
-  const [trades, setTrades] = useState([])
+export function useMarketStream(market: string) {
+  const [orderbook, setOrderbook] = useState<any>(null)
+  const [trades, setTrades] = useState<any[]>([])
   const seqRef = useRef(0)  // 체결에 고유 키 부여(같은 시각 체결 구분)
 
   useEffect(() => {
@@ -17,9 +17,9 @@ export function useMarketStream(market) {
     setTrades([])
     /* eslint-enable react-hooks/set-state-in-effect */
     seqRef.current = 0
-    let ws
+    let ws: WebSocket | undefined
     let alive = true
-    let retry
+    let retry: ReturnType<typeof setTimeout> | undefined
 
     async function connect() {
       if (!alive) return
@@ -39,7 +39,7 @@ export function useMarketStream(market) {
         } catch { /* 무시 */ }
       }
       ws.onclose = () => { if (alive) retry = setTimeout(connect, 3000) }
-      ws.onerror = () => { try { ws.close() } catch { /* noop */ } }
+      ws.onerror = () => { try { ws!.close() } catch { /* noop */ } }
     }
     connect()
 

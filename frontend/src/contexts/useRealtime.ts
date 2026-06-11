@@ -3,7 +3,7 @@ import { subscribeMarket, getPrice, subscribeConnected, getConnected, subscribeA
 
 // 특정 종목의 실시간 시세 — 그 종목만 구독해, 해당 종목 가격이 바뀔 때만 리렌더한다.
 // (없으면 undefined → 호출부가 REST 값으로 폴백)
-export function useLivePrice(market) {
+export function useLivePrice(market: any) {
   return useSyncExternalStore(
     (cb) => (market ? subscribeMarket(market, cb) : () => {}),
     () => (market ? getPrice(market) : undefined),
@@ -17,9 +17,9 @@ export function useLiveVersion() {
 
 // REST tickers에 실시간 시세(가격·등락·거래대금)를 덮어쓴 배열을 반환. 배치(300ms)마다 재계산되어
 // 정렬·필터 카운트·거래대금이 라이브로 갱신된다. (없는 종목은 REST 값 유지)
-export function useLiveTickers(tickers) {
+export function useLiveTickers(tickers: any) {
   const version = useLiveVersion()
-  return useMemo(() => tickers.map(t => {
+  return useMemo(() => tickers.map((t: any) => {
     const live = getPrice(t.market)
     return live ? {
       ...t,
@@ -39,9 +39,9 @@ export function useWsConnected() {
 }
 
 // 값이 바뀌는 순간 'up'/'down' 펄스 신호를 잠깐 반환(가격 셀 깜빡임용).
-export function usePulse(value, ms = 500) {
+export function usePulse(value: any, ms = 500) {
   const prev = useRef(value)
-  const [flash, setFlash] = useState(null)
+  const [flash, setFlash] = useState<any>(null)
   useEffect(() => {
     if (prev.current != null && value != null && value !== prev.current) {
       setFlash(value > prev.current ? 'up' : 'down')

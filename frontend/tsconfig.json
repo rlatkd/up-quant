@@ -13,11 +13,9 @@
     "allowJs": true,
     "esModuleInterop": true,
 
-    /* 점진 마이그레이션 — 우선 전 파일을 TS로 전환하고 빌드/린트를 그린으로.
-       strict·noImplicitAny는 다음 단계에서 단계적으로 켜며 타입을 채운다(useState 제네릭 등). */
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
+    /* strict 전면 활성화 — noImplicitAny·strictNullChecks 포함 전 strict 검사 ON(타입 채움 완료).
+       미사용 변수/파라미터 검사는 별개라 끔(런타임 무관·정리 부담). */
+    "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },

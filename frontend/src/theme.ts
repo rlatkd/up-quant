@@ -11,7 +11,7 @@ export const SERIES = [
   '#4cae76', // green
 ]
 
-export const seriesColor = (i) => SERIES[i % SERIES.length]
+export const seriesColor = (i: any) => SERIES[i % SERIES.length]
 
 // 시장 지배력 도넛 — BTC·ETH·XRP·SOL·기타. 비중 비교라 조각 구분이 우선이므로
 // 단일 블루 농담 대신 색상(hue)을 분리(차분 톤 유지, 의미색 순수 red/blue는 회피). '기타'는 회색.

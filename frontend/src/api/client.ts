@@ -7,8 +7,8 @@ const client = axios.create({
 })
 
 // ── 공통 로깅 인터셉터 (모든 API 호출이 이 인스턴스를 거친다) ──
-client.interceptors.request.use((config: any) => {
-  config.metadata = { start: performance.now() }
+client.interceptors.request.use((config) => {
+  ;(config as any).metadata = { start: performance.now() }
   return config
 })
 

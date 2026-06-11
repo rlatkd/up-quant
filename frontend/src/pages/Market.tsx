@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   AreaChart, Area, YAxis, Tooltip, ResponsiveContainer, Treemap,
   ComposedChart, Line, XAxis, CartesianGrid, Legend,
@@ -9,6 +9,7 @@ import { useFearGreed } from '../hooks/useTrends'
 import { LivePrice, LiveChangeRate } from '../components/LiveCells'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
+import type { Ticker } from '../types'
 
 const FEATURED_LIMIT = 4   // 상단 대표 카드 수 (거래대금 상위)
 
@@ -16,25 +17,25 @@ const RANK_LIMIT = 10      // 상승률·하락률·거래대금 표기 순위 (
 const TREEMAP_LIMIT = 30   // 시장 현황 트리맵에 표시할 메이저 종목 수 (거래대금 상위)
 const W52_LIMIT = 30       // 52주 신고/신저 배지 대상 = 거래대금 상위 N종 (유동성 낮은 잡코인 신저가 노이즈 제외)
 
-function fmtRate(r) {
+function fmtRate(r: number) {
   return (r > 0 ? '+' : '') + (r * 100).toFixed(2) + '%'
 }
 
-function fmtKrwShort(v) {
+function fmtKrwShort(v: number) {
   if (v >= 1e12) return (v / 1e12).toFixed(1) + '조'
   if (v >= 1e8) return Math.round(v / 1e8).toLocaleString() + '억'
   return v.toLocaleString()
 }
 
 // 시장 요약 스트립 — 흩어져 있던 KPI·공포탐욕·상승하락 수를 숫자 한 줄로 응집(대시보드에서 이관).
-function SummaryStrip({ tickers }) {
+function SummaryStrip({ tickers }: { tickers: Ticker[] }) {
   const { data: fng } = useFearGreed()   // 외부(alternative.me) 실제 공포·탐욕 지수 — 실패 시 자체 폴백(source 명시)
   const total = tickers.reduce((s, t) => s + t.acc_trade_price_24h, 0)
-  const rise = tickers.filter(t => t.change === 'RISE').length
-  const fall = tickers.filter(t => t.change === 'FALL').length
+  const rise = tickers.filter((t) => t.change === 'RISE').length
+  const fall = tickers.filter((t) => t.change === 'FALL').length
   const avg = tickers.length ? tickers.reduce((s, t) => s + t.change_rate, 0) / tickers.length * 100 : 0
-  const w52h = tickers.filter(t => t.is_52w_high).length
-  const w52l = tickers.filter(t => t.is_52w_low).length
+  const w52h = tickers.filter((t) => t.is_52w_high).length
+  const w52l = tickers.filter((t) => t.is_52w_low).length
   const top10 = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h)
     .slice(0, 10).reduce((s, t) => s + t.acc_trade_price_24h, 0)
   const conc = total ? (top10 / total * 100).toFixed(1) : '0'
@@ -61,16 +62,16 @@ function SummaryStrip({ tickers }) {
   )
 }
 
-function changeColor(change) {
+function changeColor(change: string) {
   if (change === 'RISE') return 'text-red-500'
   if (change === 'FALL') return 'text-blue-500'
   return 'text-gray-600 dark:text-gray-300'
 }
 
-function MiniCard({ ticker }) {
+function MiniCard({ ticker }: { ticker: Ticker }) {
   const isRise = ticker.change === 'RISE'
   const color = isRise ? '#ef4444' : '#3b82f6'
-  const data = ticker.sparkline.map(v => ({ v }))
+  const data = ticker.sparkline.map((v) => ({ v }))
 
   return (
     <Link to={`/coins/${ticker.market}`} className="block bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-4 hover:border-gray-300 transition-colors">
@@ -100,7 +101,7 @@ function MiniCard({ ticker }) {
           <YAxis hide domain={['dataMin', 'dataMax']} />
           <Tooltip
             contentStyle={{ fontSize: 11, padding: '2px 6px' }}
-            formatter={(v) => v.toLocaleString() + ' KRW'}
+            formatter={(v: any) => v.toLocaleString() + ' KRW'}
             labelFormatter={() => ''}
           />
           <Area type="monotone" dataKey="v" name="가격" stroke={color} strokeWidth={1.5} fill={`url(#g-${ticker.market})`} dot={false} isAnimationActive={false} />
@@ -110,7 +111,7 @@ function MiniCard({ ticker }) {
   )
 }
 
-function RankTable({ title, rows, color, onRowClick }) {
+function RankTable({ title, rows, color, onRowClick }: { title: string; rows: Ticker[]; color: string; onRowClick: (m: string) => void }) {
   return (
     <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md overflow-hidden">
       <div className={`px-4 py-3 border-b border-gray-100 dark:border-[#232d40] text-sm font-semibold ${color}`}>{title}</div>
@@ -123,7 +124,7 @@ function RankTable({ title, rows, color, onRowClick }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(t => (
+          {rows.map((t) => (
             <tr
               key={t.market}
               onClick={() => onRowClick(t.market)}
@@ -149,7 +150,7 @@ function RankTable({ title, rows, color, onRowClick }) {
   )
 }
 
-function W52Badges({ tickers }) {
+function W52Badges({ tickers }: { tickers: Ticker[] }) {
   // 거래대금 상위 N종 안에서만 52주 경신을 추린다 (메이저 기준 — 유동성 낮은 잡코인 신저가 노이즈 제외)
   const major = [...tickers].sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h).slice(0, W52_LIMIT)
   const highs = major.filter(t => t.is_52w_high)
@@ -188,7 +189,7 @@ function W52Badges({ tickers }) {
   )
 }
 
-function TreemapCell({ x, y, width, height, name, change_rate }: any) {
+function TreemapCell({ x = 0, y = 0, width = 0, height = 0, name = '', change_rate = 0 }: { x?: number; y?: number; width?: number; height?: number; name?: string; change_rate?: number }) {
   if (!width || !height) return null
   const abs = Math.abs(change_rate)
   const opacity = Math.min(0.9, 0.25 + abs * 6)
@@ -229,12 +230,12 @@ function TreemapCell({ x, y, width, height, name, change_rate }: any) {
   )
 }
 
-function fmtDay(ts) {
+function fmtDay(ts: number) {
   const d = new Date(ts * 1000)
   return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function ADTooltip({ active, payload }: any) {
+function ADTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
   if (!active || !payload || !payload.length) return null
   const p = payload[0].payload
   return (
@@ -253,7 +254,7 @@ function ADTooltip({ active, payload }: any) {
 // 끌어올린 것(divergence). 거래대금 상위 100종, 자체 로딩(tickers와 독립).
 function ADLineChart() {
   const { data, loading } = useAdvanceDecline()
-  const rows = data.points.map(p => ({
+  const rows = data.points.map((p) => ({
     label: fmtDay(p.time), ad: p.ad_line, index: p.index,
     advancers: p.advancers, decliners: p.decliners,
   }))
@@ -309,7 +310,7 @@ export default function Market() {
     size: t.acc_trade_price_24h,
     change_rate: t.change_rate,
   }))
-  const goCoin = m => navigate(`/coins/${m}`)
+  const goCoin = (m: string) => navigate(`/coins/${m}`)
 
 
   return (
@@ -374,7 +375,7 @@ export default function Market() {
 
       {/* 리스크/군집 심화는 전용 페이지로 일원화(중복 제거) — 변동성 분포·VaR은 리스크 탭, 산점도·K-means는 분석>클러스터링 */}
       <div className="grid grid-cols-2 gap-4">
-        <Link to="/risk" className="block bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5 hover:border-brand-300 transition-colors">
+        <Link to="/research/risk" className="block bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5 hover:border-brand-300 transition-colors">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">리스크 분포 · VaR</div>
@@ -383,7 +384,7 @@ export default function Market() {
             <span className="text-brand-600 text-sm font-medium whitespace-nowrap">리스크 →</span>
           </div>
         </Link>
-        <Link to="/structure#cluster" className="block bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5 hover:border-brand-300 transition-colors">
+        <Link to="/research/structure#cluster" className="block bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5 hover:border-brand-300 transition-colors">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">리스크-수익 분포 · 종목 군집</div>

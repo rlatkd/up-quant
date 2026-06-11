@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
@@ -9,11 +9,12 @@ import { useTickers } from '../hooks/useTickers'
 import PageLoading from '../components/ui/PageLoading'
 import PageError from '../components/ui/PageError'
 import { SERIES } from '../theme'
+import type { CoinStat, Ticker } from '../types'
 
 // 카테고리(섹터)는 업비트 데이터랩 '코인 분류'에서 받아온 가변 목록(한글)이라,
 // 색상은 응답 categories 순서대로 팔레트를 매핑한다. 라벨은 섹터명(한글) 그대로 사용.
 const CAT_PALETTE = SERIES
-const catColor = (categories, cat) => CAT_PALETTE[Math.max(0, categories.indexOf(cat)) % CAT_PALETTE.length]
+const catColor = (categories: any, cat: any) => CAT_PALETTE[Math.max(0, categories.indexOf(cat)) % CAT_PALETTE.length]
 
 // 업비트 데이터랩 '코인 분류' 대분류 5개 섹터 설명 (스냅샷 기준 · 신규 상장은 미분류)
 const CAT_DESC = {
@@ -24,36 +25,36 @@ const CAT_DESC = {
   '밈': '커뮤니티·밈에서 출발한 토큰 (예: DOGE)',
 }
 
-function pearson(xs, ys) {
+function pearson(xs: any, ys: any) {
   const n = xs.length
   if (n < 2) return 0
-  const mx = xs.reduce((a, b) => a + b, 0) / n
-  const my = ys.reduce((a, b) => a + b, 0) / n
-  const num = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0)
-  const dx = Math.sqrt(xs.reduce((s, x) => s + (x - mx) ** 2, 0))
-  const dy = Math.sqrt(ys.reduce((s, y) => s + (y - my) ** 2, 0))
+  const mx = xs.reduce((a: any, b: any) => a + b, 0) / n
+  const my = ys.reduce((a: any, b: any) => a + b, 0) / n
+  const num = xs.reduce((s: any, x: any, i: any) => s + (x - mx) * (ys[i] - my), 0)
+  const dx = Math.sqrt(xs.reduce((s: any, x: any) => s + (x - mx) ** 2, 0))
+  const dy = Math.sqrt(ys.reduce((s: any, y: any) => s + (y - my) ** 2, 0))
   return dx * dy ? num / (dx * dy) : 0
 }
 
-function CorrHeatmap({ rows, categories }) {
+function CorrHeatmap({ rows, categories }: { rows: Record<string, number | string>[]; categories: string[] }) {
   if (!rows.length || !categories.length) return null
-  const matrix = categories.map(a =>
-    categories.map(b => {
-      const xs = rows.map(r => r[a])
-      const ys = rows.map(r => r[b])
+  const matrix = categories.map((a) =>
+    categories.map((b) => {
+      const xs = rows.map((r) => r[a])
+      const ys = rows.map((r) => r[b])
       return parseFloat(pearson(xs, ys).toFixed(2))
     })
   )
   // 암호화폐 섹터는 대부분 강하게 동조(0.8~0.95)해 고정 임계값으론 거의 다 같은 색이 된다.
   // → 대각선(자기 자신=1.00)을 빼고, 남은 셀의 실제 min~max 범위에 색 농도를 매핑하는
   //   "상대" 스케일. 좁게 몰린 값도 차이가 보이게 펴진다. (색=절대 강도가 아니라 이 표 안 상대 강도)
-  const offDiag = []
+  const offDiag: any[] = []
   for (let i = 0; i < categories.length; i++)
     for (let j = 0; j < categories.length; j++)
       if (i !== j) offDiag.push(matrix[i][j])
   const lo = offDiag.length ? Math.min(...offDiag) : 0
   const hi = offDiag.length ? Math.max(...offDiag) : 1
-  function cellColor(v, isDiag) {
+  function cellColor(v: any, isDiag: any) {
     if (isDiag) return { bg: 'rgba(229,231,235,0.5)', text: '#9ca3af' } // 대각선: 중립 회색
     const t = hi > lo ? (v - lo) / (hi - lo) : 1   // 0=상대적으로 가장 약, 1=가장 강
     const op = 0.1 + 0.75 * t
@@ -65,7 +66,7 @@ function CorrHeatmap({ rows, categories }) {
         <thead>
           <tr>
             <th className="pb-2 pr-3 text-left text-gray-400 dark:text-gray-500 font-medium w-40"></th>
-            {categories.map(c => (
+            {categories.map((c) => (
               <th key={c} className="pb-2 px-2 text-center text-gray-400 dark:text-gray-500 font-medium">
                 <div className="flex items-center justify-center gap-1">
                   <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor(categories, c) }} />
@@ -101,7 +102,7 @@ function CorrHeatmap({ rows, categories }) {
   )
 }
 
-function HeatmapCell({ value }) {
+function HeatmapCell({ value }: { value: number }) {
   const abs = Math.abs(value)
   const opacity = Math.min(0.8, 0.1 + abs * 0.035)
   const bg = value >= 0 ? `rgba(239,68,68,${opacity})` : `rgba(59,130,246,${opacity})`
@@ -115,24 +116,24 @@ function HeatmapCell({ value }) {
 
 // 섹터 클릭 시 띄우는 모달 — 소속 종목 리스트(거래대금 desc) + 행 클릭 상세 + 카트 담기.
 // ESC·바깥 클릭으로 닫힘. 종목은 useCoinStats(category 포함) + useTickers(현재가) 결합.
-function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
+function SectorDrilldownModal({ sector, onClose, stats, tickers }: { sector: string | null; onClose: () => void; stats: CoinStat[]; tickers: Ticker[] }) {
   const navigate = useNavigate()
 
   // ESC로 닫기
   useEffect(() => {
     if (!sector) return
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: any) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [sector, onClose])
 
   const rows = useMemo(() => {
     if (!sector) return []
-    const tickerByMarket = Object.fromEntries(tickers.map(t => [t.market, t]))
+    const tickerByMarket = Object.fromEntries(tickers.map((t) => [t.market, t]))
     return stats
-      .filter(s => s.category === sector)
-      .map(s => ({ ...s, ticker: tickerByMarket[s.market] }))
-      .filter(s => s.ticker)
+      .filter((s) => s.category === sector)
+      .map((s) => ({ ...s, ticker: tickerByMarket[s.market] }))
+      .filter((s) => s.ticker)
       .sort((a, b) => b.ticker.acc_trade_price_24h - a.ticker.acc_trade_price_24h)
   }, [sector, stats, tickers])
 
@@ -143,7 +144,7 @@ function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
     : 0
   const totalVolume = rows.reduce((s, r) => s + r.ticker.acc_trade_price_24h, 0)
 
-  const goCoin = (m) => { onClose(); navigate(`/coins/${m}`) }
+  const goCoin = (m: any) => { onClose(); navigate(`/coins/${m}`) }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
@@ -184,7 +185,7 @@ function SectorDrilldownModal({ sector, onClose, stats, tickers }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => {
+                {rows.map((r) => {
                   const t = r.ticker
                   const cChange = t.change === 'RISE' ? 'text-red-500' : t.change === 'FALL' ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'
                   const c1m = r.return_1m > 0 ? 'text-red-500' : r.return_1m < 0 ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'
@@ -230,7 +231,7 @@ const CUM_ZOOM_STEP = 0.5
 const CUM_ZOOM_MAX = 3
 
 // 표준 Tooltip 내용 — 호버 시점의 전 섹터 값을 큰 순으로, 색점과 함께.
-function CumTooltip({ active, payload, label }: any) {
+function CumTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: any }) {
   if (!active || !payload || !payload.length) return null
   const date = new Date(label * 1000).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })
   const items = [...payload].sort((a, b) => b.value - a.value)
@@ -250,14 +251,14 @@ function CumTooltip({ active, payload, label }: any) {
   )
 }
 
-function CumulativeChart({ rows, categories }) {
+function CumulativeChart({ rows, categories }: { rows: Record<string, number | string>[]; categories: string[] }) {
   const [zoom, setZoom] = useState(1)      // 세로 확대 배율(가로는 항상 100%)
   const n = rows.length
   const chartH = Math.round(CUM_BASE_H * zoom)
 
   // x축 눈금 — 일봉 ~150점이라 약 8개만 노출(타임스탬프 기준)
   const step = Math.max(1, Math.floor(n / 8))
-  const ticks = rows.filter((_, i) => i % step === 0).map(r => r.t)
+  const ticks = rows.filter((_, i) => i % step === 0).map((r) => r.t)
 
   return (
     <div>
@@ -301,7 +302,7 @@ function CumulativeChart({ rows, categories }) {
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
           <Tooltip content={<CumTooltip />} />
-          {categories.map(cat => (
+          {categories.map((cat) => (
             <Line
               key={cat}
               type="monotone"
@@ -320,7 +321,7 @@ function CumulativeChart({ rows, categories }) {
 }
 
 export default function Sectors() {
-  const [activeSector, setActiveSector] = useState(null)  // 모달용 — 클릭된 섹터명
+  const [activeSector, setActiveSector] = useState<any>(null)  // 모달용 — 클릭된 섹터명
   const { data: monthly, loading: monthlyLoading, error: monthlyError, retry: monthlyRetry } = useCategoryMonthly()
   const { data: cumulative, loading: cumLoading, error: cumError, retry: cumRetry } = useCategoryDailyCumulative()
   // 드릴다운 모달에서 쓸 데이터 — coinStats(category 포함) + tickers(현재가). 게이트 판정에도 포함.
@@ -343,7 +344,7 @@ export default function Sectors() {
           업비트 데이터랩 '코인 분류' 대분류 기준 · <span className="text-brand-500">섹터를 클릭</span>하면 소속 종목 리스트를 봅니다
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2">
-          {monthly.categories.map(cat => (
+          {monthly.categories.map((cat) => (
             <button
               key={cat}
               type="button"
@@ -356,7 +357,7 @@ export default function Sectors() {
                   {cat}
                   <span className="ml-1.5 text-[11px] text-gray-300 group-hover:text-brand-400">→</span>
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">{CAT_DESC[cat] ?? '—'}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">{(CAT_DESC as any)[cat] ?? '—'}</div>
               </div>
             </button>
           ))}
@@ -387,7 +388,7 @@ export default function Sectors() {
               <thead>
                 <tr>
                   <th className="text-left text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 pr-3 w-40">카테고리</th>
-                  {monthly.rows.map(row => (
+                  {monthly.rows.map((row) => (
                     <th key={row.label} className="text-center text-xs text-gray-400 dark:text-gray-500 font-medium pb-2 px-1">
                       {row.label.slice(2)}
                     </th>
@@ -395,7 +396,7 @@ export default function Sectors() {
                 </tr>
               </thead>
               <tbody>
-                {monthly.categories.map(cat => (
+                {monthly.categories.map((cat) => (
                   <tr key={cat}>
                     <td className="text-xs font-medium text-gray-600 dark:text-gray-300 py-1 pr-3">
                       <div className="flex items-center gap-1.5">
@@ -403,7 +404,7 @@ export default function Sectors() {
                         {cat}
                       </div>
                     </td>
-                    {monthly.rows.map(row => (
+                    {monthly.rows.map((row) => (
                       <HeatmapCell key={row.label} value={row[cat]} />
                     ))}
                   </tr>
@@ -417,7 +418,7 @@ export default function Sectors() {
       <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
         <div className="flex items-center justify-between mb-0.5">
           <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">카테고리 상관관계</div>
-          <Link to="/structure#network" className="text-xs text-brand-600 hover:underline">종목 단위 상관 네트워크 →</Link>
+          <Link to="/research/structure#network" className="text-xs text-brand-600 hover:underline">종목 단위 상관 네트워크 →</Link>
         </div>
         <div className="text-xs text-gray-400 dark:text-gray-500 mb-4">최근 6개월 섹터 수익률 기반 피어슨 상관계수 (-1 ~ +1) · 색은 표 안에서의 상대 강도 · 종목 단위는 분석 → 상관 네트워크</div>
         <CorrHeatmap rows={monthly.rows} categories={monthly.categories} />

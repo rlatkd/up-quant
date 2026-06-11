@@ -14,7 +14,7 @@ export function useMarketSummary() {
   return { summary: data, loading, error, retry }
 }
 
-export function useTicker(market) {
+export function useTicker(market: string) {
   const q = useQuery({
     queryKey: ['markets', 'ticker', market],
     queryFn: () => getTicker(market),
@@ -26,8 +26,8 @@ export function useTicker(market) {
 
 // 호가·체결은 코인 상세에서 WS(useMarketStream)가 실시간으로 덧씌우는 REST 폴백이라 dedup 이득이 작아
 // 단순 effect 유지(WS 도착 전 초기 1회 스냅샷용).
-export function useOrderbook(market) {
-  const [orderbook, setOrderbook] = useState(null)
+export function useOrderbook(market: string) {
+  const [orderbook, setOrderbook] = useState<any>(null)
   useEffect(() => {
     if (!market) return
     let cancelled = false
@@ -37,8 +37,8 @@ export function useOrderbook(market) {
   return { orderbook }
 }
 
-export function useTrades(market) {
-  const [trades, setTrades] = useState([])
+export function useTrades(market: string) {
+  const [trades, setTrades] = useState<any[]>([])
   useEffect(() => {
     if (!market) return
     let cancelled = false

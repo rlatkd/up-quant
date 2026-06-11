@@ -1,6 +1,6 @@
 // recharts(SVG) 차트를 PNG로 내려받는다. container 안의 첫 <svg>를 직렬화해 canvas로 래스터화.
 // 다크/라이트 배경을 자동 반영하고 2배 해상도로 렌더한다. (lightweight-charts는 canvas라 별도.)
-export function downloadChartPng(container, filename = 'upquant-chart.png') {
+export function downloadChartPng(container: any, filename = 'upquant-chart.png') {
   if (!container) return
   const svg = container.querySelector('svg')
   if (!svg) return
@@ -24,10 +24,10 @@ export function downloadChartPng(container, filename = 'upquant-chart.png') {
     canvas.width = w * scale
     canvas.height = h * scale
     const ctx = canvas.getContext('2d')
-    ctx.fillStyle = dark ? '#1a2234' : '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.scale(scale, scale)
-    ctx.drawImage(img, 0, 0, w, h)
+    ctx!.fillStyle = dark ? '#1a2234' : '#ffffff'
+    ctx!.fillRect(0, 0, canvas.width, canvas.height)
+    ctx!.scale(scale, scale)
+    ctx!.drawImage(img, 0, 0, w, h)
     canvas.toBlob(blob => {
       if (!blob) return
       const url = URL.createObjectURL(blob)

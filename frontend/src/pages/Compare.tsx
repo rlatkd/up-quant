@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -34,7 +34,7 @@ export default function Compare() {
     return m ? m.split(',').filter(Boolean).slice(0, 5) : ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']
   })
   const [query, setQuery] = useState('')
-  const chartRef = useRef(null)
+  const chartRef = useRef<any>(null)
   const [copied, setCopied] = useState(false)
 
   // 선택 종목을 URL에 인코딩(공유 링크용). setSearchParams는 라우터 액션이라 set-state-in-effect 아님.
@@ -49,12 +49,12 @@ export default function Compare() {
     })
   }
   // 종목별 캔들을 캐시해 두고, 선택이 바뀌어도 이미 받은 종목은 재요청하지 않는다.
-  const [candlesByMarket, setCandlesByMarket] = useState({})
+  const [candlesByMarket, setCandlesByMarket] = useState<Record<string, any>>({})
   // 로딩 상태는 별도 state 없이 (선택된 종목 중 아직 캐시에 없는 게 있는지)로 파생
   // — effect 안 setLoadingChart(true) 제거하여 cascading render 회피.
   const loadingChart = selected.some(m => !candlesByMarket[m])
 
-  function toggleMarket(market) {
+  function toggleMarket(market: any) {
     setSelected(prev =>
       prev.includes(market) ? prev.filter(m => m !== market) : prev.length < 5 ? [...prev, market] : prev
     )
@@ -64,7 +64,7 @@ export default function Compare() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return tickers
-    return tickers.filter(t =>
+    return tickers.filter((t) =>
       t.market.toLowerCase().includes(q) || t.korean_name.toLowerCase().includes(q)
     )
   }, [tickers, query])
@@ -97,9 +97,9 @@ export default function Compare() {
     if (active.length === 0) return []
 
     const minLen = Math.min(...active.map(x => x.candles.length))
-    const rows = []
+    const rows: any[] = []
     for (let i = 0; i < minLen; i++) {
-      const row = { time: new Date(active[0].candles[i].timestamp).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) }
+      const row: Record<string, any> = { time: new Date(active[0].candles[i].timestamp).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) }
       active.forEach(({ market, candles }) => {
         const base  = candles[0].close
         const close = candles[i].close
@@ -177,7 +177,7 @@ export default function Compare() {
         {/* 스크롤 그리드 */}
         <div className="max-h-56 overflow-y-auto border border-gray-100 dark:border-[#232d40] rounded">
           <div className="grid grid-cols-4 gap-1 p-2">
-            {filtered.map(t => {
+            {filtered.map((t) => {
               const isSelected = selected.includes(t.market)
               const disabled = !isSelected && selected.length >= 5
               return (
@@ -232,7 +232,7 @@ export default function Compare() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#9ca3af' }} interval={14} />
               <YAxis domain={yDomain} tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => v + '%'} />
-              <Tooltip formatter={(v, name) => [v.toFixed(2) + '%', name.replace('KRW-', '')]} contentStyle={{ fontSize: 12 }} />
+              <Tooltip formatter={(v: any, name: any) => [v.toFixed(2) + '%', name.replace('KRW-', '')]} contentStyle={{ fontSize: 12 }} />
               <Legend formatter={name => name.replace('KRW-', '')} wrapperStyle={{ fontSize: 12 }} />
               <ReferenceLine y={0} stroke="#e5e7eb" />
               {selected.map((m, i) => (
@@ -251,7 +251,7 @@ export default function Compare() {
             const last   = vals[vals.length - 1] ?? 0
             const maxVal = Math.max(...vals)
             const minVal = Math.min(...vals)
-            const ticker = tickers.find(t => t.market === m)
+            const ticker = tickers.find((t) => t.market === m)
             return (
               <div key={m} className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-4">
                 <div className="flex items-center gap-2 mb-3">

@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { getMetrics } from '../api/system'
 import PageLoading from '../components/ui/PageLoading'
 
 // 직접 구현한 관측성 계층(캐시·로깅·스로틀)을 한눈에 보는 운영 대시보드. 5초마다 폴링.
-function fmtUptime(s) {
+function fmtUptime(s: number) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
   return `${h}h ${m}m ${sec}s`
 }
 
-function Stat({ label, value, sub = null, accent = null }) {
+function Stat({ label, value, sub = null, accent = null }: { label?: ReactNode; value?: ReactNode; sub?: ReactNode; accent?: string | null }) {
   return (
     <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md px-5 py-4">
       <div className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{label}</div>
@@ -18,14 +18,14 @@ function Stat({ label, value, sub = null, accent = null }) {
   )
 }
 
-function statusColor(s) {
+function statusColor(s: number) {
   if (s >= 500) return 'text-red-500'
   if (s >= 400) return 'text-amber-500'
   return 'text-green-600'
 }
 
 export default function SystemMonitor() {
-  const [data, setData] = useState(null)
+  const [data, setData] = useState<any>(null)
   useEffect(() => {
     let alive = true
     const load = () => getMetrics().then(d => { if (alive) setData(d) }).catch(() => {})
@@ -114,7 +114,7 @@ export default function SystemMonitor() {
               </tr>
             </thead>
             <tbody>
-              {data.recent.map((r, i) => (
+              {data.recent.map((r: any, i: any) => (
                 <tr key={i} className="border-t border-gray-50 dark:border-[#232d40]">
                   <td className="px-4 py-1.5 font-mono text-xs text-gray-500 dark:text-gray-400">{r.rid}</td>
                   <td className="px-4 py-1.5 text-gray-600 dark:text-gray-300">{r.method}</td>

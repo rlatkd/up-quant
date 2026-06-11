@@ -1,16 +1,16 @@
-﻿import { Component } from 'react'
+import { Component } from 'react'
 
 // 페이지 단위 에러 경계 — 한 화면에서 던져진 예외가 헤더·푸터까지 언마운트하지 않도록 가둔다.
 // (Phase 23: lightweight-charts v5 API 이동으로 RSI 클릭 시 TypeError → 경계가 없어 전 화면이 흰 화면이 됐던 사건 계기)
 // 함수형 컴포넌트는 에러 경계를 만들 수 없어 class로 작성(getDerivedStateFromError/componentDidCatch).
 export default class ErrorBoundary extends Component<any, { error: any }> {
-  state = { error: null }
+  state = { error: null as any }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: any) {
     return { error }
   }
 
-  componentDidCatch(error, info) {
+  componentDidCatch(error: any, info: any) {
     // 콘솔에 남겨 진단 가능하게(외부 수집기 없음 — 직접 구현 정체성상 콘솔로 충분).
     console.error('[ErrorBoundary] UI 렌더 오류:', error, info?.componentStack)
   }

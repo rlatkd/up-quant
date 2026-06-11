@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 
 // 가격 알림 context — Provider(PriceAlerts.jsx)와 hook을 분리(react-refresh/only-export-components 대응).
-export const PriceAlertContext = createContext(null)
+export const PriceAlertContext = createContext<any>(null)
 
 export function usePriceAlerts() {
   const ctx = useContext(PriceAlertContext)
