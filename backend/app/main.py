@@ -61,7 +61,8 @@ def _prefetch(quiet: bool = False) -> None:
         fng_service.get_fear_greed()
         marketcap_service.get_caps()
         marketcap_service.get_global()
-        # 체결강도(WS 1회 수집)는 호출 시 갱신 — 프리페치 제외(WS 1회 ~2초)
+        # 체결강도(WS 1회 수집)도 프리페치 → 시장 동향 첫 진입에 빈 영역 없이 즉시 렌더(게이트가 캐시 히트로 통과).
+        trends_service.get_volume_power()
         # 퀀트 전역(파라미터 없는/기본) 분석 워밍.
         quant_service.get_network()
         quant_service.get_pca()

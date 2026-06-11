@@ -225,9 +225,17 @@ async def _ws_collect() -> dict[str, tuple[float, float]]:
     async with websockets.connect(_UPBIT_WS, ssl=_SSL_CTX, max_size=None, ping_interval=None) as ws:
         await ws.send(req)
         target = len(markets)
+        # ⚠️ 종료를 '전종목 수집' 조건에만 맡기면 행(hang)이 난다: 일부 종목은 acc_ask_volume==0이라
+        # 영영 out에 안 들어가고, 시장이 활발하면 메시지가 2초 안에 계속 들어와 recv 타임아웃 break도
+        # 안 걸려 무한 수집 → 요청이 끝나지 않음(프론트 '불러오는 중' 고정). 전체 수집 시간 상한(deadline)을
+        # 둔다 — 초기 스냅샷은 첫 ~1초 버스트에 대부분 도착하므로 4초면 충분.
+        deadline = asyncio.get_event_loop().time() + 4.0
         while len(out) < target:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                break
             try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                raw = await asyncio.wait_for(ws.recv(), timeout=min(2.0, remaining))
             except asyncio.TimeoutError:
                 break
             d = json.loads(raw)

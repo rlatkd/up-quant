@@ -82,11 +82,13 @@ class FxRate(BaseModel):
     price: float        # KRW
     change: float       # 전일대비(절대)
     change_rate: float  # 전일대비(소수)
+    spark: list[float] = []   # 최근 ~40영업일 KRW/단위 추이(frankfurter·ECB 일별) — 스파크라인용
 
 
 class FxResult(BaseModel):
     rates: list[FxRate]
     as_of: str
+    spark_dates: list[str] = []   # spark 시계열 x축 라벨(MM-DD, 전 통화 공통)
     error: str | None = None   # 외부 소스 실패 시 "교체 필요" 메시지(숨기지 않고 노출)
 
 
