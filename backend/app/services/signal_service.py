@@ -27,7 +27,7 @@ def _compute_signals() -> SignalsResult:
     if regime_changed:
         items.append(SignalItem(
             kind="regime", title=f"시장 국면 전환 → {regime_label}",
-            detail="HMM 국면이 직전 대비 바뀜 — 익스포저 점검", action="/regime"))
+            detail="HMM 국면이 직전 대비 바뀜 — 익스포저 점검", action="/research/regime"))
 
     # ② 횡단면 모멘텀 — 현물 실행 가능한 롱온리 상위분위(진입 후보).
     mom = quant_service.get_momentum(long_only=True)
@@ -47,7 +47,7 @@ def _compute_signals() -> SignalsResult:
         tag = " · FDR통과" if p.fdr_pass else ""
         items.append(SignalItem(
             kind="pair", title=f"{p.korean_name1}–{p.korean_name2} 페어 {side}{tag}",
-            detail=f"z={p.zscore:+.2f} (|z|>2 진입)", value=p.zscore, action="/factor"))
+            detail=f"z={p.zscore:+.2f} (|z|>2 진입)", value=p.zscore, action="/research/factor"))
 
     # ④ 52주 신고가 경신 / 급등 — 거래대금 상위에서.
     tickers = market_service.get_tickers()

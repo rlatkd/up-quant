@@ -8,10 +8,10 @@ import Screener from './Screener'
 // 페이지 안에는 서브탭 바도, 중복 제목(PageHeader)도 두지 않는다. 경로가 단일 출처.
 const VIEWS = { market: Market, sectors: Sectors, screener: Screener }
 
-function viewFromPath(pathname) {
-  if (pathname.startsWith('/sectors')) return 'sectors'
-  if (pathname.startsWith('/screener')) return 'screener'
-  return 'market'  // /explore·/market 기본
+function viewFromPath(pathname: string) {
+  if (pathname.startsWith('/market/sectors')) return 'sectors'
+  if (pathname.startsWith('/market/screener')) return 'screener'
+  return 'market'  // /market/overview 기본
 }
 
 export default function Explore() {

@@ -1,54 +1,56 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useTickers } from '../hooks/useTickers'
 import PageLoading from '../components/ui/PageLoading'
-import InfoTooltip from '../components/InfoTooltip'
 import CompareBody from './backtest/CompareBody'
 import WalkForwardBody from './backtest/WalkForwardBody'
 import MonteCarloBody from './backtest/MonteCarloBody'
 
 // 검증 · 시뮬레이션 — 전략의 강건성(과최적화)·전망을 점검하는 메타 분석. 전략을 "실행"하는
-// 백테스트(/tools/backtest)와 성격이 달라 별도 페이지로 분리. 같은 성격 3종을 선택자로 묶는다.
-const METHODS = [
-  { key: 'compare',     label: '전략 비교' },
-  { key: 'walkforward', label: '워크포워드' },
-  { key: 'montecarlo',  label: '몬테카를로' },
-]
+// 백테스트(/strategy/backtest)와 성격이 달라 별도 페이지로 둔다. 3기법(전략비교·워크포워드·
+// 몬테카를로)은 각각 내용 높이가 짧아 드롭다운으로 나누지 않고 한 페이지에 세로로 모아 표시한다.
+
+function Section({ no, label, desc, children }: { no: number; label: string; desc: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="flex items-baseline gap-2 mb-3">
+        <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{no}. {label}</span>
+        <span className="text-xs text-gray-400 dark:text-gray-500">{desc}</span>
+      </div>
+      {children}
+    </section>
+  )
+}
 
 export default function Validation() {
   const { tickers, loading: tLoading } = useTickers()
-  const [method, setMethod] = useState('compare')
-  const [market, setMarket] = useState('KRW-BTC')
+  // 기법마다 종목을 독립으로 둔다(한 페이지에 셋이 공존).
+  const [mCompare, setMCompare] = useState('KRW-BTC')
+  const [mWalk, setMWalk] = useState('KRW-BTC')
+  const [mMonte, setMMonte] = useState('KRW-BTC')
+
+  // 페이지 단위 단일 로딩 게이트 — 세 기법이 각자 스피너를 띄우지 않고, 셋의 초기 데이터가 모두
+  // 준비될 때까지 헤더·푸터만 남기고 하나의 PageLoading만 보인다(요소별 분할 로딩 금지).
+  const [ready, setReady] = useState(0)
+  const bump = useCallback(() => setReady((n) => n + 1), [])
+  const allReady = ready >= 3
 
   if (tLoading) return <PageLoading />
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white dark:bg-[#1a2234] border border-gray-200 dark:border-[#2c3850] rounded-md p-5">
-        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
-          검증 · 시뮬레이션
-          <InfoTooltip>
-            전략을 "실행"하는 게 아니라, 전략이 <b>강건한지·앞으로 어떨지</b>를 점검합니다. 전략 비교는 여러 전략을 같은 종목에 겹쳐 보고, 워크포워드는 인샘플에서 고른 파라미터를 그 다음 구간(out-of-sample)에서만 평가해 과최적화를 거르며, 몬테카를로는 과거 수익률을 부트스트랩해 미래 분포(부채꼴)를 그립니다.
-          </InfoTooltip>
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {METHODS.map(m => (
-            <button key={m.key} onClick={() => setMethod(m.key)}
-              className={`px-4 py-1.5 text-sm rounded font-medium cursor-pointer transition-colors ${
-                method === m.key ? 'bg-brand-500 text-white' : 'bg-gray-100 dark:bg-[#222c3e] text-gray-500 dark:text-gray-400 hover:bg-gray-200'
-              }`}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+    <div>
+      {!allReady && <PageLoading />}
+      {/* 바디는 항상 마운트해 초기 데이터를 받되, 셋 다 준비되기 전엔 통째로 숨긴다(분할 스피너 방지). */}
+      <div className={allReady ? 'space-y-8' : 'hidden'}>
+        <Section no={1} label="전략 비교" desc="MA 크로스·RSI 역추세를 같은 종목에 돌려 자산곡선을 겹쳐 비교">
+          <CompareBody market={mCompare} setMarket={setMCompare} tickers={tickers} onReady={bump} />
+        </Section>
+        <Section no={2} label="워크포워드" desc="구간 분할 인샘플 최적화 → 아웃오브샘플 검증(과최적화 p값)">
+          <WalkForwardBody market={mWalk} setMarket={setMWalk} tickers={tickers} onReady={bump} />
+        </Section>
+        <Section no={3} label="몬테카를로" desc="과거 일간수익률 부트스트랩 1000경로 → 손실 확률·분위 부채꼴">
+          <MonteCarloBody market={mMonte} setMarket={setMMonte} tickers={tickers} onReady={bump} />
+        </Section>
       </div>
-
-      {method === 'walkforward' ? (
-        <WalkForwardBody market={market} setMarket={setMarket} tickers={tickers} />
-      ) : method === 'montecarlo' ? (
-        <MonteCarloBody market={market} setMarket={setMarket} tickers={tickers} />
-      ) : (
-        <CompareBody market={market} setMarket={setMarket} tickers={tickers} />
-      )}
     </div>
   )
 }
