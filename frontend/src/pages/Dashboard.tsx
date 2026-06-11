@@ -315,9 +315,9 @@ function RankingGrid() {
   const { data: stats } = useCoinStats()
   const { data: vp, loading: vpLoading } = useVolumePower()
 
-  const gainers = useMemo(() => [...tickers].sort((a, b) => b.change_rate - a.change_rate).slice(0, 5), [tickers])
-  const losers = useMemo(() => [...tickers].sort((a, b) => a.change_rate - b.change_rate).slice(0, 5), [tickers])
-  const surge = useMemo(() => [...stats].filter((s) => s.vol_surge > 0).sort((a, b) => b.vol_surge - a.vol_surge).slice(0, 5), [stats])
+  const gainers = useMemo(() => [...tickers].sort((a, b) => b.change_rate - a.change_rate).slice(0, 6), [tickers])
+  const losers = useMemo(() => [...tickers].sort((a, b) => a.change_rate - b.change_rate).slice(0, 6), [tickers])
+  const surge = useMemo(() => [...stats].filter((s) => s.vol_surge > 0).sort((a, b) => b.vol_surge - a.vol_surge).slice(0, 6), [stats])
 
   // 우측 레일에 주간 상승 TOP10 아래로 수직 스택. fragment로 반환해 카드들이 레일 flex의 직접 자식이
   // 되게 한다(레일의 justify-between이 TOP10+이 카드들을 한꺼번에 균등 분배 → 최하단이 좌측 바닥에 맞음).

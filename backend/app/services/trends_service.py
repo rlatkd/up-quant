@@ -266,8 +266,8 @@ def _compute_volume_power() -> VolumePower:
     def mk(lst):
         return [VolumePowerItem(market=m, korean_name=nmap.get(m, m), power=p) for m, p in lst]
 
-    buy = mk(sorted(items, key=lambda x: x[1], reverse=True)[:5])    # 매수 우위(체결강도 높음)
-    sell = mk(sorted(items, key=lambda x: x[1])[:5])                 # 매도 우위(체결강도 낮음)
+    buy = mk(sorted(items, key=lambda x: x[1], reverse=True)[:6])    # 매수 우위(체결강도 높음)
+    sell = mk(sorted(items, key=lambda x: x[1])[:6])                 # 매도 우위(체결강도 낮음)
     return VolumePower(buy=buy, sell=sell)
 
 
