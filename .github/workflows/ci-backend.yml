@@ -1,0 +1,28 @@
+name: ci-backend
+
+# backend/** 푸시 → 테스트(compileall·pytest). 성공하면 cd-backend가 이어받아 배포.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install -r requirements.txt pytest
+      - name: Syntax check
+        run: python -m compileall app
+      - name: Unit tests (pytest)
+        run: python -m pytest tests -q

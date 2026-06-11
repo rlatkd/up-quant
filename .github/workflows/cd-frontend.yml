@@ -1,23 +1,24 @@
-name: deploy-frontend
+name: cd-frontend
 
-# frontend/** 가 main에 푸시되면: 빌드 → S3 동기화 → CloudFront 무효화.
-# VITE_* 는 빌드 타임에 번들로 박히는 공개 URL(비밀 아님) → repository Variables 사용.
+# ci-frontend가 성공해야 실행(workflow_run 체이닝) → 빌드·S3·CloudFront. 수동 실행도 가능.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/deploy-frontend.yml'
+  workflow_run:
+    workflows: ["ci-frontend"]
+    types: [completed]
   workflow_dispatch: {}
 
 jobs:
-  build-deploy:
+  deploy:
+    # CI 성공일 때만(수동 실행 포함)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}   # CI가 돌린 그 커밋을 빌드
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -26,8 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VITE_API_BASE: ${{ vars.VITE_API_BASE }}   # 예: https://api.내도메인
-          VITE_WS_BASE: ${{ vars.VITE_WS_BASE }}      # 예: wss://api.내도메인
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}   # 예: https://api.skku.site
+          VITE_WS_BASE: ${{ vars.VITE_WS_BASE }}      # 예: wss://api.skku.site
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}

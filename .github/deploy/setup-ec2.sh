@@ -31,14 +31,14 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
 echo "== 4) systemd 서비스 (.env는 첫 배포가 만든 뒤 start) =="
-sudo cp "$APP_DIR/deploy/upquant.service" /etc/systemd/system/upquant.service
+sudo cp "$APP_DIR/.github/deploy/upquant.service" /etc/systemd/system/upquant.service
 sudo systemctl daemon-reload
 sudo systemctl enable upquant
 # 배포 스텝이 비번 없이 재시작할 수 있게
 echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl restart upquant, /bin/systemctl start upquant' | sudo tee /etc/sudoers.d/upquant >/dev/null
 
 echo "== 5) nginx =="
-sudo cp "$APP_DIR/deploy/nginx-upquant.conf" /etc/nginx/sites-available/upquant
+sudo cp "$APP_DIR/.github/deploy/nginx-upquant.conf" /etc/nginx/sites-available/upquant
 sudo sed -i "s/__API_DOMAIN__/${API_DOMAIN}/g" /etc/nginx/sites-available/upquant
 sudo ln -sf /etc/nginx/sites-available/upquant /etc/nginx/sites-enabled/upquant
 sudo rm -f /etc/nginx/sites-enabled/default

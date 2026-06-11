@@ -1,17 +1,16 @@
-name: deploy-backend
+name: cd-backend
 
-# backend/** 가 main에 푸시되면: EC2에 SSH → git pull → .env 주입(GitHub Secrets) → 의존성 설치 → 서비스 재시작.
-# 비밀은 EC2가 런타임에 읽어야 하므로 배포 때 .env로 기록한다(GitHub Secrets가 단일 소스).
+# ci-backend가 성공해야 실행(workflow_run 체이닝) → EC2 SSH·.env 주입·재시작·헬스 대기. 수동 실행도 가능.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy-backend.yml'
+  workflow_run:
+    workflows: ["ci-backend"]
+    types: [completed]
   workflow_dispatch: {}
 
 jobs:
   deploy:
+    # CI 성공일 때만(수동 실행 포함)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: SSH 배포
@@ -19,7 +18,7 @@ jobs:
         env:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}        # 강한 랜덤(고정 — 바뀌면 전원 로그아웃)
           AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}    # 과제용 계정 비번
-          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}      # 예: https://내도메인
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}      # 예: https://www.skku.site
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           host: ${{ secrets.EC2_HOST }}                  # api 도메인 또는 EIP
@@ -45,7 +44,7 @@ jobs:
             .venv/bin/pip install -r requirements.txt
             sudo systemctl restart upquant
             # 부팅 프리페치는 lifespan에서 동기로 끝난 뒤에야 서빙 → /health 응답 = 준비 완료.
-            # ready=true(또는 응답) 될 때까지 폴링(최대 ~6분). 안 되면 배포 실패(빨강) 처리.
+            # ready=true 될 때까지 폴링(최대 ~6분). 안 되면 배포 실패(빨강) 처리.
             echo "프리페치/기동 대기..."
             for i in $(seq 1 120); do
               if curl -sf http://localhost:8000/health | grep -q '"ready":true'; then
