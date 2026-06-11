@@ -68,14 +68,14 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 
 | 퀀트의 질문 | 대시보드 기능 (경로) | 금융·경제 이론 | 유의미한 결과 |
 |---|---|---|---|
-| **① 지금 시장 국면은?** | HMM 국면 탐지 · 시장 종합 추세 (`/regime`, 대시보드) | 레짐 스위칭, 변동성 군집(ARCH 효과) | 평온/격동 국면 자동 라벨 → 리스크 온·오프·포지션 사이징 |
-| **② 분산이 실제로 되나?** | 상관 네트워크(MST) · PCA · K-means 군집 (`/structure`, `/regime`) | 체계적 위험 vs 고유 위험, 시장 베타 | PC1(공통요인) 설명력이 커 한 덩어리로 움직임 → **분산효과 제한적**, 허브(BTC) 식별 |
-| **③ 어느 섹터로 자금이?** | 섹터 누적수익률 · 로테이션 (`/sectors`) | 섹터 로테이션, 테마 모멘텀 | 강·약 섹터로 자금 흐름 방향 파악 |
-| **④ 수익 팩터가 실재하나?** | 횡단면 모멘텀 롱숏 백테스트 (`/factor`) | 팩터 투자, 시장 효율성 | 모멘텀 분위 롱숏 성과 → 크립토 모멘텀 유효성 검증 |
-| **⑤ 차익거래 기회는?** | 공적분 페어트레이딩 (`/factor`) | 공적분·평균회귀, 시장중립 | 동일 생태계 페어 스프레드 z-점수 → 진입 신호 |
-| **⑥ 최적 비중은?** | Markowitz 효율적 경계선 (`/tools/portfolio`) | 현대 포트폴리오 이론(MPT), 평균-분산, 샤프 | ★최대샤프 / ◆최소분산 비중 산출, 분산효과 곡선 |
-| **⑦ 얼마나 잃을 수 있나?** | GARCH 변동성예측 · VaR (`/risk`, 코인 상세) | GARCH 변동성, Value-at-Risk | 1일 95% VaR로 하방 위험 정량화 |
-| **⑧ 전략이 진짜 돈이 되나?** | 백테스트 (거래비용·벤치마크·알파·워크포워드) (`/tools/backtest`) | 초과수익(알파), 거래비용, 생존편향 | 거래비용 차감 후에도 buy&hold 대비 알파가 남는가 |
+| **① 지금 시장 국면은?** | HMM 국면 탐지 (`/research/regime`) | 레짐 스위칭, 변동성 군집(ARCH 효과) | 평온/격동 국면 자동 라벨 → 리스크 온·오프·포지션 사이징 |
+| **② 분산이 실제로 되나?** | 상관 네트워크(MST) · PCA · K-means 군집 (`/research/structure`·`/research/regime`) | 체계적 위험 vs 고유 위험, 시장 베타 | PC1(공통요인) 설명력이 커 한 덩어리로 움직임 → **분산효과 제한적**, 허브(BTC) 식별 |
+| **③ 어느 섹터로 자금이?** | 섹터 누적수익률 · 로테이션 (`/market/sectors`) | 섹터 로테이션, 테마 모멘텀 | 강·약 섹터로 자금 흐름 방향 파악 |
+| **④ 수익 팩터가 실재하나?** | 횡단면 모멘텀 롱숏 백테스트 (`/research/factor`) | 팩터 투자, 시장 효율성 | 모멘텀 분위 롱숏 성과 → 크립토 모멘텀 유효성 검증 |
+| **⑤ 차익거래 기회는?** | 공적분 페어트레이딩 (`/research/factor`) | 공적분·평균회귀, 시장중립 | 동일 생태계 페어 스프레드 z-점수 → 진입 신호 |
+| **⑥ 최적 비중은?** | Markowitz 효율적 경계선 (`/strategy/portfolio`) | 현대 포트폴리오 이론(MPT), 평균-분산, 샤프 | ★최대샤프 / ◆최소분산 비중 산출, 분산효과 곡선 |
+| **⑦ 얼마나 잃을 수 있나?** | GARCH 변동성예측 · VaR (`/research/risk`, 코인 상세) | GARCH 변동성, Value-at-Risk | 1일 95% VaR로 하방 위험 정량화 |
+| **⑧ 전략이 진짜 돈이 되나?** | 백테스트 (거래비용·벤치마크·알파·워크포워드) (`/strategy/backtest`) | 초과수익(알파), 거래비용, 생존편향 | 거래비용 차감 후에도 buy&hold 대비 알파가 남는가 |
 
 ### 분석 기법 ↔ 선행연구
 
@@ -100,24 +100,21 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 
 ## 화면 구성
 
-헤더 탭을 **자산운용 리서치 톤 4그룹**(증권사·운용사 용어)으로 묶은 SPA입니다 — **시황**(대시보드) │ **마켓**(시장 현황·섹터·스크리너) │ **리서치**(시장 구조·시장 국면·팩터·리스크·종목 비교) │ **전략**(최적화·백테스트·검증·시뮬레이션). 종목 비교는 "고른 종목 분석"이라 리서치에, 스크리너는 "전체 시장 발굴"이라 마켓에 둡니다. 로고(`/`)는 **코인 목록**(master-detail)이며, 도움말·가이드는 별도 창입니다. 헤더 우측에 **다크모드 토글 · 가격 알림(🔔, 실시간 조건 도달 시 토스트) · AI 전략 리포트(Gemini) · WS 연결 인디케이터(⋯ 메뉴)**가 있습니다. **표시형 페이지는 로딩/에러 시 헤더·푸터만 남기고 전체가 로딩/에러 화면이 됩니다(부분 렌더 없음).**
+헤더 탭을 **자산운용 리서치 톤**(증권사·운용사 용어)으로 묶은 SPA입니다 — **시장 동향** │ **마켓▾**(시장 현황·섹터·스크리너·종목 비교) │ **리서치▾**(시장 구조·시장 국면·팩터·리스크) │ ⎟관점 구분선⎟ │ **최적화** │ **백테스트▾**(MA·RSI·추세추종·포트폴리오) │ **검증**(3기법 한 페이지) │ **AI 전략**(βeta·Gemini 모달). 드롭다운 그룹명 = 경로 prefix(`/market/*`·`/research/*`·`/strategy/*`)이고, 가운데 구분선은 **분석(시장 동향·마켓·리서치) │ 실행(최적화·백테스트·검증)** 단계 경계를 나타냅니다. 종목 비교·스크리너는 "탐색"(발굴한 후보를 겹쳐 보기/전체 시장 발굴)이라 마켓에 둡니다. 로고(`/`)는 **코인 목록**(master-detail)이며, 도움말·가이드는 별도 창입니다. 헤더 우측에 **가격 알림(🔔, 실시간 조건 도달 시 토스트) · 다크모드 토글 · 더보기(시스템 모니터링·실시간 상태·가이드·도움말·로그아웃)**가 있습니다. 드롭다운으로 들어간 페이지(마켓·리서치·백테스트 하위)는 본문 최상단에 **`그룹 › 페이지` 브레드크럼**을 표시합니다. **표시형 페이지는 로딩/에러 시 헤더·푸터만 남기고 전체가 로딩/에러 화면이 됩니다(부분 렌더 없음).**
 
 | 경로 | 페이지 | 설명 |
 |------|--------|------|
 | `/` · `/coins` · `/coins/:market` | **코인 목록** (메인, master-detail) | 좌: 코인 상세(캔들 인터벌 10종·MA/Bollinger/RSI 토글·호가·체결·상관관계·GARCH/VaR·거래대금 순위·호가 압력 바) / 우: 슬림 사이드바(검색·필터·정렬·★ 즐겨찾기). **현재가·호가·체결 실시간(WS)** |
-| `/dashboard` | **시황 (코인동향 미러)** | 자체 시장지수 6카드 + 당일/전일 인트라데이(60분봉) · 주간 상승 TOP10 · 오늘의 환율 · 시황 한 줄 · 랭킹 그리드(급상승·급하락·거래량급증·**체결강도**) · 최신 뉴스 · 디지털 자산 표(기간수익/시가총액) · 디지털 자산 지수 표(시장·전략·테마·섹터) |
-| `/market` | **마켓 현황** | **시장 요약 스트립**(총거래대금·평균등락·52주신고저·집중도·**공포·탐욕**·상승하락) · 미니 차트 카드 · 52주 신고/신저 배지(상위 30) · 상승/하락/거래대금 표(**실시간 셀**) · 거래대금 트리맵 · 리스크-수익 산점도 · **시장 폭 추세(Advance-Decline 라인)** |
-| `/sectors` | **섹터 분석** | 섹터 안내(클릭 → 소속 종목 드릴다운) · 누적수익률(일봉 동일가중) · 월별 히트맵 · 상관관계 히트맵 |
-| `/screener` | **스크리너** | 다중조건·프리셋 스크리닝 |
-| `/structure` | **시장 구조** | 상관 네트워크(MST) · K-means + 계층 덴드로그램 — *종목 간 관계(미시)* |
-| `/regime` | **시장 국면** | PCA 시장요인 · HMM 시장국면 — *시장 전체 상태(거시)* |
-| `/factor` | **팩터 분석** | 횡단면 모멘텀 롱숏 · 공적분 페어트레이딩 |
-| `/risk` | **리스크** | 리스크-수익 분포 · 변동성 분포 · VaR 랭킹 (coinStats 재사용, 추가 호출 0) |
-| `/tools/portfolio` | **포트폴리오 최적화** | Markowitz 효율적 경계선(구름 + 곡선 + ★최대샤프/◆최소분산/**▲리스크패리티**, **Ledoit-Wolf 수축 공분산**), → 백테스트로 비중 전달 |
-| `/tools/backtest` | **백테스트** | MA크로스·RSI·**전략 비교**·**워크포워드**·**몬테카를로**·**추세추종(TS모멘텀)**·포트폴리오 보유 / **유동성 슬리피지·다중검정 p값**·buy&hold/BTC 벤치마크·알파·Sharpe/Sortino/Calmar |
-| `/tools/compare` | **비교 분석** | 최대 5종목 누적 등락률 겹쳐 비교 (**PNG export · 공유 링크**) |
-| `/system` | **시스템 모니터링** | 캐시 적중률 · 외부 호출수 · 평균 응답시간 · 최근 요청(rid) — 자체 구현 메트릭(푸터 링크) |
-| `/help` · `/guide` | **도움말 · 가이드** | 기능 안내 · 방법론/기술스택 (별도 창) |
+| `/trends` | **시장 동향 (코인동향 미러)** | 오늘의 시황 + 최신 뉴스(상단) · 자체 시장지수 6카드(호버 툴팁) + 당일/전일 인트라데이(60분봉) · 주간 상승 TOP10 · **환율 추이 차트**(통화별 X/Y축) · 랭킹 그리드(급상승·급하락·거래량급증·**체결강도**) · 디지털 자산 표(기간수익/시가총액) · 자산 지수 표(시장·전략·테마·섹터). 좌(지수·환율·시그널)/우 레일(TOP10·랭킹 균등분배) 2-컬럼 |
+| `/market/overview` · `/market/sectors` · `/market/screener` · `/market/compare` | **마켓** | 현황: 요약 스트립·미니카드·52주 배지·상승/하락/거래대금 표(실시간)·트리맵·산점도·**A-D 라인** / 섹터: 안내(드릴다운)·누적·히트맵 / 스크리너: 다중조건·프리셋·CSV / 종목 비교: 최대 5종 누적등락(PNG·공유링크) |
+| `/research/structure` · `/research/regime` · `/research/factor` · `/research/risk` | **리서치** | 시장 구조(MST·K-means 군집) · 시장 국면(PCA·HMM) · 팩터(모멘텀 롱숏·공적분 페어) · 리스크(분포·VaR) |
+| `/strategy/portfolio` | **최적화** | Markowitz 효율적 경계선(구름 + 곡선 + ★최대샤프/◆최소분산/**▲리스크패리티**, **Ledoit-Wolf 수축**) + CAL·목표수익률 슬라이더·상관행렬, → 백테스트로 비중 전달 |
+| `/strategy/backtest/:strategy` | **백테스트** (헤더 드롭다운) | MA크로스·RSI·**추세추종(TSMOM)**·**포트폴리오 보유** — 전략별 하위 라우트. **유동성 슬리피지**·buy&hold/BTC 벤치마크·알파·Sharpe/Sortino/Calmar |
+| `/strategy/validation` | **검증·시뮬레이션** (3기법 한 페이지) | **전략 비교** · **워크포워드**(다중검정 과최적화 p값) · **몬테카를로**(부트스트랩 부채꼴) |
+| `/system` | **시스템 모니터링** | 캐시 적중률 · 외부 호출수 · 평균 응답시간 · 최근 요청(rid) · 외부소스 헬스 — 자체 구현 메트릭(⋯ 메뉴) |
+| `/help` · `/guide` | **도움말 · 가이드** | 기능 안내 · 방법론/기술스택(**실제 화면 캡처**) — 별도 창 |
+
+> 헤더 그룹명 = 경로 prefix(`/market/*`·`/research/*`·`/strategy/*`), 시황→**시장 동향(`/trends`)**. 옛/평탄 경로(`/dashboard`·`/market`·`/structure`·`/tools/*` 등)는 전부 리다이렉트로 호환.
 
 ---
 
@@ -146,7 +143,7 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 | 라이브러리 | 용도 |
 |-----------|------|
 | **React 19 + Vite** | UI 프레임워크 · 번들러 |
-| **TypeScript** | 전 소스 `.ts/.tsx`(점진 strict) · `tsc --noEmit` 타입체크 · 라우트 기반 코드 스플리팅(`React.lazy`) |
+| **TypeScript** | 전 소스 `.ts/.tsx` · **strict 전면 활성화**(noImplicitAny·strictNullChecks 포함) · 백엔드 스키마 거울 `types.ts`(도메인 모델 실타입) · `tsc --noEmit` · 코드 스플리팅(`React.lazy`) |
 | **react-router-dom v7** | 클라이언트 사이드 라우팅 (인증 게이트) |
 | **@tanstack/react-query** | 서버 상태 캐시 (동일키 디둡 · staleTime · keepPreviousData) |
 | **axios** | HTTP 클라이언트 (요청 ID 인터셉터 · 쿠키 인증 · 401 갱신) |
@@ -205,8 +202,8 @@ clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재
 |---|---|---|---|
 | **업비트 시세 Open API** | 공개 REST/WebSocket (인증 불필요) | 현재가·캔들·호가·체결·52주·**체결강도(WS `acc_ask/bid_volume`)** (약 260종) | 시세·차트·리스크·정량분석·트렌드 전반 |
 | **업비트 데이터랩 '코인 분류'** | 웹 스크래핑 (1회, 정적 스냅샷) | 약 260종 섹터(대분류 5)·테마(level2) | 섹터·테마 성과·분류 |
-| **환율** (open.er-api.com) | 외부 무료 API (백엔드 프록시·캐시) | USD·JPY·CNY·EUR / KRW | 트렌드 대시보드 '오늘의 환율' |
-| **뉴스** (한국 크립토 RSS) | 외부 RSS 통합 (헤드라인+링크만) | 최신 기사 제목·링크 | 트렌드 대시보드 '최신 뉴스' |
+| **환율** (현재가 open.er-api.com · **추이 frankfurter.dev**) | 외부 무료 API 2종 (백엔드 프록시·캐시) | USD·JPY·CNY·EUR / KRW 현재가 + 최근 ~32영업일 시계열(ECB 일별) | 트렌드 대시보드 '환율' — 통화별 추이 라인차트 |
+| **뉴스** (한국 크립토 RSS) | 외부 RSS 통합 (블록미디어·토큰포스트·블록체인투데이, 헤드라인+링크만) | 최신 기사 제목·링크 | 트렌드 대시보드 '최신 뉴스' |
 | **시가총액 · 도미넌스** (CoinGecko) | 외부 무료 API (`/coins/markets` 상위 500 · `/global`) | 시총·순위 · **BTC 시총 도미넌스** | '시가총액' 탭 · 시황 도미넌스(시총 기준, 실패 시 거래대금 비중 폴백) |
 | **공포·탐욕** (alternative.me) | 외부 무료 API | Crypto Fear & Greed Index | 시장 요약(실패 시 자체 시장 폭 프록시 폴백·출처 표시) |
 
@@ -254,10 +251,10 @@ up-quant/
 │   │   │   ├── analysis_service.py   # 변동성·1개월수익률·상관관계·섹터 수익률·A-D (실데이터)
 │   │   │   ├── backtest_service.py   # MA·RSI·전략비교·워크포워드·몬테카를로·TSMOM·포트폴리오 (거래비용·슬리피지·벤치마크)
 │   │   │   ├── quant_service.py      # 공용 returns_matrix + Markowitz(경계선)·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR·리스크패리티
-│   │   │   ├── report_service.py     # AI 전략 리포트 생성 (Gemini 호출부 주석 · 종류별 차등 캐시)
-│   │   │   ├── trends_service.py      # 자체 시장지수·인트라데이·자산지수·체결강도(WS)·기간수익·시황
-│   │   │   ├── fx_service.py          # 환율 프록시 (open.er-api, 외부)
-│   │   │   ├── news_service.py        # 한국 크립토 RSS 통합 (외부)
+│   │   │   ├── report_service.py     # AI 전략 리포트 (Gemini 실연동·부문별 프롬프트·503 재시도·실패 시 502·차등 캐시)
+│   │   │   ├── trends_service.py      # 자체 시장지수·인트라데이·자산지수·체결강도(WS·4초 deadline)·기간수익·시황
+│   │   │   ├── fx_service.py          # 환율 프록시 (현재가 open.er-api + 추이 frankfurter.dev, 외부)
+│   │   │   ├── news_service.py        # 한국 크립토 RSS 통합 (블록미디어·토큰포스트·블록체인투데이, HTML 가드)
 │   │   │   ├── marketcap_service.py   # 시가총액·BTC 도미넌스 (CoinGecko, 외부)
 │   │   │   ├── fng_service.py          # 공포·탐욕 지수 (alternative.me, 외부)
 │   │   │   └── signal_service.py       # 모멘텀·페어·국면·돌파 시그널 집계
@@ -307,7 +304,7 @@ up-quant/
 │   │   │   └── format.ts             # 숫자·금액 포맷 헬퍼
 │   │   ├── components/
 │   │   │   ├── ui/                   # 공용 UI (Spinner · Card · StatCard · PageLoading · PageError)
-│   │   │   ├── layout/               # Header(탭 4그룹·WS·🔔·🌙·AI리포트) · Footer · Layout(+ErrorBoundary)
+│   │   │   ├── layout/               # Header(탭 그룹·분석│실행 구분선·🔔·🌙·AI 전략·더보기) · Footer · Layout(+브레드크럼·ErrorBoundary)
 │   │   │   ├── LiveCells.tsx         # 실시간 가격/등락 셀 (REST 폴백 + 변동 펄스)
 │   │   │   ├── ErrorBoundary.tsx     # 페이지 단위 에러 경계
 │   │   │   ├── ReportModal.tsx       # AI 전략 리포트 모달
@@ -318,11 +315,11 @@ up-quant/
 │   │       ├── Login.tsx             # '/login' — 단일 계정 로그인(인트로 연출·인라인 폼)
 │   │       ├── CoinList.tsx          # '/' · '/coins' · '/coins/:market' — 메인, master-detail
 │   │       ├── CoinDetail.tsx        # 코인 상세 본문(CoinDetailView) — CoinList 좌측에 임베드
-│   │       ├── Dashboard.tsx         # '/dashboard' — 코인동향 미러(자체지수·인트라데이·환율·뉴스·체결강도·기간수익/시총·자산지수)
+│   │       ├── Dashboard.tsx         # '/trends' 시장 동향 — 코인동향 미러(자체지수·인트라데이·환율·뉴스·체결강도·기간수익/시총·자산지수)
 │   │       ├── Explore.tsx           # '/market'·'/sectors'·'/screener' 래퍼(URL=서브탭)
 │   │       ├── Market.tsx · Sectors.tsx · Screener.tsx   # 탐색 본문 (Explore가 재사용)
 │   │       ├── Analysis.tsx          # '/structure'·'/regime'·'/factor'·'/risk' + PortfolioSection
-│   │       ├── Tools.tsx             # '/tools/*' 래퍼 (PortfolioPage·BacktestPage·ComparePage)
+│   │       ├── Tools.tsx             # '/strategy/*'·'/market/compare' 래퍼 (PortfolioPage·BacktestPage·ValidationPage·ComparePage)
 │   │       ├── Backtest.tsx          # 전략도구: 백테스트 오케스트레이터
 │   │       ├── backtest/             # 백테스트 전략별 본문(Single·Portfolio·Compare·WalkForward·MonteCarlo·Tsmom) + parts·helpers
 │   │       ├── Compare.tsx           # 전략도구: 비교 분석 본문 (Tools가 재사용)
@@ -331,12 +328,12 @@ up-quant/
 │   │       └── Help.tsx              # '/help' — 기능 안내 (별도 창)
 │   ├── .env.example                  # 배포 환경변수 예시(VITE_API_BASE·VITE_WS_BASE)
 │   ├── index.html                    # HTML 엔트리 · Pretendard 폰트 · favicon
-│   ├── tsconfig.json                 # TypeScript 설정(점진 strict)
+│   ├── tsconfig.json                 # TypeScript 설정(strict 전면)
 │   ├── vite.config.js · eslint.config.js
 │   └── package.json                  # 의존성 · npm 스크립트(dev·build·lint·typecheck)
 ├── .github/workflows/ci.yml          # CI — 백엔드 compileall+pytest / 프론트 lint+typecheck+build
 ├── references/                       # 기획서 · API 명세(API.md) · 엔지니어링 노트 · 발표 자료(pt/)
-├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~32)
+├── CLAUDE.md                         # 협업 규칙 · 구조 · 작업 이력(Phase 0~35)
 └── pages.md                          # 페이지 IA 트리 · 중복 진단 · 아이디어 비축 (보조 작업 문서)
 ```
 
@@ -442,7 +439,7 @@ npm run dev
 | **스파크라인 (1시간봉, 전 종목)** | **1800s** | 261콜(부팅 1회) |
 | **일봉 (통계·정량분석 공용, canonical 200)** | **3600s** | 261콜 |
 | 주봉·월봉 (canonical, 집계 공용) | 1800s | 261콜 |
-| 외부 소스(환율·뉴스·시총·도미넌스·F&G) | 성공 600~3600s / **에러 60s** | 1콜 |
+| 외부 소스(환율 현재가/추이·뉴스·시총·도미넌스·F&G) | 성공 600~21600s / **에러 60s** | 1콜 |
 | 마켓목록 · 한글명 | 3600s | 1콜 |
 
 ---

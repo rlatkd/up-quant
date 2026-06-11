@@ -200,9 +200,10 @@ RSI 역추세(과매도 매수 / 과매수 매도) 전략 백테스트.
 - **응답**: `{ "status": "ok", "ready": <bool> }`
 
 ### `GET /api/report/strategy`
-LLM(Gemini) 투자 전략 리포트 — 시장 데이터(프리페치 재사용)를 모아 표준 리서치 5섹션 마크다운 생성. **LLM 호출부는 주석 처리(미연동)** — `GEMINI_API_KEY` + 주석 해제 시 동작, 미연동 시 데이터 기반 자동 초안 반환. **종류별 차등 캐시**(시장 2h / 포트·리스크 6h).
+LLM(Gemini `gemini-2.5-flash`, thinking 끄고 출력 4096토큰) 투자 전략 리포트 — 시장 데이터(프리페치 재사용)를 모아 **부문별 전용 프롬프트**(시장/포트폴리오/리스크 각 초점·출력 형식)로 생성. **Gemini 실연동**(키는 `backend/.env`의 `GEMINI_API_KEY`, `google-genai`). **자동 초안(stub) 없음** — **503(서버 과부하)은 3회 백오프 재시도** 후, 키 미설정·비일시적 오류·빈 응답이면 **502**로 전파(실패는 캐시 안 함). 성공만 **종류별 차등 캐시**(시장 2h / 포트·리스크 6h).
 - **쿼리**: `report_type`(`market`|`portfolio`|`risk`, 기본 `market`)
-- **응답**: `ReportResult` — `report_type`·`title`·`markdown`·`model`·`generated_at`(unix초)·`enabled`(실제 LLM 호출 여부)·`note`
+- **응답(200)**: `ReportResult` — `report_type`·`title`·`markdown`·`model`·`generated_at`(unix초)·`enabled`(성공 True)·`note`
+- **오류(502)**: `{ detail: "..." }` — Gemini 호출 실패/키 미설정 사유
 
 ### `GET /api/system/metrics`
 관측성 메트릭(외부 의존성 없는 자체 구현). 캐시 적중률·외부 호출수·평균 응답시간·최근 요청(rid) + **외부 소스 헬스(Phase 31)**.
@@ -241,8 +242,8 @@ REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업�
 | `GET /volume-power` | `VolumePower` — `buy[]`·`sell[]`(`{market,korean_name,power}`). 체결강도=매수/매도×100 (업비트 **WS 티커 `acc_ask/bid_volume`** 1회 스냅샷, 스테이블·저유동 제외). `error?` |
 | `GET /period-returns` | `PeriodReturns` — `rows[{market,korean_name,acc_trade_price_24h,r1w,r1m,r3m,r6m,r1y,market_cap,market_cap_rank}]`. 일봉(≤6m)·월봉(1y) + **시총(CoinGecko 외부)** |
 | `GET /brief` | `MarketBrief` — `{text,as_of,rise,fall,avg_change,dominance,dominance_label,total_volume}`. 자체 시황 한 줄. **도미넌스는 시총 기준(CoinGecko /global) 우선·라벨로 출처 명시** |
-| `GET /fx` | `FxResult` — `rates[{pair,label,unit,price,change,change_rate}]`·`as_of`·`error?`. **외부 open.er-api.com** 프록시(성공 10분/에러 60초 캐시) |
-| `GET /news` | `NewsResult` — `items[{title,url,source,published,ts}]`·`error?`. **외부 한국 크립토 RSS**(헤드라인+링크만) |
+| `GET /fx` | `FxResult` — `rates[{pair,label,unit,price,change,change_rate,spark[]}]`·`as_of`·`spark_dates[]`·`error?`. 현재가 = **open.er-api.com**(10분), 추이(`spark`/`spark_dates`, 최근 ~32영업일 KRW/단위) = **frankfurter.dev/v1**(ECB 일별, 6h). 에러 60초 캐시 |
+| `GET /news` | `NewsResult` — `items[{title,url,source,published,ts}]`·`error?`. **외부 한국 크립토 RSS**(블록미디어·토큰포스트·블록체인투데이, 헤드라인+링크만). HTML 응답/깨진 XML 가드 |
 | `GET /fear-greed` | `FearGreed` — `{value,label,classification,as_of,source,error?}`. **외부 alternative.me** 실제 공포·탐욕(실패 시 자체 시장 폭 폴백·`source='자체(시장 폭)'`)(Phase 31) |
 
 ---
@@ -355,9 +356,9 @@ REST가 첫 화면(스냅샷·집계)을 책임지고, 실시간 갱신은 업�
 | 코인 목록 | `/api/markets/tickers`, `/api/markets/summary`, `WS /ws/tickers`(현재가 실시간) |
 | 탐색(마켓·섹터·스크리너 통합 `/explore`) | `/api/markets/tickers`, `/api/analysis/coins`, `/api/analysis/category/monthly`, `/api/analysis/category/cumulative-daily` |
 | 코인 상세 | `/api/markets/tickers/{market}`, `/api/markets/orderbook/{market}`, `/api/markets/trades/{market}`, `/api/candles/{market}`, `/api/analysis/correlation/{market}`, `/api/analysis/coins`, `/api/quant/garch/{market}`, `WS /ws/tickers`·`WS /ws/market/{market}`(현재가·호가·체결 실시간) |
-| 종목 비교 (`/tools/compare`, 리서치 그룹) | `/api/candles/{market}` (선택 종목별) |
+| 종목 비교 (`/market/compare`, 마켓 그룹) | `/api/candles/{market}` (선택 종목별) |
 | 백테스트(전략 실행, `/tools/backtest`) | `/api/backtest/ma-cross`, `/api/backtest/rsi`, `/api/backtest/tsmom`, `/api/backtest/portfolio` |
-| 검증·시뮬레이션 (`/tools/validation`, Phase 30 분리) | `/api/backtest/compare`, `/api/backtest/walk-forward`, `/api/backtest/montecarlo` |
+| 검증·시뮬레이션 (`/strategy/validation`, 3기법 한 페이지) | `/api/backtest/compare`, `/api/backtest/walk-forward`, `/api/backtest/montecarlo` |
 | 시장 구조 (`/structure`) | `/api/quant/network`, `/api/quant/clusters`, `/api/quant/dendrogram` |
 | 시장 국면 (`/regime`) | `/api/quant/pca`, `/api/quant/regime` |
 | 팩터 (`/factor`) | `/api/quant/momentum`(±`long_only`), `/api/quant/pairs` |
