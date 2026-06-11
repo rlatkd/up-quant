@@ -387,6 +387,26 @@ npm run dev
 
 ---
 
+## 배포 (AWS · CI/CD)
+
+실서비스: **`https://www.skku.site`**. 프론트(정적)와 백엔드(API+WS)를 분리 호스팅합니다.
+
+```
+사용자 ──HTTPS──> CloudFront(ACM) ── S3(up-quant-fe, 정적 FE, OAC)        ← www.skku.site
+        ──HTTPS/WSS──> EC2(Nginx+certbot) ── uvicorn(FastAPI, 단일 프로세스) ← api.skku.site
+DNS: Route53(skku.site) — www→CloudFront(alias), api→EC2(EIP), apex→www는 CloudFront Function 301
+```
+
+- **프론트(S3+CloudFront)**: 빌드 산출물을 S3에 sync, CloudFront가 ACM 인증서로 HTTPS 제공. 원본은 **S3 REST 엔드포인트 + OAC**(웹사이트 엔드포인트 아님 — OAC는 REST에만 적용). SPA 라우팅은 **403/404 → `/index.html`(200)** 커스텀 에러응답. apex(`skku.site`)는 **CloudFront Function으로 www에 301 리다이렉트**.
+- **백엔드(EC2 Ubuntu, t3.small)**: ⚠️ **uvicorn 단일 프로세스 systemd**로 실행 — 인메모리 캐시·WebSocket 중계 허브가 프로세스 상태라 멀티워커를 쓰면 캐시·실시간이 깨집니다. Nginx가 `api.skku.site`로 REST·WS를 같은 호스트로 프록시(certbot TLS). 부트스트랩은 [`.github/deploy/setup-ec2.sh`](.github/deploy/setup-ec2.sh)(패키지·스왑·venv·systemd·nginx 일괄).
+- **CI/CD(GitHub Actions, 4워크플로)**: `main` 푸시 시 변경된 쪽만 —
+  - `ci-frontend`(lint·typecheck·vitest) → 성공 시 `cd-frontend`(빌드→S3 sync→CloudFront 무효화)
+  - `ci-backend`(compileall·pytest) → 성공 시 `cd-backend`(EC2 SSH→`git pull`→Secrets로 `.env` 주입→`pip`→`restart`→**헬스 ready 폴링**)
+  - CI→CD 연결은 **`workflow_run`**(테스트 통과해야 배포). 비밀은 **GitHub Repository Secrets** 단일 소스(프론트는 빌드타임 `vars.VITE_API_BASE`/`VITE_WS_BASE`).
+- **환경변수**: 백엔드 `AUTH_SECRET`·`AUTH_PASSWORD`·`CORS_ORIGINS=https://www.skku.site`·`COOKIE_SECURE=1`·`GEMINI_API_KEY`(CD가 `.env`로 주입). ⚠️ `AUTH_SECRET`은 고정(바뀌면 발급된 JWT 전부 무효 → 전원 로그아웃).
+
+---
+
 ## API 레퍼런스
 
 기본 URL: `http://localhost:8000` · **모든 `/api/*`·`/ws/*`는 로그인 인증 필요**(HttpOnly 쿠키 JWT, 과제용 계정 `test`/`test`). 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다. **상세 명세는 [`references/API.md`](references/API.md)** 또는 Swagger(`/docs`)를 참고하세요.

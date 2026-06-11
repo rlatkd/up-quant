@@ -2,7 +2,7 @@
 
 UPquant 백엔드(FastAPI) REST API 명세입니다. 응답은 **업비트 Open API(시세, 인증 불필요)** 를 호출해 생성하며, 인메모리 TTL 캐시(stale-while-revalidate)로 제공됩니다. (카테고리 분류는 업비트 데이터랩 '코인 분류'를 1회 스크랩한 정적 스냅샷, 수익률은 실 월봉 집계)
 
-- **Base URL**: `http://localhost:8000` (배포 시 프론트는 `VITE_API_BASE`로 주입)
+- **Base URL**: 로컬 `http://localhost:8000` · **운영 `https://api.skku.site`**(EC2·nginx·TLS). 프론트는 `VITE_API_BASE`로 주입.
 - **자동 생성 문서** (서버 실행 중일 때):
   - Swagger UI: <http://localhost:8000/docs>
   - ReDoc: <http://localhost:8000/redoc>
