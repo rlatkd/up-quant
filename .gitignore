@@ -24,14 +24,9 @@ Thumbs.db
 # Claude Code 로컬 설정(런타임에 자주 변경됨)
 .claude/
 
-# 마크다운은 기본 제외(로컬 메모용)하되, 아래 문서들은 추적
+# 로컬 보관용(깃 추적 제외) — 프로젝트에서 뺀 문서·개인 자료·계획서 등
+skku/
+
+# 마크다운은 기본 제외(로컬 메모용)하되 README만 추적
 *.md
 !README.md
-!CLAUDE.md
-!pages.md
-!투자전략_가이드.md
-!references/*.md
-!docs/*.md
-
-# 개인 자료는 깃에 올리지 않음 (QAE 프로젝트 계획서 원본)
-references/QAE_EDA_*
