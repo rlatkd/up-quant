@@ -21,7 +21,7 @@ UPquant는 단순 시세 조회를 넘어 **상관분석 · PCA · 군집 · GAR
 ## 목차
 
 - [무엇을 답하는가](#무엇을-답하는가)
-- [분석 프레임워크](#분석-프레임워크) ← 이 프로젝트의 정체성
+- [분석 프레임워크](#분석-프레임워크)
 - [화면 구성](#화면-구성)
 - [기술 스택](#기술-스택)
 - [아키텍처](#아키텍처)
@@ -121,7 +121,7 @@ UPquant는 이 흩어진 분석을 **다섯 단계의 의사결정 흐름**으�
 > 옛/평탄 경로(`/dashboard`·`/market`·`/structure`·`/tools/*`·`/compare` 등)는 전부 리다이렉트로 호환됩니다.
 
 <details>
-<summary><b>📸 화면 스크린샷 더 보기</b></summary>
+<summary><b>화면 더 보기</b></summary>
 
 ### 시장 동향
 ![시장 동향](images/02-trends.png)
@@ -213,19 +213,19 @@ flowchart LR
     hub -- "업비트 WS 1개" --> upbitws["Upbit WebSocket"]
 ```
 
-**Backend 레이어** (Spring 유사 계층, 단방향)
+**Backend 레이어** (MVC 패턴, 단방향)
 
 ```
-routers/   ← HTTP/WS 진입점        (≈ @RestController)
+routers/   ← HTTP/WS 진입점        (Controller)
    ↓
-services/  ← 비즈니스 로직 + 캐싱   (≈ @Service)  ※ 업비트 응답을 가공·캐시
+services/  ← 비즈니스 로직 + 캐싱   (Service)     ※ 업비트 응답을 가공·캐시
    ↓
-clients/   ← 외부 API 호출 래퍼    (≈ @Repository)  ※ 스로틀·재시도·로깅
+clients/   ← 외부 API 호출 래퍼    (Repository)  ※ 스로틀·재시도·로깅
 ```
 
 - **정량 분석**(`quant_service.py`)은 별도 데이터를 받지 않고 **공용 일봉 캐시를 재사용**합니다(`returns_matrix` 헬퍼 → 추가 팬아웃 0, 계산만).
 - **실시간 중계**(`main.py:TickerHub`)는 업비트 ticker WebSocket을 **단 1개**만 열어 모든 클라이언트에 fan-out합니다. REST 캐시의 "대량 팬아웃은 1회만, 이후 공유" 원칙을 WebSocket으로 옮긴 것입니다.
-- **관측성** — 프론트 axios 인터셉터 → 백엔드 미들웨어 → 업비트 `event_hook`이 모두 동일한 **요청 ID(rid)** 로 로깅됩니다. 백엔드가 `X-Request-Id` 헤더로 rid를 내려주며, 한 요청의 전 구간을 grep 한 번으로 추적할 수 있습니다(Spring MDC 유사).
+- **관측성** — 프론트 axios 인터셉터 → 백엔드 미들웨어 → 업비트 `event_hook`이 모두 동일한 **요청 ID(rid)** 로 로깅됩니다. 백엔드가 `X-Request-Id` 헤더로 rid를 내려주며, 한 요청의 전 구간을 grep 한 번으로 추적할 수 있습니다(요청 단위 상관 추적).
 
 ---
 
@@ -301,24 +301,24 @@ npm run dev
 
 ## 배포 (AWS · CI/CD)
 
-실서비스: **`https://www.skku.site`**. 프론트(정적)와 백엔드(API+WS)를 분리 호스팅합니다.
+프론트(정적)와 백엔드(API+WS)를 분리 호스팅합니다.
 
 ```
-사용자 ──HTTPS──> CloudFront(ACM) ── S3(정적 FE, OAC)                  ← www.skku.site
-        ──HTTPS/WSS──> EC2(Nginx+certbot) ── uvicorn(FastAPI, 단일 프로세스) ← api.skku.site
-DNS: Route53(skku.site) — www→CloudFront(alias), api→EC2(EIP), apex→www는 CloudFront Function 301
+사용자 ──HTTPS──> CloudFront(ACM) ── S3(정적 FE, OAC)                  ← www.example.com
+        ──HTTPS/WSS──> EC2(Nginx+certbot) ── uvicorn(FastAPI, 단일 프로세스) ← api.example.com
+DNS: Route53 — www→CloudFront(alias), api→EC2(EIP), apex→www는 CloudFront Function 301
 ```
 
 <details>
 <summary><b>배포 상세 (S3+CloudFront · EC2 · GitHub Actions)</b></summary>
 
-- **프론트(S3+CloudFront)**: 빌드 산출물을 S3에 sync, CloudFront가 ACM 인증서로 HTTPS 제공. 원본은 **S3 REST 엔드포인트 + OAC**(웹사이트 엔드포인트 아님 — OAC는 REST에만 적용). SPA 라우팅은 **403/404 → `/index.html`(200)** 커스텀 에러응답. apex(`skku.site`)는 **CloudFront Function으로 www에 301 리다이렉트**.
-- **백엔드(EC2 Ubuntu, t3.small)**: ⚠️ **uvicorn 단일 프로세스 systemd**로 실행 — 인메모리 캐시·WebSocket 중계 허브가 프로세스 상태라 멀티워커를 쓰면 캐시·실시간이 깨집니다. Nginx가 `api.skku.site`로 REST·WS를 같은 호스트로 프록시(certbot TLS). 부트스트랩은 [`.github/deploy/setup-ec2.sh`](.github/deploy/setup-ec2.sh).
+- **프론트(S3+CloudFront)**: 빌드 산출물을 S3에 sync, CloudFront가 ACM 인증서로 HTTPS 제공. 원본은 **S3 REST 엔드포인트 + OAC**(웹사이트 엔드포인트 아님 — OAC는 REST에만 적용). SPA 라우팅은 **403/404 → `/index.html`(200)** 커스텀 에러응답. apex는 **CloudFront Function으로 www에 301 리다이렉트**.
+- **백엔드(EC2 Ubuntu, t3.small)**: ⚠️ **uvicorn 단일 프로세스 systemd**로 실행 — 인메모리 캐시·WebSocket 중계 허브가 프로세스 상태라 멀티워커를 쓰면 캐시·실시간이 깨집니다. Nginx가 api-url로 REST·WS를 같은 호스트로 프록시(certbot TLS). 부트스트랩은 [`.github/deploy/setup-ec2.sh`](.github/deploy/setup-ec2.sh).
 - **CI/CD(GitHub Actions, 4워크플로)**: `main` 푸시 시 변경된 쪽만 —
   - `ci-frontend`(lint·typecheck·vitest) → 성공 시 `cd-frontend`(빌드→S3 sync→CloudFront 무효화)
   - `ci-backend`(compileall·pytest) → 성공 시 `cd-backend`(EC2 SSH→`git pull`→Secrets로 `.env` 주입→`pip`→`restart`→헬스 ready 폴링)
   - CI→CD 연결은 **`workflow_run`**(테스트 통과해야 배포). 비밀은 **GitHub Repository Secrets** 단일 소스.
-- **환경변수**: 백엔드 `AUTH_SECRET`·`AUTH_PASSWORD`·`CORS_ORIGINS=https://www.skku.site`·`COOKIE_SECURE=1`·`GEMINI_API_KEY`(CD가 `.env`로 주입). ⚠️ `AUTH_SECRET`은 고정(바뀌면 발급된 JWT 전부 무효 → 전원 로그아웃).
+- **환경변수**: 백엔드 `AUTH_SECRET`·`AUTH_PASSWORD`·`CORS_ORIGINS`·`COOKIE_SECURE=1`·`GEMINI_API_KEY`(CD가 `.env`로 주입). ⚠️ `AUTH_SECRET`은 고정(바뀌면 발급된 JWT 전부 무효 → 전원 로그아웃).
 
 </details>
 
@@ -326,7 +326,7 @@ DNS: Route53(skku.site) — www→CloudFront(alias), api→EC2(EIP), apex→www�
 
 ## API 레퍼런스
 
-기본 URL: 로컬 `http://localhost:8000` · 운영 `https://api.skku.site`. **모든 `/api/*`·`/ws/*`는 로그인 인증 필요**(HttpOnly 쿠키 JWT, 과제용 계정 `test`/`test`). 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다. 자동 생성 문서는 Swagger(`/docs`)·ReDoc(`/redoc`)·OpenAPI(`/openapi.json`).
+**모든 `/api/*`·`/ws/*`는 로그인 인증 필요**(HttpOnly 쿠키 JWT, 과제용 계정 `test`/`test`). 모든 응답에 추적용 `X-Request-Id` 헤더가 포함됩니다. 자동 생성 문서는 Swagger(`/docs`)·ReDoc(`/redoc`)·OpenAPI(`/openapi.json`).
 
 | 그룹 | 주요 엔드포인트 |
 |------|-----------------|
@@ -397,42 +397,186 @@ DNS: Route53(skku.site) — www→CloudFront(alias), api→EC2(EIP), apex→www�
 
 ```
 up-quant/
-├── backend/                          # FastAPI 서버
+├── backend/                                  # FastAPI 서버
 │   ├── app/
-│   │   ├── main.py                   # 진입점 · CORS(env) · 로깅 미들웨어 · 부팅 프리페치 · WS 허브(TickerHub) · /health
+│   │   ├── __init__.py
+│   │   ├── main.py                           # 진입점 · CORS · 로깅 미들웨어 · 부팅 프리페치 · WS 허브(TickerHub) · /health
 │   │   ├── core/
-│   │   │   ├── config.py             # 환경설정 · 마켓 유니버스/카테고리 · 캐시 TTL
-│   │   │   ├── cache.py              # 인메모리 TTL 캐시 (SWR · single-flight · LRU)
-│   │   │   ├── logging.py            # 요청 ID(rid) contextvar + 공통 로깅 포맷
-│   │   │   ├── metrics.py            # 자체 관측성 메트릭
-│   │   │   ├── security.py           # OAuth2+JWT(PyJWT·bcrypt) · current_user · WS 단발 티켓
-│   │   │   └── ratelimit.py          # IP 토큰버킷 · 로그인 brute-force 잠금
-│   │   ├── clients/upbit_rest.py     # 업비트 REST (httpx · 스로틀 · 429 재시도 · event_hook 로깅)
-│   │   ├── data/upbit_sectors.json   # 데이터랩 '코인 분류' 스크랩 스냅샷
-│   │   ├── routers/                  # HTTP 엔드포인트 (≈ @RestController)
-│   │   │   └── auth · markets · candles · analysis · backtest · quant · report · system · trends · signals
-│   │   ├── services/                 # 비즈니스 로직 + 캐싱 (≈ @Service)
-│   │   │   ├── market_service · candle_service · analysis_service
-│   │   │   ├── backtest_service · quant_service          # 백테스트 7종 · 정량 9종
-│   │   │   ├── trends_service · fx_service · news_service · marketcap_service · fng_service
-│   │   │   └── signal_service · report_service
-│   │   └── schemas/                  # Pydantic 응답 모델(DTO)
-│   ├── tests/                        # pytest 43 (수치·캐시·설정·라우터·개선·퀀트)
+│   │   │   ├── __init__.py
+│   │   │   ├── config.py                     # 환경설정 · 마켓 유니버스/카테고리 · 캐시 TTL
+│   │   │   ├── cache.py                      # 인메모리 TTL 캐시 (SWR · single-flight · LRU)
+│   │   │   ├── logging.py                    # 요청 ID(rid) contextvar + 공통 로깅 포맷
+│   │   │   ├── metrics.py                    # 자체 관측성 메트릭(캐시 적중률·외부 호출·소스 헬스)
+│   │   │   ├── ratelimit.py                  # IP 토큰버킷 · 로그인 brute-force 잠금
+│   │   │   └── security.py                   # OAuth2+JWT(PyJWT·bcrypt) · current_user · WS 단발 티켓
+│   │   ├── clients/
+│   │   │   ├── __init__.py
+│   │   │   └── upbit_rest.py                 # 업비트 REST (httpx · 스로틀 · 429 재시도 · event_hook 로깅)
+│   │   ├── data/
+│   │   │   └── upbit_sectors.json            # 데이터랩 '코인 분류' 스크랩 스냅샷(섹터)
+│   │   ├── routers/                          # HTTP 엔드포인트 (Controller)
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py                       # /api/auth     로그인·토큰·갱신·로그아웃·me·WS 티켓
+│   │   │   ├── markets.py                    # /api/markets  현재가·요약·호가·체결
+│   │   │   ├── candles.py                    # /api/candles  캔들
+│   │   │   ├── analysis.py                   # /api/analysis 카테고리·코인통계·상관관계·A-D 라인
+│   │   │   ├── backtest.py                   # /api/backtest MA·RSI·비교·워크포워드·몬테카를로·TSMOM·포트폴리오
+│   │   │   ├── quant.py                      # /api/quant    정량/ML 9종
+│   │   │   ├── trends.py                     # /api/trends   지수·인트라데이·환율·뉴스·체결강도·시총
+│   │   │   ├── signals.py                    # /api/signals  모멘텀·페어·국면·돌파 시그널 통합
+│   │   │   ├── report.py                     # /api/report   AI 전략 리포트(Gemini)
+│   │   │   └── system.py                     # /api/system   관측성 메트릭
+│   │   ├── services/                         # 비즈니스 로직 + 캐싱 (Service)
+│   │   │   ├── __init__.py
+│   │   │   ├── market_service.py             # 현재가·한글명·호가·체결·요약·52주·스파크라인
+│   │   │   ├── candle_service.py             # 캔들 (canonical 일/주/월봉 1회 fetch 후 슬라이스 공유)
+│   │   │   ├── analysis_service.py           # 변동성·1개월수익률·상관관계·섹터 수익률·A-D
+│   │   │   ├── backtest_service.py           # 백테스트 7종 (거래비용·슬리피지·벤치마크)
+│   │   │   ├── quant_service.py              # returns_matrix + Markowitz·PCA·군집·덴드로그램·GARCH·HMM·공적분·모멘텀·VaR
+│   │   │   ├── trends_service.py             # 자체 시장지수·인트라데이·자산지수·체결강도(WS)·기간수익·시황
+│   │   │   ├── fx_service.py                 # 환율 (open.er-api 현재가 + frankfurter 추이, 외부)
+│   │   │   ├── news_service.py               # 한국 크립토 RSS 통합 (외부)
+│   │   │   ├── marketcap_service.py          # 시가총액·BTC 도미넌스 (CoinGecko, 외부)
+│   │   │   ├── fng_service.py                # 공포·탐욕 지수 (alternative.me, 외부)
+│   │   │   ├── signal_service.py             # 시그널 집계 (기존 캐시 재사용)
+│   │   │   └── report_service.py             # AI 전략 리포트 (Gemini 부문별 프롬프트)
+│   │   └── schemas/                          # Pydantic 응답 모델(DTO)
+│   │       ├── __init__.py
+│   │       ├── market.py                     # Ticker · MarketSummary · Orderbook · Trade
+│   │       ├── candle.py                     # CandleItem
+│   │       ├── analysis.py                   # CategoryReturns · CoinStat · CorrelationItem · AdvanceDeclineResult
+│   │       ├── backtest.py                   # BacktestResult · WalkForwardResult · MonteCarloResult · TsmomResult …
+│   │       ├── quant.py                      # PortfolioResult · NetworkResult · PCAResult · GarchResult · RegimeResult …
+│   │       ├── trends.py                     # MarketIndex · AssetIndices · VolumePower · PeriodReturns · FxResult …
+│   │       ├── signal.py                     # SignalItem · SignalsResult
+│   │       └── report.py                     # ReportResult
+│   ├── tests/                                # pytest 43
+│   │   ├── test_numeric.py                   # MDD·리스크조정·과최적화 p값·피어슨·일간수익률
+│   │   ├── test_cache.py                     # SWR 콜드/신선/stale · single-flight · LRU
+│   │   ├── test_config.py                    # CORS_ORIGINS(CSV·JSON) · SKIP_PREFETCH 파싱
+│   │   ├── test_quant_units.py               # 페어 OOS 불변식 · 월/주봉 canonical 공유
+│   │   ├── test_improvements.py              # RSI(Wilder)·사이징·FDR·2-leg PnL·JWT·레이트리밋·외부 파서
+│   │   └── test_routes.py                    # /health·메트릭·인증·라우트 등록(네트워크 0)
 │   └── requirements.txt
-├── frontend/                         # React + Vite SPA (전 소스 TypeScript)
+├── frontend/                                 # React 19 + Vite SPA (전 소스 TypeScript)
+│   ├── public/                               # 정적 에셋 (favicon · logo · guide/*.png)
+│   ├── scripts/                              # 가이드/문서 스크린샷 캡처 (Playwright)
+│   │   ├── capture-guide.mjs
+│   │   ├── capture-pages.mjs
+│   │   └── capture-extras.mjs
 │   ├── src/
-│   │   ├── main.tsx · App.tsx · config.ts · index.css · theme.ts · types.ts
-│   │   ├── api/                      # axios 호출 래퍼 (client + 도메인별)
-│   │   ├── hooks/                    # 데이터 페칭 훅 (react-query 백킹 · error/retry)
-│   │   ├── contexts/                 # Auth(쿠키 JWT) · Realtime(WS store) · PriceAlerts
-│   │   ├── components/               # ui/ · layout/(Header·Footer·Layout) · LiveCells · ReportModal · ...
-│   │   ├── utils/                    # chartExport · csv · format · popup
-│   │   └── pages/                    # 라우트별 페이지 (Login · CoinList · Dashboard · Explore · Analysis · Tools · ...)
-│   ├── .env.example · index.html · tsconfig.json · package.json
+│   │   ├── main.tsx                          # 앱 진입점 (ReactDOM · react-query Provider)
+│   │   ├── App.tsx                           # 라우트(코드 스플리팅) · RequireAuth · Provider
+│   │   ├── config.ts                         # API_BASE · WS_BASE (env)
+│   │   ├── index.css                         # Tailwind 엔트리 · @theme 색 토큰 · 다크모드 · 실시간 펄스
+│   │   ├── theme.ts                          # 구분용 색 팔레트 (SERIES · DOM_COLORS)
+│   │   ├── types.ts                          # 백엔드 스키마 거울 — 도메인 모델 타입
+│   │   ├── vite-env.d.ts
+│   │   ├── api/                              # axios 호출 래퍼
+│   │   │   ├── client.ts                     # axios 인스턴스 (withCredentials · 401 갱신 · rid)
+│   │   │   ├── auth.ts
+│   │   │   ├── markets.ts
+│   │   │   ├── candles.ts
+│   │   │   ├── analysis.ts
+│   │   │   ├── backtest.ts
+│   │   │   ├── quant.ts
+│   │   │   ├── trends.ts
+│   │   │   ├── signals.ts
+│   │   │   ├── report.ts
+│   │   │   └── system.ts
+│   │   ├── hooks/                            # 데이터 페칭 훅 (react-query 백킹 · error/retry)
+│   │   │   ├── useFetch.ts
+│   │   │   ├── useTickers.ts
+│   │   │   ├── useCandles.ts
+│   │   │   ├── useAnalysis.ts
+│   │   │   ├── useQuant.ts
+│   │   │   ├── useTrends.ts
+│   │   │   ├── useSignals.ts
+│   │   │   ├── useGate.ts                    # 전역 로딩/에러 게이트 합성
+│   │   │   └── useMarketStream.ts            # 코인 상세 호가·체결 실시간 WS
+│   │   ├── contexts/                         # 인증 · 실시간 시세 · 가격 알림
+│   │   │   ├── Auth.tsx
+│   │   │   ├── useAuth.ts
+│   │   │   ├── Realtime.tsx                  # WS(/ws/tickers) 생명주기 · 300ms 배치
+│   │   │   ├── realtimeStore.ts              # 외부 store (종목별 selector)
+│   │   │   ├── useRealtime.ts                # useLivePrice · useWsConnected · usePulse
+│   │   │   ├── PriceAlerts.tsx
+│   │   │   └── usePriceAlerts.ts
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── Header.tsx                # 탭 그룹 · 분석│실행 구분선 · 🔔 · 🌙 · AI 전략 · 더보기
+│   │   │   │   ├── Footer.tsx
+│   │   │   │   └── Layout.tsx                # +브레드크럼 · ErrorBoundary
+│   │   │   ├── ui/
+│   │   │   │   ├── Spinner.tsx
+│   │   │   │   ├── Card.tsx
+│   │   │   │   ├── StatCard.tsx
+│   │   │   │   ├── PageLoading.tsx
+│   │   │   │   ├── PageError.tsx
+│   │   │   │   └── PageError.test.tsx
+│   │   │   ├── LiveCells.tsx                 # 실시간 가격/등락 셀 (REST 폴백 + 펄스)
+│   │   │   ├── ErrorBoundary.tsx
+│   │   │   ├── ReportModal.tsx               # AI 전략 리포트 모달
+│   │   │   ├── SignalsPanel.tsx              # 시그널 통합 패널 (+CSV)
+│   │   │   ├── Caveat.tsx
+│   │   │   └── InfoTooltip.tsx
+│   │   ├── pages/                            # 라우트별 페이지
+│   │   │   ├── Login.tsx
+│   │   │   ├── Login.test.tsx
+│   │   │   ├── CoinList.tsx                  # '/' · '/coins/:market' master-detail 메인
+│   │   │   ├── CoinDetail.tsx                # 코인 상세 본문 (CoinList에 임베드)
+│   │   │   ├── Dashboard.tsx                 # '/trends' 시장 동향
+│   │   │   ├── Explore.tsx                   # '/market/*' 래퍼 (URL=서브탭)
+│   │   │   ├── Market.tsx
+│   │   │   ├── Sectors.tsx
+│   │   │   ├── Screener.tsx
+│   │   │   ├── Compare.tsx                   # 종목 비교
+│   │   │   ├── Analysis.tsx                  # '/research/*' + PortfolioSection
+│   │   │   ├── Tools.tsx                     # '/strategy/*' 래퍼
+│   │   │   ├── Backtest.tsx                  # 백테스트 오케스트레이터
+│   │   │   ├── Validation.tsx                # 검증 3기법 한 페이지
+│   │   │   ├── SystemMonitor.tsx             # '/system'
+│   │   │   ├── Guide.tsx                     # '/guide' (별도 창)
+│   │   │   ├── Help.tsx                      # '/help' (별도 창)
+│   │   │   └── backtest/                     # 백테스트 전략별 본문
+│   │   │       ├── SingleStrategyBody.tsx
+│   │   │       ├── PortfolioBacktest.tsx
+│   │   │       ├── CompareBody.tsx
+│   │   │       ├── WalkForwardBody.tsx
+│   │   │       ├── MonteCarloBody.tsx
+│   │   │       ├── TsmomBody.tsx
+│   │   │       ├── parts.tsx
+│   │   │       └── helpers.ts
+│   │   ├── utils/
+│   │   │   ├── format.ts
+│   │   │   ├── format.test.ts
+│   │   │   ├── csv.ts
+│   │   │   ├── csv.test.ts
+│   │   │   ├── chartExport.ts                # 차트 SVG→PNG 내보내기
+│   │   │   └── popup.ts
+│   │   └── test/
+│   │       └── setup.ts
+│   ├── .env.example
+│   ├── index.html
+│   ├── tsconfig.json
+│   ├── vite.config.js
+│   ├── vitest.config.ts
+│   ├── eslint.config.js
+│   └── package.json
 ├── .github/
-│   ├── deploy/                       # EC2 부트스트랩 · systemd · nginx 설정
-│   └── workflows/                    # ci-/cd- frontend·backend (4 워크플로)
-├── images/                           # README 스크린샷
+│   ├── ec2-setup.sh                          # EC2 초기 셋업 스크립트
+│   ├── deploy/
+│   │   ├── setup-ec2.sh                      # EC2 부트스트랩(패키지·스왑·venv·systemd·nginx)
+│   │   ├── upquant.service                   # systemd 유닛 (uvicorn 단일 프로세스)
+│   │   └── nginx-upquant.conf                # nginx 리버스 프록시 (REST+WS·TLS)
+│   └── workflows/
+│       ├── ci-frontend.yml
+│       ├── ci-backend.yml
+│       ├── cd-frontend.yml
+│       └── cd-backend.yml
+├── images/                                   # README 스크린샷
+├── .gitattributes
+├── .gitignore
 └── README.md
 ```
 
@@ -451,7 +595,7 @@ up-quant/
 | 캐시 워밍 | 부팅 시 **동기** 프리페치 후 기동 | 기동 느려지는 대신 첫 사용자도 콜드 없음. 대량 팬아웃은 기동 1회만 |
 | 실시간 중계 | 업비트 ticker WS **1개**를 fan-out하는 공유 허브 | 클라이언트마다 연결을 새로 열면 N배로 늘어 비효율 (팬아웃 원칙의 WS판) |
 | 프론트 실시간 구독 | 외부 store + `useSyncExternalStore` 종목별 selector | 261종 고빈도 갱신 시 Context 전체구독은 리렌더 폭주 → 바뀐 셀만 리렌더 |
-| 관측성 | `contextvars` 기반 rid를 3계층 로그에 주입 + `X-Request-Id` | Spring MDC처럼 요청 전 구간 추적 |
+| 관측성 | `contextvars` 기반 rid를 3계층 로그에 주입 + `X-Request-Id` | 요청 전 구간 상관 추적 |
 | 마켓 유니버스 | 분석은 KRW 전체(~261종) | `/market/all` 교집합으로 상장폐지 자동 제외 |
 | 정량 분석 | 통계/ML은 검증된 라이브러리, 일봉은 공용 캐시 재사용 | 직접구현 정체성은 인프라 계층에. 추가 팬아웃 0 |
 | 에러 UX | 실패 시 빈 화면 대신 "다시 시도" 게이트 (`useFetch`·`PageError`) | 조용한 실패 제거 |
@@ -571,7 +715,7 @@ up-quant/
 <details>
 <summary><b>⑦ 관측성 · 운영 · 배포 — 로컬 단일 머신에선 안 보이던 가정들</b></summary>
 
-- **관측성 — 외부 APM vs 직접 구현한 rid** — OpenTelemetry는 POC엔 과함 → `contextvars` 기반 rid를 axios·미들웨어·httpx event_hook에 주입(`X-Request-Id` 전파). 실무의 Spring MDC를 표준 라이브러리로.
+- **관측성 — 외부 APM vs 직접 구현한 rid** — OpenTelemetry는 POC엔 과함 → `contextvars` 기반 rid를 axios·미들웨어·httpx event_hook에 주입(`X-Request-Id` 전파). 실무에서 쓰던 요청 단위 상관 추적을 표준 라이브러리로.
 - **WS SSL 인증서 — "REST는 되는데 WS만 죽는다"** — macOS 프레임워크 Python의 기본 CA가 깨진 심링크(certifi 미설치) → `ssl.create_default_context()`가 CA 0개. httpx는 자체 certifi라 무사했던 게 단서. "머신을 고친다" vs "코드에서 certifi 명시" 중 후자(환경 비의존). *"내 머신이 이상한 것"이라도 코드로 못 박을 수 있으면 그게 이식성이다.*
 - **환경변수화 — "설정은 있는데 안 쓴다"는 더 나쁘다** — `cors_origins` 필드가 있는데 main은 하드코딩(죽은 설정). pydantic-settings가 `list[str]`을 JSON 선파싱해 CSV가 죽던 것을 `NoDecode`로 끔. *라이브러리의 "똑똑한 기본 동작"이 의도와 충돌하면 그 동작을 끄는 명시 어노테이션을 찾는 게 깨끗하다.*
 - **조용한 실패 → 재시도 UI** — `.catch` 없는 훅이 API 죽으면 빈 화면(ErrorBoundary는 렌더 예외만 잡음) → 공용 `useFetch`(`{data,loading,error,retry}`). *공용 추상화로 묶을 때 호출부 계약(반환 키)은 그대로 둬야 한다.*
